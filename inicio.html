@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ingeniería Telcom EIRL</title>
+
+    <style>
+        /* Reset básico */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
+            image-rendering: auto;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-size: 16px;
+            background-color: #f6f6f6;
+            color: #333;
+            line-height: 1.8;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Estilos para el carrusel */
+        .carousel {
+            position: relative;
+            width: 100%;
+            height: 85vh;
+            overflow: hidden;
+        }
+
+        .carousel-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .carousel-item {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 1.5s ease-in-out;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+
+        .carousel-item.active {
+            opacity: 1;
+        }
+
+        .carousel-caption {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 2rem;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            text-align: center;
+        }
+
+        .carousel-caption h2 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+        }
+
+        .carousel-caption p {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Estilos para la barra de navegación */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 5%;
+            background-color: rgba(0, 0, 0, 0.8);
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+            transition: background-color 0.3s;
+        }
+
+        .navbar.scrolled {
+            background-color: #222;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .navbar .logo {
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 700;
+            color: #fff;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+        }
+
+        .logo img {
+            height: 40px;
+            margin-right: 10px;
+        }
+
+        .nav-list {
+            list-style-type: none;
+            display: flex;
+            gap: 30px;
+        }
+
+        .nav-list li a {
+            color: #fff;
+            text-decoration: none;
+            padding: 10px 25px;
+            border-radius: 5px;
+            transition: background-color 0.3s, color 0.3s;
+            font-weight: 500;
+        }
+
+        .nav-list li a:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #007BFF;
+        }
+
+        .nav-list li a.active {
+            background-color: #007BFF;
+            color: #fff;
+        }
+
+        /* Estilos para botones */
+        .btn {
+            display: inline-block;
+            background-color: #007BFF;
+            color: #fff;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 7px;
+            cursor: pointer;
+            text-decoration: none;
+            font-weight: 600;
+            letter-spacing: 1px;
+            transition: background-color 0.3s, transform 0.3s;
+        }
+
+        .btn:hover {
+            background-color: #0056b3;
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        /* Estilos para secciones */
+        section {
+            padding: 80px 0;
+            background-color: rgba(255, 255, 255, 0.95);
+            position: relative;
+            transition: background-color 0.3s ease;
+        }
+
+        section:nth-child(even) {
+            background-color: rgba(240, 240, 240, 0.95);
+        }
+
+        section h2 {
+            font-size: 2.5rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            display: inline-block;
+        }
+
+        section h2::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 0;
+            width: 60px;
+            height: 4px;
+            background-color: #007BFF;
+        }
+
+        .grid {
+            display: flex;
+            gap: 25px;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+
+        .card {
+            flex: 1;
+            padding: 30px;
+            background-color: #fff;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            max-width: calc(33.33% - 25px);
+            min-width: 300px;
+            margin-bottom: 25px;
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .grid-item {
+            background-color: #fff;
+            padding: 25px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            transition: transform 0.3s ease;
+            flex: 1 1 calc(50% - 15px);
+            min-width: 280px;
+        }
+
+        .grid-item:hover {
+            transform: translateY(-5px);
+        }
+
+        .grid-item h3 {
+            color: #007BFF;
+            margin-bottom: 15px;
+        }
+
+        /* Estilos para clientes */
+        .clients-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 25px;
+            margin-top: 30px;
+        }
+
+        .client-item {
+            background-color: #fff;
+            padding: 20px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .client-item:hover {
+            transform: translateY(-5px);
+        }
+
+        .client-logo {
+            max-width: 120px;
+            max-height: 80px;
+            margin-bottom: 15px;
+            object-fit: contain;
+        }
+
+        /* Estilos para el pie de página */
+        footer {
+            background-color: #222;
+            color: #fff;
+            padding: 40px 0 20px;
+            text-align: center;
+            font-size: 0.9rem;
+            border-top: 4px solid #444;
+            position: relative;
+        }
+
+        .footer-content {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+
+        .footer-section {
+            flex: 1;
+            min-width: 250px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .footer-section h3 {
+            color: #007BFF;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .footer-section ul {
+            list-style: none;
+        }
+
+        .footer-section ul li {
+            margin-bottom: 10px;
+        }
+
+        .footer-section ul li a {
+            color: #ccc;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-section ul li a:hover {
+            color: #007BFF;
+        }
+
+        .footer-bottom {
+            border-top: 1px solid #444;
+            padding-top: 20px;
+        }
+
+        /* Estilos para efectos de transición */
+        .fade-in {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.8s ease, transform 0.8s ease;
+        }
+
+        .fade-in.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Estilos para el menú en dispositivos móviles */
+        .navbar-toggler {
+            display: none;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            padding: 10px;
+            z-index: 1001;
+        }
+
+        .navbar-toggler span {
+            display: block;
+            width: 30px;
+            height: 3px;
+            background-color: #fff;
+            margin: 6px 0;
+            transition: all 0.3s;
+        }
+
+        /* Estilos para valores con puntos */
+        .values-list {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .values-list li {
+            position: relative;
+            padding-left: 25px;
+            margin-bottom: 12px;
+        }
+
+        .values-list li::before {
+            content: "•";
+            color: #007BFF;
+            font-weight: bold;
+            font-size: 1.5rem;
+            position: absolute;
+            left: 0;
+            top: -5px;
+        }
+
+        .values-image {
+            width: 100%;
+            max-width: 450px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+
+        /* Estilos para dispositivos móviles */
+        @media (max-width: 992px) {
+            .grid {
+                flex-direction: column;
+            }
+            
+            .card, .grid-item {
+                max-width: 100%;
+            }
+            
+            .carousel-caption h2 {
+                font-size: 2.3rem;
+            }
+            
+            .carousel-caption p {
+                font-size: 1.2rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .carousel {
+                height: 60vh;
+            }
+            
+            .navbar-toggler {
+                display: block;
+            }
+            
+            .nav-list {
+                position: fixed;
+                top: 0;
+                right: -300px;
+                width: 250px;
+                height: 100vh;
+                background-color: rgba(0, 0, 0, 0.9);
+                flex-direction: column;
+                padding-top: 80px;
+                transition: right 0.3s ease;
+                gap: 10px;
+            }
+            
+            .nav-list.active {
+                right: 0;
+            }
+            
+            .nav-list li {
+                width: 100%;
+            }
+            
+            .nav-list li a {
+                display: block;
+                padding: 15px 25px;
+                text-align: left;
+            }
+            
+            .carousel-caption h2 {
+                font-size: 1.8rem;
+            }
+            
+            .carousel-caption p {
+                font-size: 1rem;
+            }
+            
+            section h2 {
+                font-size: 2rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .carousel {
+                height: 50vh;
+            }
+            
+            .carousel-caption h2 {
+                font-size: 1.5rem;
+            }
+            
+            section {
+                padding: 60px 0;
+            }
+            
+            .footer-section {
+                flex: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Barra de navegación -->
+    <nav class="navbar">
+        <a href="#" class="logo">Ingeniería Telcom EIRL</a>
+        
+        <div class="navbar-toggler">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+        
+        <ul class="nav-list">
+            <li><a href="#inicio" class="active">Inicio</a></li>
+            <li><a href="#quienes-somos">Quiénes Somos</a></li>
+            <li><a href="#servicios">Servicios</a></li>
+            <li><a href="#mision-vision">Misión y Visión</a></li>
+            <li><a href="#codigo-etica">Código de Ética</a></li>
+            <li><a href="#nuestros-clientes">Clientes</a></li>
+            <li><a href="#contacto">Contacto</a></li>
+        </ul>
+    </nav>
+
+    <!-- Carrusel de imágenes -->
+    <div id="inicio" class="carousel">
+        <div class="carousel-inner">
+            <div class="carousel-item active" style="background-image: url('https://www.givaudan.com/sites/givaudanweb.int/files/styles/convert_to_jpg/public/2022-12/GIV_FragranceEncapsulationCentre04_1028x685.webp.jpg?itok=VxB7YFfZ');"></div>
+            <div class="carousel-item" style="background-image: url('https://www.digikala.com/mag/wp-content/uploads/2017/11/Hydrogen-Research.jpg');"></div>
+            <div class="carousel-item" style="background-image: url('https://th.bing.com/th/id/R.fdac14707a893b5bad614a8528c93156?rik=RaoF0emCMEXl%2fw&pid=ImgRaw&r=0');"></div>
+            <div class="carousel-item" style="background-image: url('https://scontent.faqp1-1.fna.fbcdn.net/v/t39.30808-6/385030282_976323506787912_4908019808882379609_n.jpg?_nc_cat=100&ccb=1-7&_nc_sid=49d041&_nc_eui2=AeFHF6WcJjV8NwGAChchU8ap1_ysXtA4v-vX_Kxe0Di_68EDEs275_4XQ3avP5WNOHF_OwlqZWBfzl0C5lcckxGe&_nc_ohc=sHjPaKJc_dAAX8hsSIr&_nc_ht=scontent.faqp1-1.fna&oh=00_AfA7DFbGRNulqKLnXTOoVTM1Bh-IREuzqAkW_o_xdjEpBg&oe=65204B09');"></div>
+        </div>
+        <div class="carousel-caption">
+            <h2>Dedicados a la Excelencia</h2>
+            <p>"Conectando Perú con Excelencia: Líderes en Telecomunicaciones y Servicios Eléctricos."</p>
+            <a href="https://sites.google.com/view/ingeneriatelcom/inicio/cont%C3%A1ctanos" class="btn">Contáctanos</a>
+        </div>
+    </div>
+
+    <!-- Quiénes Somos -->
+    <section id="quienes-somos" class="fade-in">
+        <div class="container">
+            <h2>Quiénes Somos</h2>
+            <p>Ingeniería Telcom EIRL es una firma líder en el ámbito de las telecomunicaciones y los servicios eléctricos. Nuestro compromiso es coordinar, analizar y supervisar diversos proyectos, garantizando la calidad y seguridad en cada uno de nuestros servicios. Nos enorgullecemos de colaborar estrechamente con las principales empresas del sector eléctrico y telecomunicaciones, contribuyendo al desarrollo y bienestar del país.</p>
+            
+            <div class="grid">
+                <div class="card">
+                    <h3>Experiencia</h3>
+                    <p>Contamos con amplia experiencia en el sector de las telecomunicaciones y servicios eléctricos, lo que nos permite ofrecer soluciones eficientes y adaptadas a las necesidades de nuestros clientes.</p>
+                </div>
+                <div class="card">
+                    <h3>Profesionalismo</h3>
+                    <p>Nuestro equipo está conformado por profesionales altamente capacitados y comprometidos con la excelencia en cada proyecto que emprendemos.</p>
+                </div>
+                <div class="card">
+                    <h3>Innovación</h3>
+                    <p>Nos mantenemos a la vanguardia tecnológica para ofrecer servicios innovadores que marquen la diferencia en un sector en constante evolución.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Servicios -->
+    <section id="servicios" class="services-section fade-in">
+        <div class="container">
+            <h2>Nuestros Servicios</h2>
+            <div class="grid">
+                <div class="grid-item">
+                    <h3>Revisión y Procesamiento</h3>
+                    <p>Servicio de revisión y procesamiento de información acorde a la Norma Técnica de Calidad de los Servicios Eléctricos Urbano y Rural, sus bases metodológicas y procedimientos específicos.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Análisis y Remisión</h3>
+                    <p>Análisis, procesamiento y remisión de información en atención a procedimientos de entidades reguladoras a cargo de nuestro Departamento de Operaciones.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Apoyo Técnico</h3>
+                    <p>Apoyo técnico en trabajos de supervisión de diversos procedimientos y normas técnicas. Brindamos asesoría especializada para asegurar el cumplimiento de estándares de calidad.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Recodificación y Pintado</h3>
+                    <p>Recodificación y pintado de suministros. Realizamos trabajos de campo con los más altos estándares de calidad y seguridad.</p>
+                </div>
+            </div>
+    
+            <h2 class="mt-5">Servicios Realizados</h2>
+            <p>Hemos prestado servicios de apoyo en la supervisión de actividades destinadas al control de pérdidas de energía en distintas gerencias zonales, cumpliendo con los términos de referencia establecidos. Además, nos hemos encargado de la supervisión de actividades programadas para controlar pérdidas de energía en diversas unidades operativas, garantizando resultados en tiempos establecidos.</p>
+        </div>
+    </section>
+    
+    <!-- Misión, Visión y Valores -->
+    <section id="mision-vision" class="fade-in">
+        <div class="container">
+            <h2>Misión, Visión & Valores</h2>
+            <div class="grid">
+                <div class="grid-item">
+                    <h3>Misión</h3>
+                    <p>Gestionar proyectos y servicios en el ámbito de las telecomunicaciones y electricidad con transparencia, imparcialidad y excelencia; asegurando la calidad y seguridad del suministro, y proporcionando soluciones económicas y eficientes a nuestros clientes.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Visión</h3>
+                    <p>Ser reconocidos a nivel nacional como la autoridad técnica preeminente y el principal referente en soluciones avanzadas de telecomunicaciones y servicios eléctricos en Perú.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Valores</h3>
+                    <ul class="values-list">
+                        <li><strong>Cliente Primero:</strong> Nuestros clientes, internos y externos, son nuestra prioridad.</li>
+                        <li><strong>Desarrollo:</strong> Contribuimos activamente al desarrollo económico de Perú.</li>
+                        <li><strong>Transparencia:</strong> Compartimos de manera clara y abierta nuestras acciones.</li>
+                        <li><strong>Profesionalismo:</strong> Garantizamos imparcialidad y excelencia en nuestra labor.</li>
+                        <li><strong>Mejora Continua:</strong> Nos esforzamos por perfeccionar nuestro trabajo diariamente.</li>
+                        <li><strong>Innovación:</strong> Buscamos constantemente nuevas soluciones y formas de trabajar.</li>
+                    </ul>
+                </div>
+                <div class="grid-item">
+                    <h3>Política de Calidad</h3>
+                    <p>En Ingeniería Telcom EIRL nos comprometemos a brindar servicios de telecomunicaciones y electricidad de calidad, cumpliendo con los requisitos de nuestros clientes y las normas legales vigentes. Para ello, nos esforzamos por mejorar continuamente nuestros procesos y la eficacia de nuestro sistema de gestión de calidad.</p>
+                    <img src="https://scontent.faqp1-1.fna.fbcdn.net/v/t39.30808-6/385021601_976350050118591_4341010315494858339_n.jpg?_nc_cat=102&ccb=1-7&_nc_sid=49d041&_nc_eui2=AeEAzNbC75G0t5CGVgb9ZvTDdLJAmRhLnBN0skCZGEucE8qFhQxMatH-VjzWyt1ZUmrMUv2hGiOkFfB6DhhXWpp7&_nc_ohc=lI4LoW4pACEAX8hgjQe&_nc_ht=scontent.faqp1-1.fna&oh=00_AfBnXiRTiZtWH12B08tt4kPPiXyoJAYx3004ftsvb8u_dw&oe=652095C1" alt="Ingeniería Telcom EIRL" class="values-image">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Código de Ética -->
+    <section id="codigo-etica" class="fade-in">
+        <div class="container">
+            <h2>Código de Ética</h2>
+            <p>En Ingeniería Telcom EIRL nos comprometemos a cumplir con los más altos estándares éticos en todas nuestras actividades. Nuestro Código de Ética establece los principios y valores que guían nuestro trabajo diario.</p>
+            
+            <div class="grid">
+                <div class="grid-item">
+                    <h3>Integridad</h3>
+                    <p>Actuamos con honestidad, transparencia y responsabilidad en todas nuestras operaciones y relaciones comerciales.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Respeto</h3>
+                    <p>Tratamos a nuestros clientes, proveedores y colaboradores con respeto y dignidad, valorando la diversidad y promoviendo un ambiente de trabajo inclusivo.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Compromiso</h3>
+                    <p>Nos comprometemos a ofrecer un servicio de calidad, cumpliendo con los plazos establecidos y superando las expectativas de nuestros clientes.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Lealtad</h3>
+                    <p>Actuamos con lealtad hacia nuestros clientes, proveedores y colaboradores, construyendo relaciones de confianza a largo plazo.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Confidencialidad</h3>
+                    <p>Respetamos la confidencialidad de la información de nuestros clientes y proveedores, protegiendo sus datos y utilizándolos únicamente para los fines acordados.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Profesionalismo</h3>
+                    <p>Actuamos con profesionalismo, compromiso y eficiencia en cada proyecto que emprendemos, buscando siempre la excelencia en nuestros servicios.</p>
+                </div>
+            </div>
+
+            <h3>Ámbito de aplicación</h3>
+            <p>Este código establece pautas básicas de comportamiento ético, complementando las disposiciones legales y reglamentarias vigentes. Todos los empleados de Ingeniería Telcom EIRL deben adherirse a estas normas.</p>
+
+            <h3>Pautas básicas de comportamiento ético</h3>
+            <p>Esperamos que nuestros empleados actúen conforme a los valores de la empresa, evitando conflictos de interés, actuando con lealtad y respeto, y comprometiéndose a ofrecer un servicio transparente y profesional.</p>
+
+            <h3>Medidas Disciplinarias</h3>
+            <p>Frente a cualquier acto que viole este Código, el área de RRHH tomará las medidas disciplinarias correspondientes, conforme a nuestras normativas internas y la legislación vigente.</p>
+        </div>
+    </section>
+
+    <!-- Estructura Organizacional -->
+    <section id="estructura-organizacional" class="fade-in">
+        <div class="container">
+            <h2>Estructura Organizacional</h2>
+            <p>La estructura organizacional de Ingeniería Telcom EIRL ha sido diseñada para garantizar una gestión eficiente de todos nuestros proyectos y servicios. Esta estructura se actualiza periódicamente para adaptarse a las necesidades cambiantes de nuestro sector y garantizar el mejor servicio a nuestros clientes.</p>
+            <div class="grid">
+                <div class="grid-item">
+                    <h3>Gerencia General</h3>
+                    <p>La Gerencia General es la encargada de dirigir y supervisar las actividades de Ingeniería Telcom EIRL, garantizando la calidad y seguridad de nuestros servicios.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Departamento de Operaciones</h3>
+                    <p>El Departamento de Operaciones se encarga de coordinar, analizar y supervisar diversos proyectos, garantizando la calidad y seguridad en cada uno de nuestros servicios.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Departamento de Administración</h3>
+                    <p>El Departamento de Administración se encarga de la gestión administrativa y financiera de Ingeniería Telcom EIRL.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Departamento de Recursos Humanos</h3>
+                    <p>El Departamento de Recursos Humanos se encarga de la gestión del talento humano de Ingeniería Telcom EIRL.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Departamento de Marketing</h3>
+                    <p>El Departamento de Marketing se encarga de la gestión de la imagen corporativa de Ingeniería Telcom EIRL.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Departamento de Tecnología</h3>
+                    <p>El Departamento de Tecnología se encarga de la gestión de la infraestructura tecnológica de Ingeniería Telcom EIRL.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Sección de Clientes -->
+    <section id="nuestros-clientes" class="clients-section fade-in">
+        <div class="container">
+            <h2>Nuestros Clientes</h2>
+            <p>Nos enorgullecemos de trabajar con renombradas empresas del sector eléctrico:</p>
+            
+            <div class="clients-grid">
+                <div class="client-item">
+                    <img src="https://www.contrataciones.pe/organizaciones/licitaciones-electrosur.png" alt="Logo de ELECTROSUR S.A" class="client-logo">
+                    <h4>ELECTROSUR S.A</h4>
+                    <p>Colaboramos en proyectos de mejora de infraestructura eléctrica.</p>
+                </div>
+                <div class="client-item">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/2/28/Logo_de_Electro_Puno.png" alt="Logo de ELECTRO PUNO S.A.A" class="client-logo">
+                    <h4>ELECTRO PUNO S.A.A</h4>
+                    <p>Soluciones eléctricas confiables para Puno y alrededores.</p>
+                </div>
+                <div class="client-item">
+                    <img src="https://media.licdn.com/dms/image/C560BAQFt6nwFdOcNuA/company-logo_200_200/0/1566622834797?e=2147483647&v=beta&t=l3XAykiPTelGua0UwQz3xy9_x6m_dTH8RiaK-1ofnWs" alt="Logo de ELECTRO SUR ESTE S.A.A" class="client-logo">
+                    <h4>ELECTRO SUR ESTE S.A.A</h4>
+                    <p>Proyectos estratégicos para la mejora del servicio eléctrico.</p>
+                </div>
+                <div class="client-item">
+                    <img src="https://yt3.googleusercontent.com/ytc/APkrFKbp78TA5HOAcprcbLI0WUlJXEi3UAVPGtjdVIGs=s900-c-k-c0x00ffffff-no-rj" alt="Logo de ELECTRO UCAYALI S.A." class="client-logo">
+                    <h4>ELECTRO UCAYALI S.A.</h4>
+                    <p>Infraestructura eléctrica moderna en la región amazónica.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contacto -->
+    <section id="contacto" class="fade-in">
+        <div class="container">
+            <h2>Contacto</h2>
+            <div class="grid">
+                <div class="grid-item">
+                    <h3>Información de Contacto</h3>
+                    <p><strong>Horario de Atención:</strong> Lunes a Sábado de 07:30 am - 06:00 pm</p>
+                    <p><strong>Teléfono:</strong> +51 946 728 495</p>
+                    <p><strong>Correo:</strong> ingeneriatelcomeirl@gmail.com</p>
+                    <p><strong>Dirección:</strong> Mza. 550 Lote. 05 A.V. Paseo de los Heroes, Crl. Greg. Albarracin Lanchipa, Tacna, Perú.</p>
+                </div>
+                <div class="grid-item">
+                    <h3>Envíanos un Mensaje</h3>
+                    <form action="#" method="post">
+                        <div style="margin-bottom: 15px;">
+                            <label for="name" style="display: block; margin-bottom: 5px;">Nombre:</label>
+                            <input type="text" id="name" name="name" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label for="email" style="display: block; margin-bottom: 5px;">Correo electrónico:</label>
+                            <input type="email" id="email" name="email" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label for="message" style="display: block; margin-bottom: 5px;">Mensaje:</label>
+                            <textarea id="message" name="message" rows="5" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+                        </div>
+                        <button type="submit" class="btn">Enviar Mensaje</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>Ingeniería Telcom EIRL</h3>
+                    <p>Conectando Perú con excelencia: líderes en telecomunicaciones y servicios eléctricos.</p>
+                </div>
+                <div class="footer-section">
+                    <h3>Enlaces Rápidos</h3>
+                    <ul>
+                        <li><a href="#inicio">Inicio</a></li>
+                        <li><a href="#quienes-somos">Quiénes Somos</a></li>
+                        <li><a href="#servicios">Servicios</a></li>
+                        <li><a href="#mision-vision">Misión y Visión</a></li>
+                        <li><a href="#codigo-etica">Código de Ética</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>Contacto</h3>
+                    <p>Teléfono: +51 946 728 495</p>
+                    <p>Email: ingeneriatelcomeirl@gmail.com</p>
+                    <p>Dirección: Mza. 550 Lote. 05 A.V. Paseo de los Heroes, Tacna, Perú.</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>© 2025 Ingeniería Telcom EIRL. Todos los derechos reservados.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Script para el carrusel automático
+        document.addEventListener("DOMContentLoaded", function() {
+            const carouselItems = document.querySelectorAll('.carousel-item');
+            let currentItem = 0;
+            
+            function showNextItem() {
+                carouselItems[currentItem].classList.remove('active');
+                currentItem = (currentItem + 1) % carouselItems.length;
+                carouselItems[currentItem].classList.add('active');
+            }
+            
+            // Cambiar de imagen cada 5 segundos
+            setInterval(showNextItem, 5000);
+            
+            // Efecto de aparición al hacer scroll
+            const fadeElements = document.querySelectorAll('.fade-in');
+            
+            function checkFadeElements() {
+                fadeElements.forEach(element => {
+                    const elementTop = element.getBoundingClientRect().top;
+                    const windowHeight = window.innerHeight;
+                    
+                    if (elementTop < windowHeight - 100) {
+                        element.classList.add('visible');
+                    }
+                });
+            }
+            
+            // Verificar elementos al cargar la página
+            checkFadeElements();
+            
+            // Verificar elementos al hacer scroll
+            window.addEventListener('scroll', checkFadeElements);
+            
+            // Cambiar el fondo de la barra de navegación al hacer scroll
+            const navbar = document.querySelector('.navbar');
+            
+            window.addEventListener('scroll', function() {
+                if (window.scrollY > 50) {
+                    navbar.classList.add('scrolled');
+                } else {
+                    navbar.classList.remove('scrolled');
+                }
+            });
+            
+            // Manejo del menú móvil
+            const navbarToggler = document.querySelector('.navbar-toggler');
+            const navList = document.querySelector('.nav-list');
+            
+            navbarToggler.addEventListener('click', function() {
+                navList.classList.toggle('active');
+                navbarToggler.classList.toggle('active');
+            });
+            
+            // Cerrar el menú al hacer clic en un enlace en dispositivos móviles
+            const navLinks = document.querySelectorAll('.nav-list a');
+            
+            navLinks.forEach(link => {
+                link.addEventListener('click', function() {
+                    navList.classList.remove('active');
+                    navbarToggler.classList.remove('active');
+                });
+            });
+            
+            // Navegación suave al hacer clic en los enlaces
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    const targetId = this.getAttribute('href');
+                    const targetElement = document.querySelector(targetId);
+                    
+                    if (targetElement) {
+                        window.scrollTo({
+                            top: targetElement.offsetTop - 70,
+                            behavior: 'smooth'
+                        });
+                    }
+                });
+            });
+            
+            // Activar el enlace activo en la navegación según la sección visible
+            function setActiveNavLink() {
+                const sections = document.querySelectorAll('section, .carousel');
+                let currentSectionId = '';
+                
+                sections.forEach(section => {
+                    const sectionTop = section.offsetTop;
+                    const sectionHeight = section.clientHeight;
+                    
+                    if (window.scrollY >= sectionTop - 100 && window.scrollY < sectionTop + sectionHeight - 100) {
+                        currentSectionId = section.getAttribute('id');
+                    }
+                });
+                
+                navLinks.forEach(link => {
+                    link.classList.remove('active');
+                    
+                    if (link.getAttribute('href') === '#' + currentSectionId) {
+                        link.classList.add('active');
+                    }
+                });
+            }
+            
+            window.addEventListener('scroll', setActiveNavLink);
+            
+            // Establecer el enlace activo inicial
+            setActiveNavLink();
+        });
+    </script>
+</body>
+</html>
