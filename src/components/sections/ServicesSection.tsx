@@ -45,7 +45,7 @@ export default function ServicesSection() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="section-subtitle mx-auto"
           >
-            Ofrecemos soluciones integrales en software, tecnologia, ingenieria y construccion.
+            Ofrecemos soluciones integrales en software, tecnología, ingeniería y construcción.
           </motion.p>
         </div>
 
@@ -88,7 +88,7 @@ export default function ServicesSection() {
             Experiencia Comprobada
           </h3>
           <p className="text-primary-200 leading-relaxed">
-            Con 24 proyectos ejecutados exitosamente, hemos brindado soluciones de software, soporte TIC e ingenieria a empresas estatales como Electrosur, Electro Puno, Electro Sur Este y la Universidad Nacional del Altiplano. Nuestro compromiso es entregar resultados de calidad en los plazos establecidos.
+            Con 24 proyectos ejecutados exitosamente, hemos brindado soluciones de software, soporte TIC e ingeniería a empresas estatales como Electrosur, Electro Puno, Electro Sur Este y la Universidad Nacional del Altiplano. Nuestro compromiso es entregar resultados de calidad en los plazos establecidos.
           </p>
         </motion.div>
       </div>

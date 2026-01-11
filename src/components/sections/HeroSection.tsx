@@ -77,7 +77,7 @@ export default function HeroSection() {
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary-800/50 backdrop-blur-sm rounded-full border border-primary-700/50 mb-6"
           >
             <FaBolt className="text-accent-electric animate-pulse" />
-            <span className="text-sm text-primary-200">Lideres en Soluciones de Ingenieria</span>
+            <span className="text-sm text-primary-200">Líderes en Soluciones de Ingeniería</span>
           </motion.div>
 
           {/* Title */}
@@ -87,7 +87,7 @@ export default function HeroSection() {
             transition={{ delay: 0.4 }}
             className="text-4xl md:text-6xl lg:text-7xl font-display font-bold text-white mb-6"
           >
-            <span className="block">INGENIERIA</span>
+            <span className="block">INGENIERÍA</span>
             <span className="block text-gradient glow-text">TELCOM EIRL</span>
           </motion.h1>
 
@@ -98,7 +98,7 @@ export default function HeroSection() {
             transition={{ delay: 0.6 }}
             className="text-xl md:text-2xl text-primary-200 max-w-3xl mx-auto mb-8"
           >
-            "Software, Ingenieria Electrica, Mineria y Soluciones TIC para el Peru"
+            "Software, Ingeniería Eléctrica, Minería y Soluciones TIC para el Perú"
           </motion.p>
 
           {/* CTA Buttons */}
@@ -131,7 +131,7 @@ export default function HeroSection() {
             transition={{ delay: 1.2 }}
             className="flex flex-col items-center gap-2 text-primary-400"
           >
-            <span className="text-sm">Descubre mas</span>
+            <span className="text-sm">Descubre más</span>
             <motion.div
               animate={{ y: [0, 10, 0] }}
               transition={{ repeat: Infinity, duration: 1.5 }}

@@ -20,7 +20,7 @@ export default function Footer() {
               />
             </Link>
             <p className="text-primary-300 text-sm mb-4">
-              Software, Ingenieria Electrica y Soluciones Tecnologicas para empresas estatales y privadas desde 2017.
+              Software, Ingeniería Eléctrica y Soluciones Tecnológicas para empresas estatales y privadas desde 2017.
             </p>
             <div className="flex gap-3">
               <a
@@ -37,7 +37,7 @@ export default function Footer() {
           {/* Quick Links */}
           <div>
             <h3 className="font-display font-semibold text-white mb-4">
-              Enlaces Rapidos
+              Enlaces Rápidos
             </h3>
             <ul className="space-y-2">
               {footerNavigation.quickLinks.map((item) => (
@@ -57,7 +57,7 @@ export default function Footer() {
                   rel="noopener noreferrer"
                   className="text-primary-300 hover:text-accent-electric transition-colors duration-200 text-sm"
                 >
-                  Area de Trabajo
+                  Área de Trabajo
                 </a>
               </li>
             </ul>
@@ -73,13 +73,13 @@ export default function Footer() {
                 <span className="text-primary-300 text-sm">Desarrollo de Software</span>
               </li>
               <li>
-                <span className="text-primary-300 text-sm">Ingenieria Electrica</span>
+                <span className="text-primary-300 text-sm">Ingeniería Eléctrica</span>
               </li>
               <li>
-                <span className="text-primary-300 text-sm">Proyectos de Mineria</span>
+                <span className="text-primary-300 text-sm">Proyectos de Minería</span>
               </li>
               <li>
-                <span className="text-primary-300 text-sm">Consultoria Tecnologica</span>
+                <span className="text-primary-300 text-sm">Consultoría Tecnológica</span>
               </li>
             </ul>
           </div>
@@ -113,7 +113,7 @@ export default function Footer() {
               {currentYear} {config.companyInfo.name}. Todos los derechos reservados.
             </p>
             <p className="text-primary-500 text-xs">
-              Desarrollado con energia por el equipo de Ingenieria Telcom EIRL
+              Desarrollado con energía por el equipo de Ingeniería Telcom EIRL
             </p>
           </div>
         </div>
