@@ -15,19 +15,22 @@ import {
 import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
 
-// Interface local para las postulaciones
+// Interface local para las postulaciones (estructura nueva)
 interface ApplicationData {
   id: string
   jobId: string
   jobTitle: string
   fullName: string
+  dni: string
   email: string
   phone: string
-  dni: string
-  experience: string
-  education: string
+  linkedIn: string
+  coverLetter: string
+  expectedSalary: string
+  availability: string
   cvUrl: string
   status: string
+  notes: string
   createdAt: string
   updatedAt: string
 }
@@ -61,22 +64,26 @@ export default function ApplicationsPage() {
 
     if (result.success && result.data) {
       // Mapear campos de la API a la estructura del componente
+      // Soporta estructura nueva (jobId, fullName, phone, status) y antigua (convocatoria_id, nombre_completo, telefono, estado)
       const mappedApplications = (result.data as unknown[]).map((app: unknown) => {
         const a = app as Record<string, unknown>
         return {
           id: String(a.id || ''),
-          jobId: String(a.convocatoria_id || a.jobId || ''),
-          jobTitle: String(a.titulo_convocatoria || a.jobTitle || 'Sin puesto'),
-          fullName: String(a.nombre_completo || a.fullName || ''),
-          email: String(a.email || ''),
-          phone: String(a.telefono || a.phone || ''),
+          jobId: String(a.jobId || a.convocatoria_id || ''),
+          jobTitle: String(a.jobTitle || a.titulo_convocatoria || 'Sin puesto'),
+          fullName: String(a.fullName || a.nombre_completo || ''),
           dni: String(a.dni || ''),
-          experience: String(a.carta_presentacion || a.experience || ''),
-          education: String(a.education || ''),
-          cvUrl: String(a.cv_url || a.cvUrl || ''),
-          status: mapStatus(String(a.estado || a.status || 'pending')),
-          createdAt: formatApiDate(a.fecha_postulacion || a.createdAt),
-          updatedAt: formatApiDate(a.fecha_postulacion || a.updatedAt),
+          email: String(a.email || ''),
+          phone: String(a.phone || a.telefono || ''),
+          linkedIn: String(a.linkedIn || a.linkedin || ''),
+          coverLetter: String(a.coverLetter || a.carta_presentacion || ''),
+          expectedSalary: String(a.expectedSalary || a.pretension_salarial || ''),
+          availability: String(a.availability || a.disponibilidad || ''),
+          cvUrl: String(a.cvUrl || a.cv_url || ''),
+          status: mapStatus(String(a.status || a.estado || 'pending')),
+          notes: String(a.notes || a.observaciones || ''),
+          createdAt: formatApiDate(a.createdAt || a.fecha_postulacion),
+          updatedAt: formatApiDate(a.updatedAt || a.createdAt || a.fecha_postulacion),
         }
       })
       setApplications(mappedApplications)
@@ -89,12 +96,18 @@ export default function ApplicationsPage() {
   const mapStatus = (status: string): string => {
     const statusMap: Record<string, string> = {
       'pendiente': 'pending',
+      'pending': 'pending',
       'en_revision': 'reviewing',
+      'revision': 'reviewing',
       'revisado': 'reviewing',
+      'reviewing': 'reviewing',
       'entrevista': 'interview',
+      'interview': 'interview',
       'rechazado': 'rejected',
+      'rejected': 'rejected',
       'contratado': 'accepted',
       'aceptado': 'accepted',
+      'accepted': 'accepted',
     }
     return statusMap[status.toLowerCase()] || status
   }
@@ -382,23 +395,64 @@ export default function ApplicationsPage() {
                         })}
                       </p>
                     </div>
+                    {selectedApplication.linkedIn && (
+                      <div>
+                        <label className="block text-sm font-medium text-primary-300 mb-1">
+                          LinkedIn
+                        </label>
+                        <a
+                          href={selectedApplication.linkedIn.startsWith('http') ? selectedApplication.linkedIn : `https://${selectedApplication.linkedIn}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-accent-electric hover:underline"
+                        >
+                          {selectedApplication.linkedIn}
+                        </a>
+                      </div>
+                    )}
+                    {selectedApplication.availability && (
+                      <div>
+                        <label className="block text-sm font-medium text-primary-300 mb-1">
+                          Disponibilidad
+                        </label>
+                        <p className="text-white">{selectedApplication.availability}</p>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Education */}
-                  <div>
-                    <label className="block text-sm font-medium text-primary-300 mb-1">
-                      Formacion Academica
-                    </label>
-                    <p className="text-white">{selectedApplication.education}</p>
-                  </div>
+                  {/* Expected Salary */}
+                  {selectedApplication.expectedSalary && (
+                    <div>
+                      <label className="block text-sm font-medium text-primary-300 mb-1">
+                        Pretension Salarial
+                      </label>
+                      <p className="text-white">S/ {selectedApplication.expectedSalary}</p>
+                    </div>
+                  )}
 
-                  {/* Experience */}
-                  <div>
-                    <label className="block text-sm font-medium text-primary-300 mb-1">
-                      Experiencia
-                    </label>
-                    <p className="text-white whitespace-pre-wrap">{selectedApplication.experience}</p>
-                  </div>
+                  {/* Cover Letter */}
+                  {selectedApplication.coverLetter && (
+                    <div>
+                      <label className="block text-sm font-medium text-primary-300 mb-1">
+                        Carta de Presentacion
+                      </label>
+                      <p className="text-white whitespace-pre-wrap bg-primary-800/50 p-4 rounded-lg">
+                        {selectedApplication.coverLetter}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Notes */}
+                  {selectedApplication.notes && (
+                    <div>
+                      <label className="block text-sm font-medium text-primary-300 mb-1">
+                        Notas
+                      </label>
+                      <p className="text-yellow-400 bg-yellow-500/10 p-3 rounded-lg">
+                        {selectedApplication.notes}
+                      </p>
+                    </div>
+                  )}
 
                   {/* CV */}
                   {selectedApplication.cvUrl && (

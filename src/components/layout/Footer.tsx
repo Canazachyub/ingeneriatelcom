@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { FaFacebook, FaPhone, FaEnvelope, FaMapMarkerAlt } from 'react-icons/fa'
+import { FaFacebook, FaPhone, FaEnvelope, FaMapMarkerAlt, FaClock, FaUserCheck, FaExternalLinkAlt } from 'react-icons/fa'
 import { config } from '../../config/env'
 import { footerNavigation } from '../../data/navigation'
 
@@ -63,24 +63,36 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Services */}
+          {/* Portal Empleados */}
           <div>
-            <h3 className="font-display font-semibold text-white mb-4">
-              Servicios
+            <h3 className="font-display font-semibold text-white mb-4 flex items-center gap-2">
+              <FaUserCheck className="text-accent-electric" />
+              Portal Empleados
             </h3>
             <ul className="space-y-2">
-              <li>
-                <span className="text-primary-300 text-sm">Desarrollo de Software</span>
-              </li>
-              <li>
-                <span className="text-primary-300 text-sm">Ingeniería Eléctrica</span>
-              </li>
-              <li>
-                <span className="text-primary-300 text-sm">Proyectos de Minería</span>
-              </li>
-              <li>
-                <span className="text-primary-300 text-sm">Consultoría Tecnológica</span>
-              </li>
+              {footerNavigation.empleados.map((item) => (
+                <li key={item.href}>
+                  {item.href.startsWith('http') ? (
+                    <a
+                      href={item.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary-300 hover:text-accent-electric transition-colors duration-200 text-sm flex items-center gap-1"
+                    >
+                      {item.label}
+                      <FaExternalLinkAlt className="text-xs" />
+                    </a>
+                  ) : (
+                    <Link
+                      to={item.href}
+                      className="text-primary-300 hover:text-accent-electric transition-colors duration-200 text-sm flex items-center gap-1"
+                    >
+                      {item.label === 'Marcar Asistencia' && <FaClock className="text-xs text-accent-energy" />}
+                      {item.label}
+                    </Link>
+                  )}
+                </li>
+              ))}
             </ul>
           </div>
 

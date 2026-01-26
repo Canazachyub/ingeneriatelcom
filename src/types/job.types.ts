@@ -14,7 +14,25 @@ export type JobCategory =
 export type JobModality = 'presencial' | 'remoto' | 'hibrido'
 export type JobStatus = 'activo' | 'pausado' | 'cerrado'
 export type JobPriority = 'normal' | 'urgente'
-export type ApplicationStatus = 'pendiente' | 'revisado' | 'entrevista' | 'rechazado' | 'contratado'
+
+// Application statuses - comprehensive list matching backend values
+export type ApplicationStatus =
+  | 'pending'      // Recibido (nuevo)
+  | 'pendiente'    // Recibido (legacy)
+  | 'review'       // En revision
+  | 'revisado'     // En revision (legacy)
+  | 'preseleccionado' // Preseleccionado
+  | 'interview'    // Entrevista programada
+  | 'entrevista'   // Entrevista programada (legacy)
+  | 'evaluation'   // Evaluacion pendiente
+  | 'evaluacion'   // Evaluacion pendiente (legacy)
+  | 'approved'     // Aprobado
+  | 'aprobado'     // Aprobado (legacy)
+  | 'hired'        // Contratado
+  | 'contratado'   // Contratado (legacy)
+  | 'rejected'     // Rechazado
+  | 'rechazado'    // Rechazado (legacy)
+  | 'no_seleccionado' // No seleccionado
 
 export interface JobPosting {
   id: string
@@ -37,23 +55,25 @@ export interface JobPosting {
   applicationsCount: number
 }
 
+// JobApplication - matches backend 16-column structure:
+// id, jobId, jobTitle, fullName, dni, email, phone, linkedIn, coverLetter, expectedSalary, availability, cvUrl, status, notes, createdAt, updatedAt
 export interface JobApplication {
   id: string
   jobId: string
-  applicant: {
-    fullName: string
-    email: string
-    phone: string
-    dni: string
-    linkedIn?: string
-  }
-  cvFileUrl: string
-  cvFileName: string
+  jobTitle: string
+  fullName: string
+  dni: string
+  email: string
+  phone: string
+  linkedIn?: string
   coverLetter?: string
-  expectedSalary?: number
+  expectedSalary?: number | string
   availability: string
-  appliedAt: Date
+  cvUrl: string
   status: ApplicationStatus
+  notes?: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface JobFilters {

@@ -18,9 +18,13 @@ export const mainNavigation: NavItem[] = [
   { label: 'Bolsa de Trabajo', href: '/bolsa-trabajo' },
   { label: 'Contacto', href: '#contacto' },
   {
-    label: 'Area de Trabajo',
-    href: 'https://canazachyub.github.io/Telcomdashboard',
-    isExternal: true,
+    label: 'Portal Empleados',
+    href: '#',
+    children: [
+      { label: 'Marcar Asistencia', href: '/asistencia' },
+      { label: 'Consultar Postulacion', href: '/mi-postulacion' },
+      { label: 'Dashboard', href: 'https://canazachyub.github.io/Telcomdashboard', isExternal: true },
+    ],
   },
 ]
 
@@ -29,7 +33,13 @@ export const footerNavigation = {
     { label: 'Inicio', href: '#inicio' },
     { label: 'Servicios', href: '#servicios' },
     { label: 'Bolsa de Trabajo', href: '/bolsa-trabajo' },
+    { label: 'Consultar Postulacion', href: '/mi-postulacion' },
     { label: 'Contacto', href: '#contacto' },
+  ],
+  empleados: [
+    { label: 'Marcar Asistencia', href: '/asistencia' },
+    { label: 'Consultar mi Postulacion', href: '/mi-postulacion' },
+    { label: 'Dashboard', href: 'https://canazachyub.github.io/Telcomdashboard' },
   ],
   legal: [
     { label: 'Terminos y Condiciones', href: '/terminos' },

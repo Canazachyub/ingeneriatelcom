@@ -1,6 +1,76 @@
 import { config } from '../config/env'
 import { JobPosting, JobApplication } from '../types/job.types'
 import { ContactForm } from '../types/contact.types'
+import {
+  ConsultaPostulacionResponse,
+  VerificarEmpleadoResponse,
+  MarcarAsistenciaResponse,
+  GeoLocation,
+  EstadoPostulacion
+} from '../types/postulacion.types'
+
+// Helper function to map backend status strings to frontend EstadoPostulacion type
+function mapBackendEstado(estado: string | undefined | null): EstadoPostulacion {
+  if (!estado) return 'recibido'
+
+  const estadoLower = estado.toLowerCase().trim()
+
+  // Map various backend status formats to frontend EstadoPostulacion
+  const statusMap: Record<string, EstadoPostulacion> = {
+    // Recibido / Pending
+    'pending': 'recibido',
+    'pendiente': 'recibido',
+    'recibido': 'recibido',
+    'received': 'recibido',
+    'nuevo': 'recibido',
+    'new': 'recibido',
+
+    // En revision / Review
+    'review': 'en_revision',
+    'revision': 'en_revision',
+    'en_revision': 'en_revision',
+    'en revision': 'en_revision',
+    'reviewing': 'en_revision',
+    'under_review': 'en_revision',
+
+    // Preseleccionado
+    'preselected': 'preseleccionado',
+    'preseleccionado': 'preseleccionado',
+    'shortlisted': 'preseleccionado',
+
+    // Entrevista programada
+    'interview': 'entrevista_programada',
+    'entrevista': 'entrevista_programada',
+    'entrevista_programada': 'entrevista_programada',
+    'interview_scheduled': 'entrevista_programada',
+    'scheduled': 'entrevista_programada',
+
+    // Evaluacion pendiente
+    'evaluation': 'evaluacion_pendiente',
+    'evaluacion': 'evaluacion_pendiente',
+    'evaluacion_pendiente': 'evaluacion_pendiente',
+    'pending_evaluation': 'evaluacion_pendiente',
+    'test': 'evaluacion_pendiente',
+
+    // Aprobado / Hired
+    'approved': 'aprobado',
+    'aprobado': 'aprobado',
+    'hired': 'aprobado',
+    'contratado': 'aprobado',
+    'accepted': 'aprobado',
+    'aceptado': 'aprobado',
+
+    // No seleccionado / Rejected
+    'rejected': 'no_seleccionado',
+    'rechazado': 'no_seleccionado',
+    'no_seleccionado': 'no_seleccionado',
+    'not_selected': 'no_seleccionado',
+    'declined': 'no_seleccionado',
+    'descartado': 'no_seleccionado',
+  }
+
+  return statusMap[estadoLower] || 'recibido'
+}
 
 export interface ApiResponse<T> {
   success: boolean
@@ -348,6 +418,195 @@ class AppScriptApi {
       }
       reader.onerror = reject
     })
+  }
+
+  // ============================================
+  // CONSULTA DE POSTULACION POR DNI
+  // ============================================
+
+  // Consultar estado de postulacion por DNI
+  async consultarPostulacion(dni: string): Promise<ApiResponse<ConsultaPostulacionResponse>> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await this.request<any>('consultarPostulacion', 'GET', { dni })
+
+    if (!result.success || !result.data) {
+      return {
+        success: false,
+        error: result.error || 'Error al consultar postulacion',
+        data: { encontrado: false, mensaje: result.error || 'No se encontro postulacion' }
+      }
+    }
+
+    const data = result.data
+
+    // Transformar respuesta del backend al formato esperado por el frontend
+    // Backend retorna: { postulante: {...}, postulacion: {...}, cronograma: [...] }
+    // Frontend espera: { encontrado: true, postulacion: {...con datos del postulante...}, cronograma: [...] }
+    const transformed: ConsultaPostulacionResponse = {
+      encontrado: true,
+      postulacion: {
+        id: data.postulacion?.id || '',
+        dni: data.postulante?.dni || '',
+        nombre: data.postulante?.nombre || '',
+        email: data.postulante?.email || '',
+        telefono: data.postulante?.telefono || '',
+        puesto: data.postulacion?.puestoNombre || '',
+        convocatoriaId: data.postulacion?.puestoId || '',
+        estado: mapBackendEstado(data.postulacion?.estado),
+        fechaPostulacion: data.postulacion?.fechaPostulacion || '',
+      },
+      cronograma: data.cronograma?.map((etapa: { id?: number; nombre?: string; descripcion?: string; estado?: string; fecha?: string }, index: number) => ({
+        etapa: String(etapa.id || index + 1),
+        nombre: etapa.nombre || '',
+        fechaInicio: etapa.fecha || new Date().toISOString(),
+        fechaFin: etapa.fecha || new Date().toISOString(),
+        descripcion: etapa.descripcion || '',
+        activa: etapa.estado === 'actual',
+        completada: etapa.estado === 'completada',
+        orden: etapa.id || index + 1
+      })) || [],
+      entrevista: data.entrevista || undefined,
+      evaluacion: data.evaluacion || undefined,
+    }
+
+    return { success: true, data: transformed }
+  }
+
+  // Historial de todas las postulaciones de un DNI
+  async historialPostulaciones(dni: string): Promise<ApiResponse<ConsultaPostulacionResponse[]>> {
+    return this.request<ConsultaPostulacionResponse[]>('historialPostulaciones', 'GET', { dni })
+  }
+
+  // ============================================
+  // SISTEMA DE ASISTENCIA
+  // ============================================
+
+  // Verificar si empleado existe y esta activo
+  async verificarEmpleado(dni: string): Promise<ApiResponse<VerificarEmpleadoResponse>> {
+    return this.request<VerificarEmpleadoResponse>('verificarEmpleado', 'GET', { dni })
+  }
+
+  // Marcar asistencia (entrada o salida)
+  async marcarAsistencia(
+    dni: string,
+    tipo: 'entrada' | 'salida',
+    location: GeoLocation
+  ): Promise<ApiResponse<MarcarAsistenciaResponse>> {
+    return this.request<MarcarAsistenciaResponse>('marcarAsistencia', 'POST', {
+      dni,
+      tipo,
+      lat: location.lat,
+      lng: location.lng,
+      accuracy: location.accuracy
+    })
+  }
+
+  // Obtener asistencias del dia actual
+  async asistenciasHoy(): Promise<ApiResponse<{
+    fecha: string
+    total: number
+    dentro: number
+    fuera: number
+    registros: Array<{
+      dni: string
+      nombre: string
+      entrada?: string
+      salida?: string
+      estado: 'dentro' | 'fuera'
+    }>
+  }>> {
+    return this.request('asistenciasHoy', 'GET')
+  }
+
+  // Reporte de asistencias de un empleado
+  async reporteAsistencia(
+    dni: string,
+    fechaInicio?: string,
+    fechaFin?: string
+  ): Promise<ApiResponse<{
+    empleado: { dni: string; nombre: string; puesto: string }
+    registros: Array<{
+      fecha: string
+      entrada?: string
+      salida?: string
+      horasTrabajadas?: number
+    }>
+    resumen: {
+      diasTrabajados: number
+      horasTotales: number
+      promedioHoras: number
+    }
+  }>> {
+    return this.request('reporteAsistencia', 'GET', { dni, fechaInicio, fechaFin })
+  }
+
+  // Obtener asistencia de hoy para dashboard admin
+  async getAttendanceToday(): Promise<ApiResponse<{
+    fecha: string
+    totalEmpleados: number
+    presentes: number
+    registros: Array<{
+      employeeName: string
+      checkIn: string
+      checkOut: string
+    }>
+  }>> {
+    const result = await this.request<{
+      fecha: string
+      total: number
+      dentro: number
+      fuera: number
+      registros: Array<{
+        dni: string
+        nombre: string
+        entrada?: string
+        salida?: string
+        estado: 'dentro' | 'fuera'
+      }>
+    }>('obtenerAsistenciasHoy', 'GET')
+
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error || 'Error al obtener asistencias' }
+    }
+
+    // Transformar al formato esperado por el Dashboard
+    return {
+      success: true,
+      data: {
+        fecha: result.data.fecha,
+        totalEmpleados: result.data.total,
+        presentes: result.data.dentro,
+        registros: result.data.registros.map(r => ({
+          employeeName: r.nombre,
+          checkIn: r.entrada || '',
+          checkOut: r.salida || ''
+        }))
+      }
+    }
+  }
+
+  // Obtener todas las asistencias con filtros (para admin)
+  async getAttendances(filters?: {
+    fecha?: string
+    employeeId?: string
+    startDate?: string
+    endDate?: string
+  }): Promise<ApiResponse<Array<{
+    id: string
+    employeeId: string
+    employeeName: string
+    employeeDni: string
+    date: string
+    checkIn: string
+    checkOut: string
+    checkInLat?: number
+    checkInLng?: number
+    checkOutLat?: number
+    checkOutLng?: number
+    status: string
+    hoursWorked?: number
+  }>>> {
+    return this.request('getAttendances', 'GET', filters)
   }
 }
 

@@ -13,6 +13,8 @@ import {
   FaSignOutAlt,
   FaBolt,
   FaServer,
+  FaClock,
+  FaChartLine,
 } from 'react-icons/fa'
 import { useAuth } from '../../context/AuthContext'
 
@@ -20,14 +22,41 @@ interface AdminLayoutProps {
   children: React.ReactNode
 }
 
-const navigation = [
-  { name: 'Dashboard', href: '/admin', icon: FaHome },
-  { name: 'Empleados', href: '/admin/empleados', icon: FaUsers },
-  { name: 'Proyectos', href: '/admin/proyectos', icon: FaProjectDiagram },
-  { name: 'Bolsa de Trabajo', href: '/admin/bolsa-trabajo', icon: FaBriefcase },
-  { name: 'Postulaciones', href: '/admin/postulaciones', icon: FaFileAlt },
-  { name: 'Mensajes', href: '/admin/mensajes', icon: FaEnvelope },
-  { name: 'Test API', href: '/admin/api-test', icon: FaServer },
+const navigationSections = [
+  {
+    title: 'Principal',
+    items: [
+      { name: 'Dashboard', href: '/admin', icon: FaHome },
+      { name: 'Asistencias', href: '/admin/asistencias', icon: FaClock },
+    ]
+  },
+  {
+    title: 'Gestion',
+    items: [
+      { name: 'Empleados', href: '/admin/empleados', icon: FaUsers },
+      { name: 'Proyectos', href: '/admin/proyectos', icon: FaProjectDiagram },
+    ]
+  },
+  {
+    title: 'Reclutamiento',
+    items: [
+      { name: 'Bolsa de Trabajo', href: '/admin/bolsa-trabajo', icon: FaBriefcase },
+      { name: 'Postulaciones', href: '/admin/postulaciones', icon: FaFileAlt },
+    ]
+  },
+  {
+    title: 'Comunicacion',
+    items: [
+      { name: 'Mensajes', href: '/admin/mensajes', icon: FaEnvelope },
+    ]
+  },
+  {
+    title: 'Sistema',
+    items: [
+      { name: 'Reportes', href: '/admin/reportes', icon: FaChartLine },
+      { name: 'Test API', href: '/admin/api-test', icon: FaServer },
+    ]
+  }
 ]
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
@@ -84,25 +113,34 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-1">
-            {navigation.map((item) => {
-              const isActive = location.pathname === item.href
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                    isActive
-                      ? 'bg-accent-electric/20 text-accent-electric'
-                      : 'text-primary-300 hover:bg-primary-800 hover:text-white'
-                  }`}
-                >
-                  <item.icon className="text-lg" />
-                  <span>{item.name}</span>
-                </Link>
-              )
-            })}
+          <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
+            {navigationSections.map((section) => (
+              <div key={section.title}>
+                <h3 className="px-4 text-xs font-semibold text-primary-500 uppercase tracking-wider mb-2">
+                  {section.title}
+                </h3>
+                <div className="space-y-1">
+                  {section.items.map((item) => {
+                    const isActive = location.pathname === item.href
+                    return (
+                      <Link
+                        key={item.name}
+                        to={item.href}
+                        onClick={() => setSidebarOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
+                          isActive
+                            ? 'bg-accent-electric/20 text-accent-electric border-l-2 border-accent-electric'
+                            : 'text-primary-300 hover:bg-primary-800 hover:text-white'
+                        }`}
+                      >
+                        <item.icon className={`text-lg ${isActive ? 'text-accent-electric' : ''}`} />
+                        <span className="text-sm">{item.name}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
 
           {/* User Info */}
