@@ -27,6 +27,13 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_APPS_SCRIPT_URL: https://script.google.com/macros/s/AKfycbywUB0ArdEt3IkATUPNdNN59HT8qYm4rwxbYKEiejZRGS7_ipcRuyfk-x2VZvUpNpyj/exec
+          VITE_SHEETS_ID: 15ajUr5KqGgs99bsCcp9LnxRaD9mbIWjZArLetk7v4hA
+          VITE_DRIVE_FOLDER_ID: 1B2CPcrNxUJtJcu7x8rXs_7_m9m2p9zAV
+          VITE_FB_PAGE_ID: 61586657451703
+          VITE_CONTACT_EMAIL: energysupervision13@gmail.com
+          VITE_DASHBOARD_URL: https://canazachyub.github.io/Telcomdashboard
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
