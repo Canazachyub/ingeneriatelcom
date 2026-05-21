@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Allow: /jobs
+Allow: /jobs/
+Allow: /terminos
+Allow: /privacidad
+
+# Bloquear panel admin de indexación
+Disallow: /admin
+Disallow: /admin/
+
+# Sitemap
+Sitemap: https://ingeneriatelcom.com/sitemap.xml
