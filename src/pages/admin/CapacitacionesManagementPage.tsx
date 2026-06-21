@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FaPlus, FaEdit, FaTrash, FaTimes, FaBook, FaListAlt,
-  FaSave, FaChevronDown
+  FaSave, FaChevronDown, FaArrowLeft
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import { Capacitacion, Pregunta } from '../../types/capacitacion.types'
@@ -28,6 +29,7 @@ const emptyPregunta: Omit<Pregunta, 'id'> = {
 }
 
 export default function CapacitacionesManagementPage() {
+  const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('capacitaciones')
   const [capacitaciones, setCapacitaciones] = useState<Capacitacion[]>([])
   const [preguntas, setPreguntas] = useState<Pregunta[]>([])
@@ -65,9 +67,11 @@ export default function CapacitacionesManagementPage() {
   // Cargar preguntas cuando cambia la capacitacion seleccionada
   const loadPreguntas = async (capId: string) => {
     if (!capId) { setPreguntas([]); return }
-    // Sin endpoint directo de banco de preguntas por cap_id aún
-    setPreguntas([])
-    showToast('Para ver preguntas, usa el panel de Google Sheets directamente o agrega getPreguntas al backend')
+    setLoading(true)
+    const res = await api.getPreguntas(capId)
+    if (res.success && res.data) setPreguntas(res.data)
+    else showToast(res.error || 'Error al cargar preguntas')
+    setLoading(false)
   }
 
   useEffect(() => {
@@ -189,8 +193,15 @@ export default function CapacitacionesManagementPage() {
       </AnimatePresence>
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Gestión de Capacitaciones</h1>
-        <p className="text-gray-500 text-sm mt-1">Administra capacitaciones y banco de preguntas</p>
+        <button
+          onClick={() => navigate('/admin')}
+          className="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-3 transition-colors group"
+        >
+          <FaArrowLeft className="group-hover:-translate-x-1 transition-transform" />
+          Volver al Dashboard
+        </button>
+        <h1 className="text-2xl font-bold text-white">Gestión de Capacitaciones</h1>
+        <p className="text-gray-400 text-sm mt-1">Administra capacitaciones y banco de preguntas</p>
       </div>
 
       {/* Tabs */}
@@ -213,7 +224,7 @@ export default function CapacitacionesManagementPage() {
       {tab === 'capacitaciones' && (
         <div>
           <div className="flex justify-between items-center mb-4">
-            <p className="text-sm text-gray-500">{capacitaciones.length} capacitacion{capacitaciones.length !== 1 ? 'es' : ''}</p>
+            <p className="text-sm text-gray-400">{capacitaciones.length} capacitacion{capacitaciones.length !== 1 ? 'es' : ''}</p>
             <button
               onClick={abrirCrearCap}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
@@ -276,7 +287,7 @@ export default function CapacitacionesManagementPage() {
               <select
                 value={capSeleccionada}
                 onChange={e => setCapSeleccionada(e.target.value)}
-                className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Selecciona una capacitación</option>
                 {capacitaciones.map(c => (
@@ -300,8 +311,8 @@ export default function CapacitacionesManagementPage() {
             </div>
           ) : preguntas.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
-              <p>No hay preguntas cargadas. Crea la primera con el botón de arriba.</p>
-              <p className="text-xs mt-2 text-gray-300">Nota: el listado requiere el endpoint getPreguntas en el backend.</p>
+              <FaListAlt className="text-4xl mx-auto mb-3 opacity-30" />
+              <p>No hay preguntas para esta capacitación. Crea la primera con el botón de arriba.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -363,30 +374,30 @@ export default function CapacitacionesManagementPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Título *</label>
                   <input type="text" value={formCap.titulo} onChange={e => setFormCap(p => ({ ...p, titulo: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
                   <textarea value={formCap.descripcion} onChange={e => setFormCap(p => ({ ...p, descripcion: e.target.value }))}
-                    rows={3} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none" />
+                    rows={3} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none text-gray-900 bg-white" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">URL Material (opcional)</label>
                   <input type="url" value={formCap.material_url} onChange={e => setFormCap(p => ({ ...p, material_url: e.target.value }))}
-                    placeholder="https://drive.google.com/..." className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+                    placeholder="https://drive.google.com/..." className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
                     <select value={formCap.categoria} onChange={e => setFormCap(p => ({ ...p, categoria: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white">
                       {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
                     <select value={formCap.estado} onChange={e => setFormCap(p => ({ ...p, estado: e.target.value as Capacitacion['estado'] }))}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white">
                       {ESTADOS_CAP.map(s => <option key={s}>{s}</option>)}
                     </select>
                   </div>
@@ -396,13 +407,13 @@ export default function CapacitacionesManagementPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">N° Preguntas</label>
                     <input type="number" min={1} max={100} value={formCap.num_preguntas}
                       onChange={e => setFormCap(p => ({ ...p, num_preguntas: +e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Nota Mínima</label>
                     <input type="number" min={1} max={20} value={formCap.nota_minima}
                       onChange={e => setFormCap(p => ({ ...p, nota_minima: +e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -410,13 +421,13 @@ export default function CapacitacionesManagementPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Tiempo (min)</label>
                     <input type="number" min={5} max={180} value={formCap.tiempo_limite_min}
                       onChange={e => setFormCap(p => ({ ...p, tiempo_limite_min: +e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Intervalo foto (seg)</label>
                     <input type="number" min={10} max={120} value={formCap.foto_intervalo_seg}
                       onChange={e => setFormCap(p => ({ ...p, foto_intervalo_seg: +e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white" />
                   </div>
                 </div>
               </div>
@@ -463,7 +474,7 @@ export default function CapacitacionesManagementPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Capacitación *</label>
                   <select value={formPq.capacitacion_id} onChange={e => setFormPq(p => ({ ...p, capacitacion_id: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white">
                     <option value="">Seleccionar...</option>
                     {capacitaciones.map(c => <option key={c.id} value={c.id}>{c.titulo}</option>)}
                   </select>
@@ -472,21 +483,21 @@ export default function CapacitacionesManagementPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Pregunta *</label>
                   <textarea value={formPq.pregunta} onChange={e => setFormPq(p => ({ ...p, pregunta: e.target.value }))}
-                    rows={3} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none" />
+                    rows={3} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none text-gray-900 bg-white" />
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
                     <select value={formPq.tipo} onChange={e => setFormPq(p => ({ ...p, tipo: e.target.value as Pregunta['tipo'] }))}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white">
                       {TIPOS.map(t => <option key={t}>{t}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Dificultad</label>
                     <select value={formPq.dificultad} onChange={e => setFormPq(p => ({ ...p, dificultad: e.target.value as Pregunta['dificultad'] }))}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white">
                       {DIFICULTADES.map(d => <option key={d}>{d}</option>)}
                     </select>
                   </div>
@@ -494,7 +505,7 @@ export default function CapacitacionesManagementPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Puntaje</label>
                     <input type="number" min={1} max={10} value={formPq.puntaje}
                       onChange={e => setFormPq(p => ({ ...p, puntaje: +e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white" />
                   </div>
                 </div>
 
@@ -511,14 +522,14 @@ export default function CapacitacionesManagementPage() {
                           value={formPq[`opcion_${letra}` as keyof typeof formPq] as string || ''}
                           onChange={e => setFormPq(p => ({ ...p, [`opcion_${letra}`]: e.target.value }))}
                           placeholder={`Opción ${letra.toUpperCase()}`}
-                          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white"
                         />
                       </div>
                     ))}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Respuesta correcta (A/B/C/D) *</label>
                       <select value={formPq.respuesta_correcta} onChange={e => setFormPq(p => ({ ...p, respuesta_correcta: e.target.value }))}
-                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white">
                         <option value="">Seleccionar...</option>
                         {['A', 'B', 'C', 'D'].map(l => <option key={l}>{l}</option>)}
                       </select>
@@ -531,14 +542,14 @@ export default function CapacitacionesManagementPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Respuesta correcta (referencia) *</label>
                     <input type="text" value={formPq.respuesta_correcta}
                       onChange={e => setFormPq(p => ({ ...p, respuesta_correcta: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" />
+                      className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 bg-white" />
                   </div>
                 )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Justificación (opcional)</label>
                   <textarea value={formPq.justificacion} onChange={e => setFormPq(p => ({ ...p, justificacion: e.target.value }))}
-                    rows={2} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none" />
+                    rows={2} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none text-gray-900 bg-white" />
                 </div>
               </div>
 

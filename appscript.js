@@ -218,6 +218,8 @@ function doGet(e) {
         return jsonResponse(actualizarPregunta(data));
       case 'eliminarPregunta':
         return jsonResponse(eliminarPregunta(data));
+      case 'getPreguntas':
+        return jsonResponse(getPreguntas(data));
       case 'getEvaluaciones':
         return jsonResponse(getEvaluaciones(data));
       case 'revisarEvaluacion':
@@ -3315,6 +3317,24 @@ function eliminarCapacitacion(data) {
 
 // --- CRUD Banco de Preguntas ---
 
+function getPreguntas(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('banco_preguntas');
+  if (!sheet) return { success: false, error: 'Hoja banco_preguntas no encontrada' };
+  var rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return { success: true, data: [] };
+  var headers = rows[0];
+  var result = rows.slice(1)
+    .filter(function(r) { return r[0] !== ''; })
+    .map(function(r) { return rowToObject(headers, r); });
+  if (data && data.capacitacion_id) {
+    result = result.filter(function(p) {
+      return String(p.capacitacion_id) === String(data.capacitacion_id);
+    });
+  }
+  return { success: true, data: result };
+}
+
 function crearPregunta(data) {
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName('banco_preguntas');
@@ -3718,3 +3738,55 @@ function registrarEventoLog(data) {
 // ============================================================
 // FIN MODULO CAPACITACIONES Y EVALUACIONES
 // ============================================================
+
+// ============================================================
+// FUNCIONES DE PRE-AUTORIZACION (ejecutar desde el editor UNA VEZ)
+// Sirven para que Apps Script pida permisos de Drive y MailApp
+// antes de que lleguen requests reales del frontend.
+// ============================================================
+
+function preAutorizarDrive() {
+  // Imagen JPEG 1x1 pixel en base64
+  var pixel = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  var resultado = guardarFotoWebcam({
+    fileContent: pixel,
+    fileName: 'pre_auth_test.jpg',
+    mimeType: 'image/jpeg',
+    capacitacion_id: 'pre_auth',
+    dni: '00000000',
+    evaluacion_id: ''
+  });
+  Logger.log('preAutorizarDrive: ' + JSON.stringify(resultado));
+  // Limpiar archivo de prueba si se creo
+  try {
+    var folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+    var proc = folder.getFoldersByName('Evaluaciones_Proctoring');
+    if (proc.hasNext()) {
+      var preFolder = proc.next().getFoldersByName('pre_auth');
+      if (preFolder.hasNext()) {
+        var dniFolder = preFolder.next().getFoldersByName('00000000');
+        if (dniFolder.hasNext()) {
+          var files = dniFolder.next().getFilesByName('pre_auth_test.jpg');
+          if (files.hasNext()) files.next().setTrashed(true);
+        }
+      }
+    }
+  } catch(e) { /* ignorar */ }
+  return resultado;
+}
+
+function preAutorizarMail() {
+  // Intenta revisar una evaluacion inexistente; falla con "no encontrada"
+  // pero eso es suficiente para que Apps Script pre-autorice MailApp
+  var resultado = revisarEvaluacion({
+    id: 'EVAL_PREAUTH_TEST',
+    nota_final: 0,
+    retroalimentacion: '',
+    estado: 'aprobado',
+    revisado_por: 'Admin'
+  });
+  Logger.log('preAutorizarMail: ' + JSON.stringify(resultado));
+  // Resultado esperado: { success: false, error: 'Evaluacion no encontrada' }
+  // Eso esta bien — Drive y MailApp quedan autorizados
+  return resultado;
+}

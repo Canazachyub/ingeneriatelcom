@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { GeoLocation, GeoLocationState } from '../types/postulacion.types'
 
 interface UseGeolocationOptions {
@@ -105,11 +105,11 @@ export function useAutoGeolocation(options: UseGeolocationOptions = {}) {
   const geo = useGeolocation(options)
 
   // Obtener ubicación automáticamente si está soportado
-  useState(() => {
+  useEffect(() => {
     if (geo.isSupported) {
       geo.getLocation()
     }
-  })
+  }, [])
 
   return geo
 }

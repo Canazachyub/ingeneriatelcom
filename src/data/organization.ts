@@ -2,7 +2,7 @@ export const departments = [
   {
     id: '1',
     name: 'Gerencia General',
-    description: 'La Gerencia General es la encargada de dirigir y supervisar las actividades de Ingenieria Telcom EIRL, garantizando la calidad y seguridad de nuestros servicios.',
+    description: 'La Gerencia General es la encargada de dirigir y supervisar las actividades de Ingeniería Telcom EIRL, garantizando la calidad y seguridad de nuestros servicios.',
     icon: 'building',
   },
   {
@@ -13,26 +13,26 @@ export const departments = [
   },
   {
     id: '3',
-    name: 'Departamento de Administracion',
-    description: 'El Departamento de Administracion se encarga de la gestion administrativa y financiera de Ingenieria Telcom EIRL.',
+    name: 'Departamento de Administración',
+    description: 'El Departamento de Administración se encarga de la gestión administrativa y financiera de Ingeniería Telcom EIRL.',
     icon: 'calculator',
   },
   {
     id: '4',
     name: 'Departamento de Recursos Humanos',
-    description: 'El Departamento de Recursos Humanos se encarga de la gestion del talento humano de Ingenieria Telcom EIRL.',
+    description: 'El Departamento de Recursos Humanos se encarga de la gestión del talento humano de Ingeniería Telcom EIRL.',
     icon: 'users',
   },
   {
     id: '5',
     name: 'Departamento de Marketing',
-    description: 'El Departamento de Marketing se encarga de la gestion de la imagen corporativa de Ingenieria Telcom EIRL.',
+    description: 'El Departamento de Marketing se encarga de la gestión de la imagen corporativa de Ingeniería Telcom EIRL.',
     icon: 'megaphone',
   },
   {
     id: '6',
-    name: 'Departamento de Tecnologia',
-    description: 'El Departamento de Tecnologia se encarga de la gestion de la infraestructura tecnologica de Ingenieria Telcom EIRL.',
+    name: 'Departamento de Tecnología',
+    description: 'El Departamento de Tecnología se encarga de la gestión de la infraestructura tecnológica de Ingeniería Telcom EIRL.',
     icon: 'computer',
   },
 ]
@@ -65,7 +65,7 @@ export const ethicsValues = [
   {
     id: '5',
     title: 'Confidencialidad',
-    description: 'Respetamos la confidencialidad de la informacion de nuestros clientes y proveedores, protegiendo sus datos y utilizandolos unicamente para los fines acordados.',
+    description: 'Respetamos la confidencialidad de la información de nuestros clientes y proveedores, protegiendo sus datos y utilizándolos únicamente para los fines acordados.',
     icon: 'lock',
   },
   {
@@ -77,14 +77,14 @@ export const ethicsValues = [
 ]
 
 export const missionVision = {
-  mission: 'Gestionar proyectos y servicios en el ambito de las telecomunicaciones y electricidad con transparencia, imparcialidad y excelencia; asegurando la calidad y seguridad del suministro, y proporcionando soluciones economicas y eficientes a nuestros clientes.',
-  vision: 'Ser reconocidos a nivel nacional como la autoridad tecnica preeminente y el principal referente en soluciones avanzadas de telecomunicaciones y servicios electricos en Peru.',
+  mission: 'Gestionar proyectos y servicios en el ámbito de las telecomunicaciones y electricidad con transparencia, imparcialidad y excelencia; asegurando la calidad y seguridad del suministro, y proporcionando soluciones económicas y eficientes a nuestros clientes.',
+  vision: 'Ser reconocidos a nivel nacional como la autoridad técnica preeminente y el principal referente en soluciones avanzadas de telecomunicaciones y servicios eléctricos en Perú.',
   values: [
     { title: 'Cliente Primero', description: 'Nuestros clientes, internos y externos, son nuestra prioridad.' },
-    { title: 'Desarrollo', description: 'Contribuimos activamente al desarrollo economico de Peru.' },
+    { title: 'Desarrollo', description: 'Contribuimos activamente al desarrollo económico de Perú.' },
     { title: 'Transparencia', description: 'Compartimos de manera clara y abierta nuestras acciones.' },
     { title: 'Profesionalismo', description: 'Garantizamos imparcialidad y excelencia en nuestra labor.' },
     { title: 'Mejora Continua', description: 'Nos esforzamos por perfeccionar nuestro trabajo diariamente.' },
-    { title: 'Innovacion', description: 'Buscamos constantemente nuevas soluciones y formas de trabajar.' },
+    { title: 'Innovación', description: 'Buscamos constantemente nuevas soluciones y formas de trabajar.' },
   ],
 }

@@ -28,8 +28,8 @@ export const services: Service[] = [
 ]
 
 export const statistics = [
-  { value: 24, suffix: '', label: 'Proyectos Ejecutados', icon: 'folder' },
+  { value: 27, suffix: '', label: 'Proyectos Ejecutados', icon: 'folder' },
   { value: 15, suffix: '+', label: 'Clientes', icon: 'users' },
-  { value: 9, suffix: '', label: 'Años de Experiencia', icon: 'clock' },
+  { value: 15, suffix: '+', label: 'Años de Experiencia', icon: 'clock' },
   { value: 100, suffix: '%', label: 'Satisfacción', icon: 'star' },
 ]

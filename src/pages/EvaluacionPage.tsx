@@ -134,6 +134,18 @@ export default function EvaluacionPage() {
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [estado, config])
 
+  // ── Reconectar stream al video del examen ────────────────────────
+  // El estado 'permisos' y 'examen' tienen cada uno su propio <video ref={videoRef}>.
+  // Cuando React monta el video del examen, el ref apunta al nuevo elemento
+  // sin srcObject → negro. Este efecto lo reconecta.
+  useEffect(() => {
+    if (estado !== 'examen') return
+    if (videoRef.current && streamRef.current && !videoRef.current.srcObject) {
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(() => {})
+    }
+  }, [estado])
+
   // ── Fotos periódicas ─────────────────────────────────────────────
   useEffect(() => {
     if (estado !== 'examen' || !config) return
@@ -267,7 +279,7 @@ export default function EvaluacionPage() {
                 value={dni}
                 onChange={e => setDni(e.target.value.replace(/\D/g, ''))}
                 placeholder="12345678"
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg font-mono"
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg font-mono text-gray-900 bg-white"
                 required
               />
             </div>
@@ -278,7 +290,7 @@ export default function EvaluacionPage() {
                 value={nombres}
                 onChange={e => setNombres(e.target.value)}
                 placeholder="Juan Pérez García"
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
                 required
                 onPaste={() => api.registrarEventoLog({ evaluacion_id: evaluacionId || 'pre', tipo_evento: 'pegado_detectado', detalle: 'campo nombres' })}
               />
@@ -290,9 +302,19 @@ export default function EvaluacionPage() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="correo@ejemplo.com"
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
                 required
               />
+            </div>
+
+            {/* Advertencias previas al examen */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800 space-y-1.5">
+              <p className="font-semibold flex items-center gap-1.5"><FaExclamationTriangle className="text-amber-500" /> Antes de continuar, ten en cuenta:</p>
+              <ul className="space-y-1 pl-1">
+                <li className="flex items-start gap-2"><FaCamera className="mt-0.5 shrink-0 text-amber-600" /><span>Se <strong>activará tu cámara</strong> y se monitorizará durante toda la evaluación.</span></li>
+                <li className="flex items-start gap-2"><FaShieldAlt className="mt-0.5 shrink-0 text-amber-600" /><span><strong>Serás monitoreado.</strong> Cambiar de pestaña o minimizar la ventana queda registrado.</span></li>
+                <li className="flex items-start gap-2"><FaChevronRight className="mt-0.5 shrink-0 text-amber-600" /><span><strong>No podrás retroceder</strong> entre preguntas. Responde con cuidado antes de avanzar.</span></li>
+              </ul>
             </div>
 
             {errorMsg && (
@@ -334,21 +356,23 @@ export default function EvaluacionPage() {
           animate={{ opacity: 1, scale: 1 }}
           className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl"
         >
-          <div className="text-center mb-6">
+          <div className="text-center mb-5">
             <FaCamera className="text-4xl text-blue-600 mx-auto mb-3" />
-            <h2 className="text-2xl font-bold text-gray-900">Cámara requerida</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Activar cámara</h2>
             <p className="text-gray-500 text-sm mt-1">
-              El examen requiere acceso a tu cámara para verificación de identidad
+              Es obligatorio para iniciar la evaluación
             </p>
           </div>
 
-          <div className="rounded-2xl overflow-hidden bg-slate-900 mb-4 aspect-video">
-            <video
-              ref={videoRef}
-              className="w-full h-full object-cover"
-              muted
-              playsInline
-            />
+          {/* Preview cámara */}
+          <div className="rounded-2xl overflow-hidden bg-slate-900 mb-4 aspect-video relative">
+            <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
+            {camaraOk && (
+              <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+                <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                EN VIVO
+              </div>
+            )}
           </div>
           <canvas ref={canvasRef} className="hidden" />
 
@@ -359,30 +383,43 @@ export default function EvaluacionPage() {
             </div>
           )}
 
-          <div className="bg-blue-50 rounded-xl px-4 py-3 text-sm text-blue-700 mb-5 flex items-start gap-2">
-            <FaShieldAlt className="mt-0.5 shrink-0" />
-            <span>Se capturarán fotos periódicas durante el examen como parte del proceso de verificación.</span>
+          {/* Condiciones del examen */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 mb-4 space-y-2">
+            <p className="font-semibold text-slate-800">Condiciones de la evaluación:</p>
+            <div className="flex items-start gap-2"><FaCamera className="mt-0.5 shrink-0 text-blue-500" /><span>La cámara es <strong>indispensable</strong> para el monitoreo de la evaluación.</span></div>
+            <div className="flex items-start gap-2"><FaShieldAlt className="mt-0.5 shrink-0 text-red-500" /><span><strong>Estás siendo monitoreado.</strong> Cambiar de pestaña, minimizar o salir de la ventana queda registrado y es reportado al evaluador.</span></div>
+            <div className="flex items-start gap-2"><FaExclamationTriangle className="mt-0.5 shrink-0 text-amber-500" /><span><strong>No podrás retroceder</strong> entre preguntas. Una vez que avances, no hay vuelta atrás.</span></div>
+            <div className="flex items-start gap-2"><FaClock className="mt-0.5 shrink-0 text-green-600" /><span>Tienes <strong>{config?.tiempo_limite_min} minutos</strong> para completar las {preguntas.length} preguntas. Al vencer el tiempo se enviará automáticamente.</span></div>
           </div>
 
           {!camaraOk && !camaraError && (
             <button
               onClick={iniciarCamara}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors mb-3 flex items-center justify-center gap-2"
+            >
+              <FaCamera /> Permitir acceso a cámara
+            </button>
+          )}
+
+          {camaraError && (
+            <button
+              onClick={iniciarCamara}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors mb-3"
             >
-              Permitir acceso a cámara
+              Reintentar
             </button>
           )}
 
           <button
             onClick={handleComenzarExamen}
             disabled={!camaraOk}
-            className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+            className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
           >
-            Comenzar Examen <FaChevronRight />
+            <FaShieldAlt /> Entiendo y comienzo el examen
           </button>
 
           <p className="text-center text-xs text-gray-400 mt-3">
-            Capacitación: <strong>{config?.titulo}</strong> · {config?.tiempo_limite_min} min · {preguntas.length} preguntas
+            <strong>{config?.titulo}</strong> · {config?.tiempo_limite_min} min · {preguntas.length} preguntas
           </p>
         </motion.div>
       </div>
@@ -417,10 +454,19 @@ export default function EvaluacionPage() {
               </div>
             )}
 
-            {/* Cámara mini */}
-            <div className="w-12 h-9 rounded-lg overflow-hidden border border-white/20 shrink-0">
-              <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
-              <canvas ref={canvasRef} className="hidden" />
+            {/* Badge monitorizado + cámara mini */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="hidden sm:flex items-center gap-1.5 bg-red-600/20 border border-red-500/40 text-red-400 text-xs font-semibold px-2.5 py-1 rounded-full">
+                <span className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse" />
+                MONITORIZADO
+              </div>
+              <div className="w-12 h-9 rounded-lg overflow-hidden border border-white/20 relative">
+                <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
+                <canvas ref={canvasRef} className="hidden" />
+                <div className="absolute inset-0 flex items-end justify-center pb-0.5">
+                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -456,7 +502,8 @@ export default function EvaluacionPage() {
 
                 {preguntaActual.tipo === 'multiple' ? (
                   <div className="space-y-3">
-                    {preguntaActual.opciones.map(op => {
+                    {preguntaActual.opciones.map((op, idx) => {
+                      const letra = ['A', 'B', 'C', 'D'][idx] ?? String(idx + 1)
                       const seleccionada = respuestaActual === op.key
                       return (
                         <button
@@ -471,7 +518,7 @@ export default function EvaluacionPage() {
                           <span className={`shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold mt-0.5 ${
                             seleccionada ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300 text-gray-400'
                           }`}>
-                            {op.key}
+                            {letra}
                           </span>
                           <span className="leading-snug">{op.texto}</span>
                         </button>

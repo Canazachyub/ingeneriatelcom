@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { HiMenu, HiX, HiChevronDown, HiExternalLink } from 'react-icons/hi'
+import { FaLock } from 'react-icons/fa'
 import { mainNavigation, NavItem } from '../../data/navigation'
 
 export default function Navbar() {
@@ -11,6 +12,7 @@ export default function Navbar() {
   const [mobileOpenDropdown, setMobileOpenDropdown] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     const handleScroll = () => {
@@ -46,6 +48,10 @@ export default function Navbar() {
     }
 
     if (href.startsWith('#')) {
+      if (location.pathname !== '/') {
+        navigate('/' + href)
+        return
+      }
       const element = document.querySelector(href)
       if (element) {
         const offset = 80
@@ -70,6 +76,9 @@ export default function Navbar() {
             onClick={() => setOpenDropdown(isOpen ? null : item.label)}
             className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-primary-200 hover:text-accent-electric transition-colors duration-200"
           >
+            {item.label === 'Portal Empleados' && (
+              <FaLock className="w-3 h-3 text-accent-energy" />
+            )}
             {item.label}
             <HiChevronDown
               className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
@@ -120,6 +129,10 @@ export default function Navbar() {
       )
     }
 
+    const isActive = item.href.startsWith('/')
+      ? location.pathname === item.href
+      : location.pathname === '/'
+
     return (
       <a
         key={item.href}
@@ -128,10 +141,16 @@ export default function Navbar() {
           e.preventDefault()
           handleNavClick(item.href)
         }}
-        className="px-4 py-2 text-sm font-medium text-primary-200 hover:text-accent-electric transition-colors duration-200 relative group"
+        className={`px-4 py-2 text-sm font-medium transition-colors duration-200 relative group ${
+          isActive ? 'text-accent-electric' : 'text-primary-200 hover:text-accent-electric'
+        }`}
       >
         {item.label}
-        <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-accent-electric group-hover:w-full transition-all duration-300" />
+        <span
+          className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 bg-accent-electric transition-all duration-300 ${
+            isActive ? 'w-full' : 'w-0 group-hover:w-full'
+          }`}
+        />
       </a>
     )
   }
@@ -147,7 +166,12 @@ export default function Navbar() {
             onClick={() => setMobileOpenDropdown(isOpen ? null : item.label)}
             className="w-full flex items-center justify-between px-4 py-3 text-primary-200 hover:text-accent-electric hover:bg-primary-800/50 rounded-lg transition-all duration-200"
           >
-            {item.label}
+            <span className="flex items-center gap-2">
+              {item.label === 'Portal Empleados' && (
+                <FaLock className="w-3 h-3 text-accent-energy" />
+              )}
+              {item.label}
+            </span>
             <HiChevronDown
               className={`w-5 h-5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
             />
@@ -199,6 +223,10 @@ export default function Navbar() {
       )
     }
 
+    const isActive = item.href.startsWith('/')
+      ? location.pathname === item.href
+      : location.pathname === '/'
+
     return (
       <a
         key={item.href}
@@ -207,7 +235,11 @@ export default function Navbar() {
           e.preventDefault()
           handleNavClick(item.href)
         }}
-        className="block px-4 py-3 text-primary-200 hover:text-accent-electric hover:bg-primary-800/50 rounded-lg transition-all duration-200"
+        className={`block px-4 py-3 rounded-lg transition-all duration-200 ${
+          isActive
+            ? 'text-accent-electric bg-primary-800/50'
+            : 'text-primary-200 hover:text-accent-electric hover:bg-primary-800/50'
+        }`}
       >
         {item.label}
       </a>

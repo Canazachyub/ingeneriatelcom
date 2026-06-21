@@ -734,6 +734,10 @@ class AppScriptApi {
     return this.request('eliminarPregunta', 'POST', { id })
   }
 
+  async getPreguntas(capacitacion_id: string): Promise<ApiResponse<Pregunta[]>> {
+    return this.request<Pregunta[]>('getPreguntas', 'POST', { capacitacion_id })
+  }
+
   // Admin — evaluaciones
   async getEvaluaciones(filtros?: {
     estado?: string

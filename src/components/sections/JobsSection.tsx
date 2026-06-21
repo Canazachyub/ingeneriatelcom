@@ -19,13 +19,14 @@ interface Job {
   estado: string
   prioridad: string
   postulantes_count: number
+  imagen?: string
 }
 
 const categories: Record<string, string> = {
-  'Ingenieria': 'Ingenieria',
-  'Tecnico': 'Tecnico',
-  'TI': 'Tecnologia / TI',
-  'Administracion': 'Administracion',
+  'Ingenieria': 'Ingeniería',
+  'Tecnico': 'Técnico',
+  'TI': 'Tecnología / TI',
+  'Administracion': 'Administración',
   'Finanzas': 'Finanzas',
   'RRHH': 'Recursos Humanos',
   'Operaciones': 'Operaciones',
@@ -35,7 +36,7 @@ const categories: Record<string, string> = {
 const modalities: Record<string, string> = {
   'Presencial': 'Presencial',
   'Remoto': 'Remoto',
-  'Hibrido': 'Hibrido',
+  'Hibrido': 'Híbrido',
 }
 
 export default function JobsSection() {
@@ -70,9 +71,10 @@ export default function JobsSection() {
             estado: String(j.estado || j.status || 'activo'),
             prioridad: String(j.prioridad || j.priority || 'media'),
             postulantes_count: Number(j.postulantes_count || j.applicationsCount || 0),
+            imagen: String(j.imagen || j.image || ''),
           }
         })
-        // Solo mostrar trabajos activos, maximo 3
+        // Solo mostrar trabajos activos, máximo 3
         const activeJobs = mappedJobs.filter(job => job.estado === 'activo').slice(0, 3)
         setJobs(activeJobs)
       }
@@ -90,7 +92,7 @@ export default function JobsSection() {
     return `Hasta S/${max.toLocaleString()}`
   }
 
-  // Si no hay trabajos y no esta cargando, no mostrar la seccion
+  // Si no hay trabajos y no está cargando, no mostrar la sección
   if (!isLoading && jobs.length === 0) {
     return null
   }
@@ -106,7 +108,7 @@ export default function JobsSection() {
             transition={{ duration: 0.5 }}
             className="inline-block px-4 py-1 bg-accent-energy/10 text-accent-energy text-sm font-medium rounded-full mb-4"
           >
-            Unete a Nuestro Equipo
+            Únete a Nuestro Equipo
           </motion.span>
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
@@ -122,7 +124,7 @@ export default function JobsSection() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="section-subtitle mx-auto"
           >
-            Descubre las oportunidades laborales disponibles en Ingenieria Telcom EIRL.
+            Descubre las oportunidades laborales disponibles en Ingeniería Telcom EIRL.
           </motion.p>
         </div>
 
@@ -144,6 +146,28 @@ export default function JobsSection() {
                 transition={{ duration: 0.5, delay: 0.3 + index * 0.1 }}
               >
                 <Card className={`h-full flex flex-col ${job.prioridad === 'alta' ? 'border-red-500/50' : ''}`}>
+                  {/* Job Image */}
+                  {job.imagen && (
+                    <div className="w-full h-36 rounded-xl overflow-hidden mb-4 -mt-1">
+                      <img
+                        src={job.imagen}
+                        alt={job.titulo}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                      />
+                    </div>
+                  )}
+                  {!job.imagen && (
+                    <div className={`w-full h-20 rounded-xl overflow-hidden mb-4 -mt-1 bg-gradient-to-r ${
+                      job.categoria === 'Ingenieria' ? 'from-blue-600/40 to-cyan-600/40' :
+                      job.categoria === 'TI' ? 'from-purple-600/40 to-pink-600/40' :
+                      job.categoria === 'Tecnico' ? 'from-orange-600/40 to-yellow-600/40' :
+                      'from-primary-700/60 to-primary-800/60'
+                    } flex items-center justify-center`}>
+                      <FaBriefcase className="text-3xl text-white/30" />
+                    </div>
+                  )}
+
                   {/* Priority Badge */}
                   {job.prioridad === 'alta' && (
                     <span className="inline-flex items-center self-start gap-1 px-2 py-1 bg-red-500/20 text-red-400 text-xs font-semibold rounded-full mb-3">
@@ -184,10 +208,7 @@ export default function JobsSection() {
                   </p>
 
                   {/* Footer */}
-                  <div className="flex items-center justify-between pt-4 border-t border-primary-700/50">
-                    <div className="flex items-center gap-2 text-xs text-primary-400">
-                      <span>{job.postulantes_count || 0} postulantes</span>
-                    </div>
+                  <div className="flex items-center justify-end pt-4 border-t border-primary-700/50">
                     <Link
                       to={`/bolsa-trabajo/${job.id}`}
                       className="btn-secondary text-sm py-2 px-4"

@@ -20,7 +20,7 @@ export default function ClientsSection() {
             transition={{ duration: 0.5 }}
             className="inline-block px-4 py-1 bg-accent-electric/10 text-accent-electric text-sm font-medium rounded-full mb-4"
           >
-            Empresas que Confian en Nosotros
+            Empresas que Confían en Nosotros
           </motion.span>
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
@@ -36,7 +36,7 @@ export default function ClientsSection() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="section-subtitle mx-auto"
           >
-            Nos enorgullecemos de trabajar con renombradas empresas del sector electrico.
+            Nos enorgullecemos de trabajar con renombradas empresas del sector eléctrico.
           </motion.p>
         </div>
 

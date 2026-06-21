@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FaBolt, FaBriefcase, FaChevronDown } from 'react-icons/fa'
+import { FaBolt, FaBriefcase, FaChevronDown, FaFolder, FaUsers, FaClock, FaStar } from 'react-icons/fa'
 import AnimatedCounter from '../common/AnimatedCounter'
 import { statistics } from '../../data/services'
 
@@ -12,10 +12,10 @@ const heroImages = [
 ]
 
 const statIcons: Record<string, React.ReactNode> = {
-  folder: <FaBolt className="text-accent-electric" />,
-  users: <FaBolt className="text-accent-electric" />,
-  clock: <FaBolt className="text-accent-electric" />,
-  star: <FaBolt className="text-accent-electric" />,
+  folder: <FaFolder className="text-accent-electric" />,
+  users: <FaUsers className="text-accent-electric" />,
+  clock: <FaClock className="text-accent-electric" />,
+  star: <FaStar className="text-accent-electric" />,
 }
 
 export default function HeroSection() {

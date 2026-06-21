@@ -1,35 +1,34 @@
-# 🔌 Ingeniería Telcom EIRL - Sitio Web Corporativo
+# Ingeniería Telcom EIRL - Sitio Web Corporativo
 
-> **Proyecto de migración y modernización completa del sitio web corporativo de Ingeniería Telcom EIRL**
-> 
-> Empresa líder en telecomunicaciones y servicios eléctricos en Perú
-
----
-
-## 📋 Tabla de Contenidos
-
-- [Descripción General](#-descripción-general)
-- [Stack Tecnológico](#-stack-tecnológico)
-- [Estructura del Proyecto](#-estructura-del-proyecto)
-- [Diseño y Estética](#-diseño-y-estética)
-- [Funcionalidades](#-funcionalidades)
-- [Integraciones](#-integraciones)
-- [APIs y Endpoints](#-apis-y-endpoints)
-- [Instrucciones de Implementación](#-instrucciones-de-implementación)
-- [Despliegue](#-despliegue)
-- [Configuración del Dominio](#-configuración-del-dominio)
+> Aplicación web corporativa con React + TypeScript + Google Apps Script como backend.
+> Empresa de telecomunicaciones y servicios eléctricos — Perú.
 
 ---
 
-## 🎯 Descripción General
+## Tabla de Contenidos
 
-Este proyecto consiste en la **migración completa** de un sitio web HTML estático a una aplicación moderna con **React + TypeScript**, diseñada para ser:
+- [Descripción General](#descripción-general)
+- [Stack Tecnológico](#stack-tecnológico)
+- [Estructura Real del Proyecto](#estructura-real-del-proyecto)
+- [Sistema de Autenticación Admin](#sistema-de-autenticación-admin)
+- [Sistema de Bolsa de Trabajo](#sistema-de-bolsa-de-trabajo)
+- [Sistema de PDF / Ficha de Postulación](#sistema-de-pdf--ficha-de-postulación)
+- [Sistema de Capacitaciones y Evaluaciones](#sistema-de-capacitaciones-y-evaluaciones)
+- [Panel de Administración](#panel-de-administración)
+- [Google Apps Script (Backend)](#google-apps-script-backend)
+- [Base de Datos - Google Sheets](#base-de-datos---google-sheets)
+- [APIs y Comunicación](#apis-y-comunicación)
+- [Flujo de Postulación](#flujo-de-postulación)
+- [Despliegue](#despliegue)
+- [Problemas Conocidos y Soluciones](#problemas-conocidos-y-soluciones)
+- [Variables de Entorno](#variables-de-entorno)
+- [Recursos del Proyecto](#recursos-del-proyecto)
 
-- ✅ Completamente modular y mantenible
-- ✅ Conectada con APIs REST (Google Apps Script)
-- ✅ Integrada con servicios de Google (Sheets, Drive)
-- ✅ Con sistema de bolsa de trabajo funcional
-- ✅ Desplegable en GitHub Pages con dominio personalizado
+---
+
+## Descripción General
+
+Sitio web corporativo migrado de HTML estático a React + TypeScript. Incluye landing page pública, bolsa de trabajo con postulaciones, sistema de capacitaciones evaluables con proctoring por webcam, y panel de administración completo.
 
 ### Información de la Empresa
 
@@ -37,1025 +36,700 @@ Este proyecto consiste en la **migración completa** de un sitio web HTML estát
 |-------|-------|
 | **Empresa** | Ingeniería Telcom EIRL |
 | **Sector** | Telecomunicaciones y Servicios Eléctricos |
-| **Ubicación** | Tacna, Perú |
+| **Sede principal** | Tacna, Perú |
 | **Dominio** | `ingeneriatelcom.com` |
 | **Correo** | energysupervision13@gmail.com |
 | **Teléfono** | +51 946 728 495 |
 | **Facebook** | https://www.facebook.com/profile.php?id=61586657451703 |
 
----
+### Estadísticas del Sitio (valores reales)
 
-## 🛠 Stack Tecnológico
+| Stat | Valor |
+|------|-------|
+| Proyectos Ejecutados | 27 |
+| Clientes | 15+ |
+| Años de Experiencia | 15+ |
+| Satisfacción | 100% |
 
-### Frontend Principal
-
-```
-React 18+          → Framework UI
-TypeScript 5+      → Tipado estático
-Vite               → Build tool y dev server
-TailwindCSS 3+     → Estilos utilitarios
-Framer Motion      → Animaciones avanzadas
-React Router DOM   → Navegación SPA
-```
-
-### Librerías Adicionales
-
-```
-@tanstack/react-query  → Manejo de estado servidor y cache
-axios                  → Cliente HTTP para APIs
-react-hook-form        → Formularios con validación
-zod                    → Validación de schemas
-react-icons            → Iconografía
-swiper                 → Carrusel/slider avanzado
-react-intersection-observer → Animaciones on-scroll
-date-fns               → Manejo de fechas
-```
-
-### Herramientas de Desarrollo
-
-```
-ESLint               → Linting
-Prettier             → Formateo de código
-husky                → Git hooks
-```
+> Archivo: `src/data/services.ts` — array `statistics[]`
 
 ---
 
-## 📁 Estructura del Proyecto
+## Stack Tecnológico
+
+### Frontend
+
+```
+React 18             → Framework UI
+TypeScript 5         → Tipado estático
+Vite                 → Build tool
+TailwindCSS 3        → Estilos utilitarios
+Framer Motion        → Animaciones con scroll (useInView)
+React Router DOM 6   → Navegación SPA
+react-intersection-observer → Triggers de animación
+react-icons          → Iconografía (FontAwesome)
+```
+
+### Backend / Infraestructura
+
+```
+Google Apps Script   → REST API (doGet / doPost)
+Google Sheets        → Base de datos
+Google Drive         → Almacenamiento de CVs y fichas PDF
+GitHub Pages         → Hosting estático con dominio personalizado
+GitHub Actions       → CI/CD automático en push a main
+```
+
+### Deploy
+
+```bash
+npm run deploy       # build + gh-pages -d dist (manual)
+# O automático via GitHub Actions en push a main
+```
+
+---
+
+## Estructura Real del Proyecto
 
 ```
 ingenieria-telcom/
 ├── public/
-│   ├── assets/
-│   │   ├── images/
-│   │   │   ├── logo.png
-│   │   │   ├── hero/
-│   │   │   │   ├── hero-1.gif          # GIF animado principal
-│   │   │   │   ├── hero-2.gif
-│   │   │   │   └── hero-3.gif
-│   │   │   ├── clients/
-│   │   │   │   ├── electrosur.png
-│   │   │   │   ├── electropuno.png
-│   │   │   │   ├── electrosureste.png
-│   │   │   │   └── electroucayali.png
-│   │   │   └── team/
-│   │   └── fonts/
-│   ├── CNAME                           # Para dominio personalizado
-│   └── favicon.ico
+│   ├── assets/images/         # GIFs hero, logos clientes
+│   ├── robots.txt
+│   ├── sitemap.xml
+│   └── CNAME                  # ingeneriatelcom.com
 │
 ├── src/
 │   ├── api/
-│   │   ├── appScriptApi.ts            # Cliente API para Google Apps Script
-│   │   ├── sheetsApi.ts               # Integración con Google Sheets
-│   │   ├── driveApi.ts                # Integración con Google Drive
-│   │   └── facebookApi.ts             # Integración con Facebook Graph API
+│   │   └── appScriptApi.ts    # Cliente API (CRÍTICO - ver sección APIs)
 │   │
 │   ├── components/
 │   │   ├── common/
-│   │   │   ├── Button.tsx
+│   │   │   ├── Breadcrumb.tsx
 │   │   │   ├── Card.tsx
-│   │   │   ├── Modal.tsx
-│   │   │   ├── Loader.tsx
-│   │   │   ├── Input.tsx
-│   │   │   ├── Select.tsx
-│   │   │   ├── FileUpload.tsx
-│   │   │   └── Toast.tsx
-│   │   │
+│   │   │   ├── PageLoader.tsx
+│   │   │   └── SectionWrapper.tsx
 │   │   ├── layout/
-│   │   │   ├── Navbar.tsx             # Navegación principal
-│   │   │   ├── Footer.tsx             # Pie de página
-│   │   │   ├── Layout.tsx             # Layout wrapper
-│   │   │   └── MobileMenu.tsx         # Menú móvil hamburguesa
-│   │   │
-│   │   ├── sections/
-│   │   │   ├── HeroSection.tsx        # Carrusel principal con GIFs
-│   │   │   ├── AboutSection.tsx       # Quiénes Somos
-│   │   │   ├── ServicesSection.tsx    # Servicios
-│   │   │   ├── MissionVisionSection.tsx
-│   │   │   ├── EthicsSection.tsx      # Código de Ética
-│   │   │   ├── OrganizationSection.tsx # Estructura Organizacional
-│   │   │   ├── ClientsSection.tsx     # Clientes
-│   │   │   ├── JobsSection.tsx        # Bolsa de Trabajo
-│   │   │   ├── FacebookFeedSection.tsx # Feed de Facebook
-│   │   │   └── ContactSection.tsx     # Contacto
-│   │   │
-│   │   └── jobs/
-│   │       ├── JobCard.tsx            # Tarjeta de convocatoria
-│   │       ├── JobModal.tsx           # Modal detalle de trabajo
-│   │       ├── ApplicationForm.tsx    # Formulario de postulación
-│   │       ├── JobFilters.tsx         # Filtros de búsqueda
-│   │       └── CVUploader.tsx         # Componente subida de CV
+│   │   │   ├── Navbar.tsx
+│   │   │   ├── Footer.tsx
+│   │   │   └── Layout.tsx
+│   │   └── sections/
+│   │       ├── HeroSection.tsx
+│   │       ├── ClientsSection.tsx
+│   │       ├── ContactSection.tsx
+│   │       ├── JobsSection.tsx    # Preview 3 convocatorias en homepage
+│   │       └── ...
+│   │
+│   ├── context/
+│   │   └── ToastContext.tsx    # Notificaciones globales
 │   │
 │   ├── pages/
-│   │   ├── HomePage.tsx               # Página principal
-│   │   ├── JobsPage.tsx               # Página completa de bolsa de trabajo
-│   │   ├── JobDetailPage.tsx          # Detalle de una convocatoria
-│   │   └── NotFoundPage.tsx           # 404
+│   │   ├── HomePage.tsx
+│   │   ├── JobsPage.tsx                 # Listado completo con filtros
+│   │   ├── JobDetailPage.tsx            # Detalle + PDF ficha + formulario
+│   │   ├── ConsultaPostulacionPage.tsx
+│   │   ├── CapacitacionesPage.tsx       # Listado público de cursos activos
+│   │   ├── EvaluacionPage.tsx           # Examen con webcam + proctoring
+│   │   ├── PrivacyPage.tsx
+│   │   ├── TermsPage.tsx
+│   │   └── admin/
+│   │       ├── DashboardPage.tsx
+│   │       ├── JobsManagementPage.tsx         # CRUD convocatorias + subida PDF
+│   │       ├── ApplicationsPage.tsx           # Revisión de postulaciones
+│   │       ├── EmployeesPage.tsx
+│   │       ├── ReportsPage.tsx
+│   │       ├── CapacitacionesManagementPage.tsx  # CRUD cursos + banco de preguntas
+│   │       └── EvaluacionesPage.tsx            # Revisión de evaluaciones + fotos webcam
 │   │
 │   ├── hooks/
-│   │   ├── useJobs.ts                 # Hook para convocatorias
-│   │   ├── useSubmitApplication.ts    # Hook para enviar postulaciones
-│   │   ├── useFacebookPosts.ts        # Hook para posts de FB
-│   │   ├── useScrollAnimation.ts      # Hook para animaciones scroll
-│   │   └── useContactForm.ts          # Hook para formulario contacto
-│   │
-│   ├── services/
-│   │   ├── jobService.ts              # Lógica de negocio trabajos
-│   │   ├── contactService.ts          # Lógica de contacto
-│   │   └── uploadService.ts           # Lógica de subida archivos
+│   │   └── useGeolocation.ts
 │   │
 │   ├── types/
-│   │   ├── job.types.ts               # Tipos para trabajos
-│   │   ├── contact.types.ts           # Tipos para contacto
-│   │   ├── api.types.ts               # Tipos para respuestas API
-│   │   └── common.types.ts            # Tipos comunes
+│   │   ├── job.types.ts           # Interface JobPosting (incluye pdf_url)
+│   │   └── capacitacion.types.ts  # Capacitacion, Pregunta, Evaluacion, EvalLog
 │   │
-│   ├── utils/
-│   │   ├── constants.ts               # Constantes globales
-│   │   ├── helpers.ts                 # Funciones helper
-│   │   └── validators.ts              # Validadores
-│   │
-│   ├── styles/
-│   │   ├── globals.css                # Estilos globales + Tailwind
-│   │   └── animations.css             # Animaciones personalizadas
-│   │
-│   ├── data/
-│   │   ├── navigation.ts              # Links de navegación
-│   │   ├── services.ts                # Datos de servicios
-│   │   ├── clients.ts                 # Datos de clientes
-│   │   └── organization.ts            # Estructura organizacional
-│   │
-│   ├── config/
-│   │   └── env.ts                     # Variables de entorno
-│   │
-│   ├── App.tsx
-│   ├── main.tsx
-│   └── vite-env.d.ts
+│   └── data/
+│       ├── services.ts            # Estadísticas y servicios (valores reales)
+│       ├── clients.ts
+│       ├── navigation.ts
+│       └── organization.ts
 │
-├── .env.example
-├── .gitignore
+├── appscript.js                   # Código del backend Google Apps Script
 ├── index.html
-├── package.json
-├── tsconfig.json
-├── tailwind.config.js
 ├── vite.config.ts
-└── README.md
+├── tailwind.config.js
+└── package.json
 ```
 
 ---
 
-## 🎨 Diseño y Estética
+## Sistema de Autenticación Admin
 
-### Dirección Creativa
+El panel admin usa autenticación por token con Google Apps Script.
 
-**Concepto**: _"Industrial Premium"_ - Fusión de estética industrial/técnica con acabados premium y modernos.
+### Cómo funciona
 
-### Paleta de Colores
+1. Admin ingresa la contraseña en el login del dashboard
+2. El frontend genera un token: `base64(userId|timestamp|ADMIN_PASSWORD)`
+3. El token se envía como parámetro `token` en cada request
+4. El Apps Script valida el token en cada acción admin
 
-```css
-:root {
-  /* Colores Primarios */
-  --primary-900: #0a1628;      /* Azul oscuro profundo - fondos */
-  --primary-800: #0f2847;      /* Azul noche */
-  --primary-700: #1a3a5c;      /* Azul industrial */
-  --primary-600: #1e4976;      /* Azul corporativo */
-  --primary-500: #2563eb;      /* Azul eléctrico principal */
-  --primary-400: #3b82f6;      /* Azul brillante */
-  --primary-300: #60a5fa;      /* Azul claro */
-  
-  /* Acentos */
-  --accent-electric: #00d4ff;   /* Cyan eléctrico - highlights */
-  --accent-energy: #fbbf24;     /* Amarillo energía - CTAs */
-  --accent-success: #10b981;    /* Verde éxito */
-  --accent-warning: #f59e0b;    /* Naranja advertencia */
-  
-  /* Neutrales */
-  --neutral-50: #f8fafc;
-  --neutral-100: #f1f5f9;
-  --neutral-200: #e2e8f0;
-  --neutral-700: #334155;
-  --neutral-800: #1e293b;
-  --neutral-900: #0f172a;
-  
-  /* Gradientes */
-  --gradient-hero: linear-gradient(135deg, #0a1628 0%, #1a3a5c 50%, #0f2847 100%);
-  --gradient-electric: linear-gradient(90deg, #2563eb 0%, #00d4ff 100%);
-  --gradient-card: linear-gradient(180deg, rgba(30,73,118,0.1) 0%, rgba(10,22,40,0.3) 100%);
-}
-```
+### Acciones que requieren token
 
-### Tipografía
+Todas las acciones de escritura: `createJob`, `updateJob`, `deleteJob`, `uploadJobPdf`, `updateApplicationStatus`, etc.
 
-```css
-/* Fuente Display - Títulos impactantes */
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+### Importante
 
-/* Fuente Body - Lectura profesional */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
-
-/* Fuente Mono - Datos técnicos */
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
-
-:root {
-  --font-display: 'Orbitron', sans-serif;
-  --font-body: 'Plus Jakarta Sans', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-}
-```
-
-### Elementos de Diseño
-
-#### Hero Section (Primera Pantalla CAPTURANTE)
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  ╔═══════════════════════════════════════════════════════╗  │
-│  ║                   [NAVBAR FLOTANTE]                   ║  │
-│  ║  LOGO          Inicio | Servicios | Trabajo | ...     ║  │
-│  ╚═══════════════════════════════════════════════════════╝  │
-│                                                             │
-│              ████████████████████████████████               │
-│              █                              █               │
-│              █     [GIF ANIMADO FULL]       █               │
-│              █   Ingeniería eléctrica       █               │
-│              █   Trabajadores en torres     █               │
-│              █   Chispas eléctricas         █               │
-│              █                              █               │
-│              ████████████████████████████████               │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │         ⚡ INGENIERÍA TELCOM EIRL ⚡                 │   │
-│  │                                                     │   │
-│  │    "Conectando Perú con Excelencia"                │   │
-│  │                                                     │   │
-│  │   Líderes en Telecomunicaciones y                  │   │
-│  │   Servicios Eléctricos                             │   │
-│  │                                                     │   │
-│  │   [⚡ VER SERVICIOS]  [📋 BOLSA DE TRABAJO]        │   │
-│  │                                                     │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│          ▼ Scroll para descubrir más ▼                     │
-│                                                             │
-│  ═══════════════════════════════════════════════════════   │
-│  🔧 +500        📡 +50           ⚡ 15+        🏆 100%      │
-│  Proyectos     Clientes        Años         Satisfacción   │
-│  ═══════════════════════════════════════════════════════   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-#### Efectos Visuales Requeridos
-
-1. **Hero con GIFs Animados**:
-   - Carrusel de GIFs de alta calidad mostrando trabajo eléctrico
-   - Overlay con gradiente oscuro para legibilidad
-   - Partículas flotantes simulando chispas eléctricas (opcional con CSS)
-   - Texto con efecto de "glow" eléctrico
-
-2. **Animaciones de Entrada**:
-   - Elementos aparecen con stagger (delay escalonado)
-   - Efecto de "slide-up" y "fade-in" al hacer scroll
-   - Números de estadísticas con contador animado
-
-3. **Tarjetas de Servicio**:
-   - Efecto hover con elevación y borde brillante
-   - Iconos animados al hover
-   - Gradiente sutil en el fondo
-
-4. **Sección de Clientes**:
-   - Logos en carrusel infinito automático
-   - Efecto grayscale → color al hover
-
-5. **Bolsa de Trabajo**:
-   - Grid de tarjetas con badges de estado (Nuevo, Urgente, etc.)
-   - Filtros animados con transiciones suaves
-   - Modal de postulación con progreso paso a paso
+Si el token se pierde o el URL es demasiado largo, Apps Script responde `{ success: false, error: 'No autorizado' }`. Ver la sección de problemas conocidos para el fix del POST.
 
 ---
 
-## ⚙️ Funcionalidades
+## Sistema de Bolsa de Trabajo
 
-### 1. Página Principal (Landing)
+### Páginas involucradas
 
-| Sección | Descripción | Datos |
-|---------|-------------|-------|
-| **Hero** | Carrusel de GIFs con mensaje principal | Estático |
-| **Estadísticas** | Contadores animados | Estático |
-| **Quiénes Somos** | Descripción + 3 cards | Estático |
-| **Servicios** | Grid de 4 servicios | Estático/API |
-| **Misión/Visión** | Cards con información | Estático |
-| **Código de Ética** | Grid de 6 valores | Estático |
-| **Estructura Org.** | Organigrama visual | Estático |
-| **Clientes** | Carrusel de logos | Estático |
-| **Bolsa de Trabajo** | Preview de convocatorias | API (Sheets) |
-| **Facebook Feed** | Últimas publicaciones | API (Facebook) |
-| **Contacto** | Formulario + info | API (Apps Script) |
+| Archivo | Rol |
+|---------|-----|
+| `src/components/sections/JobsSection.tsx` | Preview de 3 convocatorias activas en homepage |
+| `src/pages/JobsPage.tsx` | Listado completo con filtros por categoría, modalidad, ciudad |
+| `src/pages/JobDetailPage.tsx` | Detalle completo + ficha PDF + formulario de postulación |
+| `src/pages/admin/JobsManagementPage.tsx` | CRUD admin de convocatorias |
 
-### 2. Sistema de Bolsa de Trabajo (CRÍTICO)
+### Ciudades disponibles en el dropdown (admin)
 
-#### Funcionalidades Requeridas
+El dropdown de ciudades en el formulario de convocatoria incluye ~40 ciudades peruanas:
+
+```
+Tacna, Arequipa, Lima, Cusco, Puno, Moquegua, Ilo, Juliaca,
+Iquitos, Trujillo, Chiclayo, Piura, Huancayo, Ayacucho,
+Cajamarca, Pucallpa, Puerto Maldonado, Tumbes, Chimbote,
+Sullana, Tarapoto, Huánuco, Ica, Abancay, Andahuaylaas,
+Moyobamba, Bagua, Chachapoyas, Tingo María, Yurimaguas,
+Jaén, Huaraz, Cerro de Pasco, La Merced, San Ramón,
+Quillabamba, Sicuani, Ilave, Desaguadero, Otros
+```
+
+### Categorías de trabajo
+
+```
+Ingenieria → Ingeniería
+Tecnico    → Técnico
+TI         → Tecnología / TI
+Administracion → Administración
+Finanzas
+RRHH       → Recursos Humanos
+Operaciones
+Otros
+```
+
+### Campos de una convocatoria (JobPosting)
 
 ```typescript
-// Categorías de trabajo disponibles
-type JobCategory = 
-  | 'ingeniero-electrico'
-  | 'ingeniero-telecomunicaciones'
-  | 'ingeniero-civil'
-  | 'contador'
-  | 'abogado'
-  | 'tecnico-electricista'
-  | 'tecnico-telecomunicaciones'
-  | 'administrativo'
-  | 'recursos-humanos'
-  | 'marketing'
-  | 'otros';
-
-// Estructura de una convocatoria
 interface JobPosting {
-  id: string;
-  title: string;
-  category: JobCategory;
-  description: string;
-  requirements: string[];
-  benefits: string[];
-  location: string;
-  modality: 'presencial' | 'remoto' | 'hibrido';
-  salary?: {
-    min: number;
-    max: number;
-    currency: 'PEN' | 'USD';
-  };
-  status: 'activo' | 'pausado' | 'cerrado';
-  priority: 'normal' | 'urgente';
-  publishedAt: Date;
-  closingDate?: Date;
-  applicationsCount: number;
-}
-
-// Estructura de una postulación
-interface JobApplication {
-  id: string;
-  jobId: string;
-  applicant: {
-    fullName: string;
-    email: string;
-    phone: string;
-    dni: string;
-    linkedIn?: string;
-  };
-  cvFileUrl: string;        // URL de Google Drive
-  cvFileName: string;
-  coverLetter?: string;
-  expectedSalary?: number;
-  availability: string;
-  appliedAt: Date;
-  status: 'pendiente' | 'revisado' | 'entrevista' | 'rechazado' | 'contratado';
+  id: string
+  titulo: string
+  categoria: string
+  descripcion: string
+  requisitos: string          // separados por |
+  beneficios: string          // separados por |
+  ubicacion: string
+  modalidad: 'Presencial' | 'Remoto' | 'Hibrido'
+  salario_min: number
+  salario_max: number
+  estado: 'activo' | 'pausado' | 'cerrado'
+  prioridad: 'normal' | 'alta'  // 'alta' muestra badge URGENTE rojo
+  imagen?: string             // URL imagen de portada
+  pdf_url?: string            // URL ficha de postulación en Drive
+  fecha_publicacion?: string
+  fecha_cierre?: string
 }
 ```
-
-#### Flujo de Postulación
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    BOLSA DE TRABAJO                         │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  [🔍 Buscar...]  [📂 Categoría ▼]  [📍 Ubicación ▼]        │
-│                                                             │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
-│  │ 🔴 URGENTE  │ │             │ │             │           │
-│  │             │ │             │ │             │           │
-│  │ Ing. Eléct. │ │ Contador    │ │ Técnico     │           │
-│  │             │ │             │ │             │           │
-│  │ Tacna       │ │ Puno        │ │ Arequipa    │           │
-│  │ S/3,500-5k  │ │ S/2,500-3k  │ │ S/2,000-2.5k│           │
-│  │             │ │             │ │             │           │
-│  │ [POSTULAR]  │ │ [POSTULAR]  │ │ [POSTULAR]  │           │
-│  └─────────────┘ └─────────────┘ └─────────────┘           │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-
-                          │
-                          ▼ Click en POSTULAR
-
-┌─────────────────────────────────────────────────────────────┐
-│              FORMULARIO DE POSTULACIÓN                      │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Paso 1 de 3: Datos Personales                             │
-│  ════════════════════════════════                          │
-│                                                             │
-│  Nombre Completo *    [________________________]           │
-│  DNI *                [____________]                       │
-│  Email *              [________________________]           │
-│  Teléfono *           [____________]                       │
-│  LinkedIn             [________________________]           │
-│                                                             │
-│                              [Siguiente →]                  │
-│                                                             │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Paso 2 de 3: Documentos                                   │
-│  ════════════════════════════════                          │
-│                                                             │
-│  ┌─────────────────────────────────────────────┐           │
-│  │                                             │           │
-│  │     📄 Arrastra tu CV aquí                  │           │
-│  │        o haz clic para seleccionar          │           │
-│  │                                             │           │
-│  │     Formatos: PDF, DOC, DOCX (max 5MB)     │           │
-│  │                                             │           │
-│  └─────────────────────────────────────────────┘           │
-│                                                             │
-│  Carta de Presentación (opcional)                          │
-│  ┌─────────────────────────────────────────────┐           │
-│  │                                             │           │
-│  │                                             │           │
-│  └─────────────────────────────────────────────┘           │
-│                                                             │
-│              [← Anterior]    [Siguiente →]                  │
-│                                                             │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Paso 3 de 3: Confirmación                                 │
-│  ════════════════════════════════                          │
-│                                                             │
-│  Pretensión Salarial   [S/ ________]                       │
-│  Disponibilidad        [Inmediata ▼]                       │
-│                                                             │
-│  ☑ Acepto los términos y condiciones                       │
-│  ☑ Autorizo el tratamiento de mis datos personales         │
-│                                                             │
-│              [← Anterior]    [✓ ENVIAR POSTULACIÓN]         │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 3. Integración con Facebook
-
-Mostrar las últimas 6 publicaciones de la página de Facebook de la empresa:
-
-```typescript
-interface FacebookPost {
-  id: string;
-  message: string;
-  full_picture?: string;
-  created_time: string;
-  permalink_url: string;
-  likes_count: number;
-  comments_count: number;
-}
-```
-
-### 4. Dashboard de Trabajo (Link Externo)
-
-El sitio incluirá un botón/enlace visible para acceder al área de trabajo interna:
-
-**URL**: https://canazachyub.github.io/Telcomdashboard
-
-Este enlace debe estar:
-- En el Navbar (solo visible con autenticación o para empleados)
-- En el Footer
-- Como acceso rápido para personal autorizado
 
 ---
 
-## 🔗 Integraciones
+## Sistema de PDF / Ficha de Postulación
 
-### 1. Google Sheets (Base de Datos)
+Permite subir una ficha PDF por convocatoria desde el admin, guardada en Google Drive organizada por ciudad.
 
-**URL del Sheet**: 
+### Flujo completo
+
 ```
-https://docs.google.com/spreadsheets/d/15ajUr5KqGgs99bsCcp9LnxRaD9mbIWjZArLetk7v4hA/edit?gid=0#gid=0
+Admin sube PDF en JobsManagementPage
+  → Frontend lee archivo como base64
+  → Llama api.uploadJobPdf({ jobId, ciudad, fileName, fileContent })
+  → Apps Script crea carpeta: Fichas_Postulacion/<ciudad>/
+  → Sube el PDF a esa carpeta
+  → Configura acceso: ANYONE_WITH_LINK (solo lectura)
+  → Retorna la URL pública del archivo
+  → Frontend guarda pdf_url en los datos del job (createJob/updateJob)
+  → En la página pública del job, aparece el botón "Ver Ficha"
 ```
 
-#### Estructura de Hojas Requeridas
+### Estructura en Google Drive
 
-**Hoja: `convocatorias`**
-| Columna | Tipo | Descripción |
-|---------|------|-------------|
-| id | string | ID único |
-| titulo | string | Título del puesto |
-| categoria | string | Categoría del trabajo |
-| descripcion | string | Descripción completa |
-| requisitos | string | Lista separada por `|` |
-| beneficios | string | Lista separada por `|` |
-| ubicacion | string | Ciudad/Región |
-| modalidad | string | presencial/remoto/hibrido |
-| salario_min | number | Salario mínimo |
-| salario_max | number | Salario máximo |
-| estado | string | activo/pausado/cerrado |
-| prioridad | string | normal/urgente |
-| fecha_publicacion | date | Fecha de publicación |
-| fecha_cierre | date | Fecha límite |
+```
+Mi Drive/
+└── Fichas_Postulacion/
+    ├── Tacna/
+    │   ├── ficha_tecnico_electricista.pdf
+    │   └── ficha_ingeniero_electrico.pdf
+    ├── Arequipa/
+    │   └── ...
+    └── Puerto_Maldonado/
+        └── ...
+```
 
-**Hoja: `postulaciones`**
-| Columna | Tipo | Descripción |
-|---------|------|-------------|
-| id | string | ID único |
-| convocatoria_id | string | FK a convocatorias |
-| nombre_completo | string | Nombre del postulante |
-| dni | string | DNI |
-| email | string | Correo electrónico |
-| telefono | string | Teléfono |
-| linkedin | string | URL LinkedIn |
-| cv_url | string | URL del CV en Drive |
+### Visualización pública (JobDetailPage)
+
+Si la convocatoria tiene `pdf_url`, aparece una sección destacada en ámbar/dorado antes del formulario de postulación:
+
+- Ícono PDF en caja ámbar
+- Etiqueta "Lectura obligatoria"
+- Título "Ficha Oficial de Postulación"
+- Descripción del contenido
+- Botón "Ver Ficha" que abre el PDF en nueva pestaña
+
+### Nota importante
+
+El campo `pdf_url` debe existir como columna en la hoja `convocatorias` de Google Sheets. Si se recrea la hoja con `recrearHoja()` y esa función no incluye `pdf_url` en los headers, la columna desaparece y los PDFs ya no se muestran.
+
+La función `setupAllSheets()` y `cargarConvocatoriasPrueba()` en `appscript.js` ya incluyen `pdf_url` en sus arrays de encabezados.
+
+---
+
+## Sistema de Capacitaciones y Evaluaciones
+
+Módulo completo para crear cursos, banco de preguntas, y que los trabajadores rindan evaluaciones en línea con proctoring ligero.
+
+### Flujo general
+
+```
+Admin crea capacitación (título, descripción, config)
+  → Admin agrega preguntas al banco (tipo multiple/llenado, dificultad, puntaje)
+  → Trabajador navega a /capacitaciones → selecciona curso → /evaluacion/:id
+  → Ingresa DNI, nombres, correo → sistema verifica intento único
+  → Activa cámara (webcam obligatoria)
+  → Rinde examen: 1 pregunta a la vez, sin retroceder, con timer
+  → Apps Script calcula puntaje automático (puntaje_auto)
+  → Admin revisa en /admin/evaluaciones: ve fotos webcam, asigna nota_final
+  → Solo al aprobar/observar se envía correo al trabajador
+```
+
+### Proctoring implementado
+
+- **Fotos periódicas**: cada `foto_intervalo_seg` (configurable) captura frame de webcam → JPEG 320×240 → Drive
+- **Cambio de pestaña**: `visibilitychange` / `window.blur` → incrementa contador `salidas_pestana`
+- **Detección de pegado**: `onpaste` en inputs → registra evento en `eval_logs`
+- **Sin retroceso**: no existe botón "Anterior" entre preguntas
+- **Auto-submit**: si el timer llega a 0, se envía el examen automáticamente
+
+### Barajeo determinístico por DNI
+
+Las preguntas del banco se barajan usando un PRNG con semilla = `parseInt(dni)`. El mismo DNI siempre obtiene el mismo orden, lo que permite reproducir el examen para revisión, pero dos trabajadores con distinto DNI ven distinto orden.
+
+### Carpeta en Google Drive
+
+```
+Mi Drive/
+└── Evaluaciones_Proctoring/
+    └── <capacitacion_id>/
+        └── <dni>/
+            ├── foto_1234567890.jpg
+            └── foto_1234567891.jpg
+```
+
+### Configuración por capacitación
+
+| Campo | Descripción |
+|-------|-------------|
+| `num_preguntas` | Cuántas preguntas se seleccionan del banco para el examen |
+| `nota_minima` | Puntaje mínimo para aprobar |
+| `tiempo_limite_min` | Minutos disponibles para rendir |
+| `foto_intervalo_seg` | Cada cuántos segundos se captura foto de webcam |
+
+### Regla de seguridad: `respuesta_correcta` nunca pública
+
+El endpoint `iniciarEvaluacion` devuelve las preguntas **sin** `respuesta_correcta` ni `justificacion`. Esos campos solo están disponibles en `getPreguntas` (admin, requiere token).
+
+---
+
+## Panel de Administración
+
+Accesible en `/admin` con contraseña.
+
+### Módulos disponibles
+
+| Módulo | Ruta | Descripción |
+|--------|------|-------------|
+| Dashboard | `/admin` | Estadísticas generales |
+| Convocatorias | `/admin/bolsa-trabajo` | CRUD completo de trabajos + subida PDF |
+| Postulaciones | `/admin/postulaciones` | Ver y gestionar aplicaciones recibidas |
+| Empleados | `/admin/empleados` | Gestión de personal |
+| Reportes | `/admin/reportes` | Informes y exportación |
+| Gestión de Cursos | `/admin/capacitaciones` | CRUD capacitaciones + banco de preguntas |
+| Evaluaciones | `/admin/evaluaciones` | Revisar resultados, ver fotos, aprobar/observar |
+
+### Formulario de convocatoria (admin)
+
+El modal de creación/edición incluye:
+- Título, categoría, descripción, requisitos (uno por línea), beneficios
+- Ciudad (dropdown ~40 ciudades), modalidad, salario min/max
+- Estado (activo/pausado/cerrado), prioridad (normal/alta)
+- URL de imagen de portada
+- Subida de ficha PDF (archivo local → Drive automático)
+
+---
+
+## Google Apps Script (Backend)
+
+**Archivo local**: `appscript.js`
+El contenido de este archivo se copia manualmente al editor de Google Apps Script y se redespliega como Web App cuando hay cambios.
+
+### URL del Web App
+
+```
+Configurada en: VITE_APPS_SCRIPT_URL (variable de entorno)
+```
+
+### Acciones disponibles
+
+#### Públicas (sin token)
+
+| Acción | Método | Descripción |
+|--------|--------|-------------|
+| `getJobs` | GET | Lista convocatorias activas |
+| `getJob` | GET | Detalle de una convocatoria por ID |
+| `apply` | POST | Recibir postulación pública (con CV) |
+| `contact` | POST | Recibir mensaje de contacto |
+| `consultarPostulacion` | GET | Consultar estado de postulación por DNI |
+| `verificarEmpleado` | GET | Verificar si empleado existe (para asistencia) |
+| `marcarAsistencia` | POST | Registrar entrada/salida con geolocalización |
+| `getCapacitaciones` | GET | Lista capacitaciones activas (sin respuestas) |
+| `getCapacitacionById` | GET | Detalle de una capacitación |
+| `iniciarEvaluacion` | POST | Valida intento único, baraja preguntas, crea fila evaluacion |
+| `submitEvaluacion` | POST | Calcula puntaje_auto, guarda, estado → pendiente_revision |
+| `guardarFotoWebcam` | POST | Sube foto base64 a Drive (Evaluaciones_Proctoring/) |
+| `registrarEventoLog` | POST | Append a eval_logs (salida pestaña, pegado, etc.) |
+
+#### Admin (requieren token)
+
+| Acción | Descripción |
+|--------|-------------|
+| `getJobsAdmin` | Lista todas las convocatorias |
+| `createJob` / `updateJob` / `deleteJob` | CRUD convocatorias |
+| `uploadJobPdf` | Subir PDF de ficha a Drive |
+| `getApplicationsAdmin` / `updateApplicationStatus` | Gestión postulaciones |
+| `getEmployees` / `createEmployee` / `updateEmployee` | Gestión empleados |
+| `crearCapacitacion` / `actualizarCapacitacion` / `eliminarCapacitacion` | CRUD capacitaciones |
+| `crearPregunta` / `actualizarPregunta` / `eliminarPregunta` | CRUD banco de preguntas |
+| `getPreguntas` | Lista preguntas por capacitacion_id (incluye respuesta_correcta) |
+| `getEvaluaciones` | Lista evaluaciones con filtros (estado, capacitacion_id) |
+| `revisarEvaluacion` | Asigna nota_final, cambia estado, dispara correo |
+
+### Funciones de mantenimiento (NO usar en producción)
+
+```javascript
+recrearHoja(nombre)          // PELIGROSO: borra y recrea una hoja completa
+setupAllSheets()             // Crea todas las hojas con headers correctos
+cargarConvocatoriasPrueba()  // Inserta datos de prueba (usa recrearHoja)
+```
+
+**ADVERTENCIA**: `cargarConvocatoriasPrueba()` usa `recrearHoja()` que elimina TODOS los datos existentes. Solo usar en entorno de prueba o proyecto vacío.
+
+### Helpers internos
+
+```javascript
+getOrCreateFolder(parentFolder, folderName)  // Crea carpeta en Drive si no existe
+rowToObject(headers, row)                    // Convierte fila de Sheet a objeto
+getColNum(colName)                           // Detecta número de columna por nombre
+jsonResponse(data)                           // Respuesta JSON estándar
+```
+
+---
+
+## Base de Datos - Google Sheets
+
+**ID del Spreadsheet**: `15ajUr5KqGgs99bsCcp9LnxRaD9mbIWjZArLetk7v4hA`
+
+### Hoja: `convocatorias`
+
+| Columna | Tipo | Notas |
+|---------|------|-------|
+| id | string | UUID generado por Apps Script |
+| titulo | string | |
+| categoria | string | Ver categorías arriba |
+| descripcion | string | |
+| requisitos | string | Items separados por `\|` |
+| beneficios | string | Items separados por `\|` |
+| ubicacion | string | Ciudad |
+| modalidad | string | Presencial / Remoto / Hibrido |
+| salario_min | number | |
+| salario_max | number | |
+| estado | string | activo / pausado / cerrado |
+| prioridad | string | normal / alta |
+| fecha_publicacion | string | |
+| fecha_cierre | string | |
+| imagen | string | URL opcional |
+| **pdf_url** | string | URL Google Drive (agregado posteriormente) |
+
+### Hoja: `postulaciones`
+
+| Columna | Tipo | Notas |
+|---------|------|-------|
+| id | string | UUID |
+| convocatoria_id | string | FK a convocatorias.id |
+| nombre_completo | string | |
+| dni | string | |
+| email | string | |
+| telefono | string | |
+| linkedin | string | Opcional |
+| cv_url | string | URL Google Drive |
 | cv_nombre | string | Nombre del archivo |
-| carta_presentacion | string | Texto opcional |
-| pretension_salarial | number | Salario esperado |
-| disponibilidad | string | Disponibilidad |
-| fecha_postulacion | datetime | Timestamp |
-| estado | string | Estado de la postulación |
+| carta_presentacion | string | Opcional |
+| pretension_salarial | number | |
+| disponibilidad | string | |
+| fecha_postulacion | datetime | |
+| estado | string | pendiente / revisado / entrevista / rechazado / contratado |
 
-**Hoja: `contactos`**
-| Columna | Tipo | Descripción |
-|---------|------|-------------|
-| id | string | ID único |
-| nombre | string | Nombre |
-| email | string | Correo |
-| mensaje | string | Mensaje |
-| fecha | datetime | Timestamp |
-| estado | string | pendiente/respondido |
+### Hoja: `contactos`
 
-### 2. Google Drive (Almacenamiento de CVs)
+| Columna | Tipo |
+|---------|------|
+| id | string |
+| nombre | string |
+| email | string |
+| telefono | string |
+| mensaje | string |
+| fecha | datetime |
+| estado | string |
 
-**Carpeta de Drive**:
-```
-https://drive.google.com/drive/folders/1B2CPcrNxUJtJcu7x8rXs_7_m9m2p9zAV?usp=sharing
-```
+### Hoja: `empleados`
 
-**ID de la Carpeta**: `1B2CPcrNxUJtJcu7x8rXs_7_m9m2p9zAV`
+| Columna | Tipo |
+|---------|------|
+| id | string |
+| nombre | string |
+| cargo | string |
+| departamento | string |
+| email | string |
+| telefono | string |
+| estado | string |
+| fecha_ingreso | string |
 
-#### Estructura de Carpetas en Drive
+### Hoja: `capacitaciones`
 
-```
-📁 Bolsa_de_Trabajo_CVs/
-├── 📁 2025/
-│   ├── 📁 01_Enero/
-│   │   ├── 📁 Ingeniero_Electrico/
-│   │   ├── 📁 Contador/
-│   │   └── 📁 Tecnico/
-│   ├── 📁 02_Febrero/
-│   └── ...
-└── 📁 Otros/
-```
+| Columna | Tipo | Notas |
+|---------|------|-------|
+| id | string | Ej: CAP001 |
+| titulo | string | |
+| descripcion | string | |
+| material_url | string | URL Drive/YouTube del material de estudio |
+| categoria | string | Seguridad / Técnico / Administrativo / Salud / Otro |
+| num_preguntas | number | Cuántas preguntas se toman del banco (ej: 20) |
+| nota_minima | number | Puntaje mínimo para aprobar (ej: 14) |
+| tiempo_limite_min | number | Minutos disponibles (ej: 25) |
+| foto_intervalo_seg | number | Segundos entre fotos webcam (ej: 30) |
+| estado | string | borrador / activo / cerrado |
+| fecha_creacion | datetime | |
 
-### 3. Google Apps Script (Backend API)
+### Hoja: `banco_preguntas`
 
-Crear un Web App de Google Apps Script que maneje:
+| Columna | Tipo | Notas |
+|---------|------|-------|
+| id | string | Ej: P001 |
+| capacitacion_id | string | FK a capacitaciones.id |
+| pregunta | string | Enunciado completo |
+| tipo | string | multiple / llenado |
+| opcion_a..d | string | Solo para tipo multiple |
+| respuesta_correcta | string | A/B/C/D (multiple) o texto (llenado) |
+| justificacion | string | Explicación de la respuesta (admin only) |
+| dificultad | string | facil / media / dificil |
+| puntaje | number | Puntos que vale la pregunta (normalmente 1) |
+| estado | string | activa / inactiva |
 
-#### Endpoints Requeridos
+### Hoja: `evaluaciones`
 
-```javascript
-// GET /api/jobs - Obtener convocatorias activas
-// GET /api/jobs/:id - Obtener detalle de convocatoria
-// POST /api/jobs/apply - Enviar postulación
-// POST /api/contact - Enviar mensaje de contacto
-// POST /api/upload - Subir archivo a Drive
-```
+| Columna | Tipo | Notas |
+|---------|------|-------|
+| id | string | UUID |
+| capacitacion_id | string | FK |
+| dni | string | |
+| nombres | string | |
+| email | string | |
+| preguntas_asignadas | string | JSON array de IDs de preguntas |
+| respuestas | string | JSON: { pregunta_id: respuesta_dada } |
+| puntaje_auto | number | Calculado al submit |
+| salidas_pestana | number | Veces que el examinado cambió de pestaña |
+| fotos_url | string | JSON array de URLs Drive |
+| hora_inicio | datetime | |
+| hora_fin | datetime | |
+| duracion_seg | number | |
+| estado | string | en_curso / pendiente_revision / aprobado / observado / abandonado |
+| nota_final | number | Asignada manualmente por admin |
+| retroalimentacion | string | Comentario del admin |
+| revisado_por | string | Nombre del admin que revisó |
+| fecha_revision | datetime | |
 
-#### Código Base para Apps Script
+### Hoja: `eval_fotos`
 
-```javascript
-// Code.gs - Google Apps Script
+| Columna | Tipo |
+|---------|------|
+| id | string |
+| evaluacion_id | string |
+| foto_url | string |
+| timestamp | datetime |
+| orden | number |
 
-const SHEET_ID = '15ajUr5KqGgs99bsCcp9LnxRaD9mbIWjZArLetk7v4hA';
-const DRIVE_FOLDER_ID = '1B2CPcrNxUJtJcu7x8rXs_7_m9m2p9zAV';
-const NOTIFICATION_EMAIL = 'energysupervision13@gmail.com';
+### Hoja: `eval_logs`
 
-function doGet(e) {
-  const action = e.parameter.action;
-  
-  switch(action) {
-    case 'getJobs':
-      return getActiveJobs();
-    case 'getJob':
-      return getJobById(e.parameter.id);
-    default:
-      return jsonResponse({ error: 'Invalid action' }, 400);
-  }
-}
+| Columna | Tipo | Notas |
+|---------|------|-------|
+| id | string | |
+| evaluacion_id | string | |
+| tipo_evento | string | salida_pestana / pegado_detectado / timeout / etc |
+| detalle | string | Información adicional |
+| timestamp | datetime | |
 
-function doPost(e) {
-  const action = e.parameter.action;
-  const data = JSON.parse(e.postData.contents);
-  
-  switch(action) {
-    case 'apply':
-      return submitApplication(data);
-    case 'contact':
-      return submitContact(data);
-    case 'upload':
-      return uploadFile(data);
-    default:
-      return jsonResponse({ error: 'Invalid action' }, 400);
-  }
-}
+---
 
-function getActiveJobs() {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  
-  const jobs = data.slice(1)
-    .filter(row => row[10] === 'activo') // estado column
-    .map(row => {
-      const job = {};
-      headers.forEach((header, i) => job[header] = row[i]);
-      return job;
-    });
-  
-  return jsonResponse({ success: true, data: jobs });
-}
+## APIs y Comunicación
 
-function submitApplication(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('postulaciones');
-  
-  const row = [
-    Utilities.getUuid(),
-    data.jobId,
-    data.fullName,
-    data.dni,
-    data.email,
-    data.phone,
-    data.linkedIn || '',
-    data.cvUrl,
-    data.cvFileName,
-    data.coverLetter || '',
-    data.expectedSalary || '',
-    data.availability,
-    new Date(),
-    'pendiente'
-  ];
-  
-  sheet.appendRow(row);
-  
-  // Enviar notificación por email
-  sendNotificationEmail(data);
-  
-  return jsonResponse({ success: true, message: 'Postulación enviada correctamente' });
-}
+### Cliente API (`src/api/appScriptApi.ts`)
 
-function uploadFile(data) {
-  const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-  const blob = Utilities.newBlob(
-    Utilities.base64Decode(data.fileContent),
-    data.mimeType,
-    data.fileName
-  );
-  
-  const file = folder.createFile(blob);
-  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  
-  return jsonResponse({
-    success: true,
-    fileUrl: file.getUrl(),
-    fileId: file.getId()
-  });
-}
+La clase `AppScriptApi` es el único punto de comunicación con el backend.
 
-function jsonResponse(data, code = 200) {
-  return ContentService
-    .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
-}
+#### Método `request()` — comportamiento crítico
 
-function sendNotificationEmail(data) {
-  const subject = `Nueva Postulación: ${data.jobTitle}`;
-  const body = `
-    Se ha recibido una nueva postulación:
-    
-    Puesto: ${data.jobTitle}
-    Nombre: ${data.fullName}
-    Email: ${data.email}
-    Teléfono: ${data.phone}
-    CV: ${data.cvUrl}
-    
-    Fecha: ${new Date().toLocaleString('es-PE')}
-  `;
-  
-  MailApp.sendEmail(NOTIFICATION_EMAIL, subject, body);
-}
-```
-
-### 4. Facebook Graph API
-
-Para mostrar las publicaciones de Facebook:
+Las acciones de escritura (POST) envían el payload en el **body** de la request con `Content-Type: text/plain`, no en la URL.
 
 ```typescript
-// src/api/facebookApi.ts
-
-const FB_PAGE_ID = '61586657451703';
-const FB_ACCESS_TOKEN = process.env.VITE_FB_ACCESS_TOKEN;
-
-export async function getFacebookPosts(limit: number = 6) {
-  const fields = 'id,message,full_picture,created_time,permalink_url,likes.summary(true),comments.summary(true)';
-  const url = `https://graph.facebook.com/v18.0/${FB_PAGE_ID}/posts?fields=${fields}&limit=${limit}&access_token=${FB_ACCESS_TOKEN}`;
-  
-  const response = await fetch(url);
-  const data = await response.json();
-  
-  return data.data.map(post => ({
-    id: post.id,
-    message: post.message,
-    image: post.full_picture,
-    createdAt: new Date(post.created_time),
-    url: post.permalink_url,
-    likes: post.likes?.summary?.total_count || 0,
-    comments: post.comments?.summary?.total_count || 0,
-  }));
+// Para POST con datos: envía body JSON
+if (method === 'POST' && requestData && Object.keys(requestData).length > 0) {
+  response = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(requestData),
+    redirect: 'follow',
+  })
+}
+// Para GET: adjunta payload como query param
+else {
+  url.searchParams.set('payload', JSON.stringify(requestData))
+  response = await fetch(url.toString(), { method: 'GET', redirect: 'follow' })
 }
 ```
 
-**Nota**: Se necesita generar un Page Access Token desde Facebook Developer Console.
+**Por qué `Content-Type: text/plain`**: Google Apps Script con CORS no acepta `application/json` en requests cross-origin (genera preflight que falla). `text/plain` evita el preflight y Apps Script igual puede leer `e.postData.contents`.
 
----
+**Por qué no todo en URL**: Payloads grandes (formulario de convocatoria con descripción larga) superan el límite de URL (~2000 chars). Si el token queda fuera del límite, Apps Script lo pierde y responde "No autorizado".
 
-## 📡 APIs y Endpoints
-
-### Variables de Entorno
-
-```env
-# .env.example
-
-# Google Apps Script Web App URL
-VITE_APPS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
-
-# Google Sheets ID
-VITE_SHEETS_ID=15ajUr5KqGgs99bsCcp9LnxRaD9mbIWjZArLetk7v4hA
-
-# Google Drive Folder ID
-VITE_DRIVE_FOLDER_ID=1B2CPcrNxUJtJcu7x8rXs_7_m9m2p9zAV
-
-# Facebook
-VITE_FB_PAGE_ID=61586657451703
-VITE_FB_ACCESS_TOKEN=your_facebook_page_access_token
-
-# Contact
-VITE_CONTACT_EMAIL=energysupervision13@gmail.com
-
-# Dashboard URL
-VITE_DASHBOARD_URL=https://canazachyub.github.io/Telcomdashboard
-```
-
-### Cliente API TypeScript
+#### Métodos disponibles
 
 ```typescript
-// src/api/appScriptApi.ts
+// Bolsa de Trabajo
+api.getJobs()
+api.getJobById(id)
+api.getJobsAdmin()
+api.createJobAdmin(jobData)
+api.updateJobAdmin(id, jobData)
+api.deleteJobAdmin(id)
+api.uploadJobPdf({ fileContent, fileName, mimeType, ciudad })
+api.submitApplication(applicationData)
+api.getApplicationsAdmin(jobId?)
+api.updateApplicationStatus(id, status, notes?)
 
-const API_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
+// Empleados y Asistencia
+api.getEmployees()
+api.createEmployee(employee)
+api.updateEmployee(id, employee)
+api.marcarAsistencia(dni, tipo, location)
+api.verificarEmpleado(dni)
 
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
+// Capacitaciones (públicos)
+api.getCapacitaciones()
+api.getCapacitacionById(id)
+api.iniciarEvaluacion({ capacitacion_id, dni, nombres, email })
+api.submitEvaluacion({ evaluacion_id, respuestas, salidas_pestana, fotos_url, duracion_seg })
+api.guardarFotoWebcam({ evaluacion_id, capacitacion_id, dni, fileContent, fileName, mimeType })
+api.registrarEventoLog({ evaluacion_id, tipo_evento, detalle? })
 
-class AppScriptApi {
-  private async request<T>(
-    action: string,
-    method: 'GET' | 'POST' = 'GET',
-    data?: Record<string, unknown>
-  ): Promise<ApiResponse<T>> {
-    const url = new URL(API_URL);
-    url.searchParams.set('action', action);
-    
-    const options: RequestInit = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    };
-    
-    if (method === 'POST' && data) {
-      options.body = JSON.stringify(data);
-    }
-    
-    const response = await fetch(url.toString(), options);
-    return response.json();
-  }
-  
-  // Convocatorias
-  async getJobs() {
-    return this.request<JobPosting[]>('getJobs');
-  }
-  
-  async getJobById(id: string) {
-    const url = new URL(API_URL);
-    url.searchParams.set('action', 'getJob');
-    url.searchParams.set('id', id);
-    return this.request<JobPosting>('getJob');
-  }
-  
-  // Postulaciones
-  async submitApplication(application: JobApplication) {
-    return this.request<{ id: string }>('apply', 'POST', application);
-  }
-  
-  // Contacto
-  async submitContact(contact: ContactForm) {
-    return this.request<{ id: string }>('contact', 'POST', contact);
-  }
-  
-  // Upload
-  async uploadFile(file: File): Promise<{ fileUrl: string; fileId: string }> {
-    const base64 = await this.fileToBase64(file);
-    return this.request('upload', 'POST', {
-      fileName: file.name,
-      mimeType: file.type,
-      fileContent: base64,
-    });
-  }
-  
-  private fileToBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => {
-        const base64 = (reader.result as string).split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-    });
-  }
-}
-
-export const api = new AppScriptApi();
+// Capacitaciones (admin)
+api.crearCapacitacion(data)
+api.actualizarCapacitacion({ id, ...data })
+api.eliminarCapacitacion(id)
+api.crearPregunta(data)
+api.actualizarPregunta({ id, ...data })
+api.eliminarPregunta(id)
+api.getPreguntas(capacitacion_id)         // incluye respuesta_correcta (admin only)
+api.getEvaluaciones({ estado?, capacitacion_id? })
+api.revisarEvaluacion({ id, nota_final, retroalimentacion, estado })
 ```
 
 ---
 
-## 🚀 Instrucciones de Implementación
+## Flujo de Postulación
 
-### Para Claude Code - Paso a Paso
+```
+Visitante navega a /bolsa-trabajo
+  → Ve listado de convocatorias activas con filtros
+  → Hace click en una convocatoria
+  → Llega a /bolsa-trabajo/:id
 
-#### Fase 1: Configuración Inicial
+En la página de detalle:
+  1. Lee descripción completa, requisitos, beneficios
+  2. (Si hay PDF) Ve el banner ámbar "Ficha Oficial de Postulación" → botón "Ver Ficha"
+  3. Completa el formulario de postulación:
+     - Nombre completo, DNI, email, teléfono
+     - LinkedIn (opcional)
+     - Sube su CV (PDF/DOC, máx 5MB) → se guarda en Drive
+     - Carta de presentación (opcional)
+     - Pretensión salarial, disponibilidad
+  4. Envía → Apps Script guarda en hoja postulaciones + notifica por email
+  5. Ve confirmación de éxito
 
-```bash
-# 1. Crear el proyecto con Vite + React + TypeScript
-npm create vite@latest ingenieria-telcom -- --template react-ts
-cd ingenieria-telcom
-
-# 2. Instalar dependencias principales
-npm install react-router-dom @tanstack/react-query axios framer-motion react-hook-form zod @hookform/resolvers react-icons swiper react-intersection-observer date-fns
-
-# 3. Instalar TailwindCSS
-npm install -D tailwindcss postcss autoprefixer
-npx tailwindcss init -p
-
-# 4. Instalar dependencias de desarrollo
-npm install -D @types/node
+Postulante puede consultar estado en: /consulta-postulacion
+  → Ingresa DNI o email
+  → Ve estado de sus postulaciones
 ```
 
-#### Fase 2: Configuración de TailwindCSS
+### Estados de postulación
 
-```javascript
-// tailwind.config.js
-/** @type {import('tailwindcss').Config} */
-export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
-  theme: {
-    extend: {
-      colors: {
-        primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
-          950: '#0a1628',
-        },
-        accent: {
-          electric: '#00d4ff',
-          energy: '#fbbf24',
-        }
-      },
-      fontFamily: {
-        display: ['Orbitron', 'sans-serif'],
-        body: ['Plus Jakarta Sans', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
-      },
-      animation: {
-        'float': 'float 6s ease-in-out infinite',
-        'glow': 'glow 2s ease-in-out infinite alternate',
-        'slide-up': 'slideUp 0.6s ease-out forwards',
-        'fade-in': 'fadeIn 0.8s ease-out forwards',
-      },
-      keyframes: {
-        float: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-20px)' },
-        },
-        glow: {
-          '0%': { boxShadow: '0 0 5px #00d4ff, 0 0 10px #00d4ff' },
-          '100%': { boxShadow: '0 0 20px #00d4ff, 0 0 30px #00d4ff' },
-        },
-        slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(30px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        fadeIn: {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
-        },
-      },
-    },
-  },
-  plugins: [],
-}
 ```
-
-#### Fase 3: Estructura de Archivos
-
-Crear toda la estructura de carpetas y archivos según el árbol definido arriba.
-
-#### Fase 4: Componentes Clave
-
-**PRIORIDAD ALTA** - Implementar en este orden:
-
-1. `Layout.tsx` - Estructura base
-2. `Navbar.tsx` - Navegación con menú móvil
-3. `HeroSection.tsx` - Hero con carrusel de GIFs
-4. `ServicesSection.tsx` - Servicios
-5. `JobsSection.tsx` - Bolsa de trabajo
-6. `ApplicationForm.tsx` - Formulario de postulación
-7. `ContactSection.tsx` - Formulario de contacto
-8. `Footer.tsx` - Pie de página
-
-#### Fase 5: Integraciones API
-
-1. Configurar Google Apps Script y desplegar como Web App
-2. Configurar las hojas en Google Sheets
-3. Obtener Facebook Page Access Token
-4. Probar todos los endpoints
-
-#### Fase 6: Testing y Optimización
-
-1. Probar en dispositivos móviles
-2. Verificar formularios y subida de archivos
-3. Optimizar imágenes y GIFs
-4. Verificar SEO básico
+pendiente → revisado → entrevista → contratado
+                    ↘ rechazado
+```
 
 ---
 
-## 📦 Despliegue
+## Despliegue
 
-### GitHub Pages
+### Manual
 
 ```bash
-# 1. Instalar gh-pages
-npm install -D gh-pages
-
-# 2. Agregar scripts en package.json
-{
-  "scripts": {
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
-  }
-}
-
-# 3. Configurar vite.config.ts para GitHub Pages
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-
-export default defineConfig({
-  plugins: [react()],
-  base: '/', // Para dominio personalizado
-})
-
-# 4. Crear archivo CNAME en public/
-echo "ingeneriatelcom.com" > public/CNAME
-
-# 5. Desplegar
 npm run deploy
+# Ejecuta: tsc && vite build → gh-pages -d dist
 ```
 
-### Configuración del Repositorio GitHub
+### Automático (GitHub Actions)
 
-1. Ir a **Settings** → **Pages**
-2. Source: Deploy from a branch
-3. Branch: `gh-pages` / `/ (root)`
-4. Custom domain: `ingeneriatelcom.com`
-5. Enforce HTTPS: ✅
+El archivo `.github/workflows/deploy.yml` ejecuta el deploy automáticamente en cada push a `main`.
 
----
+```yaml
+# Requiere secrets en GitHub:
+# VITE_APPS_SCRIPT_URL
+# VITE_ADMIN_PASSWORD (si aplica)
+```
 
-## 🌐 Configuración del Dominio
+### Configuración GitHub Pages
 
-### DNS Records para `ingeneriatelcom.com`
+1. Settings → Pages → Branch: `gh-pages` / root
+2. Custom domain: `ingeneriatelcom.com`
+3. Enforce HTTPS: activado
+
+### DNS Records
 
 ```
 Tipo    Nombre    Valor
-─────────────────────────────────────────
 A       @         185.199.108.153
 A       @         185.199.109.153
 A       @         185.199.110.153
@@ -1063,63 +737,131 @@ A       @         185.199.111.153
 CNAME   www       canazachyub.github.io
 ```
 
-### Archivo CNAME
+### SPA Routing en GitHub Pages
 
-```
-ingeneriatelcom.com
-```
+`public/404.html` redirige rutas desconocidas al `index.html` para que React Router funcione correctamente en recarga directa de páginas.
 
 ---
 
-## 📝 Notas Adicionales
+## Problemas Conocidos y Soluciones
 
-### GIFs Recomendados para Hero
+### 1. "No autorizado" al crear/editar convocatoria
 
-Buscar GIFs de alta calidad (1920x1080 mínimo) de:
-- Torres de telecomunicaciones con trabajadores
-- Chispas eléctricas y rayos
-- Instalación de cables de fibra óptica
-- Paneles eléctricos industriales
-- Equipos de medición eléctrica
+**Causa**: El payload del formulario era tan largo que la URL superaba el límite del navegador. El token quedaba truncado o se perdía. Además, el parámetro `method` en `request()` originalmente tenía nombre `_method` (con guión bajo) y no se usaba, por lo que todo se enviaba como GET.
 
-**Fuentes recomendadas**:
-- Giphy (versión HD)
-- Pexels (videos convertidos a GIF)
-- Unsplash (animaciones)
+**Solución**: Implementar POST real con body para todas las acciones de escritura. Ver sección "Método `request()`" arriba.
 
-### SEO Básico
+### 2. PDFs desaparecen después de ejecutar funciones de prueba
 
-```html
-<!-- index.html -->
-<head>
-  <title>Ingeniería Telcom EIRL | Telecomunicaciones y Servicios Eléctricos en Perú</title>
-  <meta name="description" content="Empresa líder en telecomunicaciones y servicios eléctricos en Perú. Supervisión, análisis y gestión de proyectos eléctricos. Bolsa de trabajo disponible.">
-  <meta name="keywords" content="telecomunicaciones, servicios eléctricos, Perú, ingeniería, Tacna, Puno, electricidad">
-  <meta property="og:title" content="Ingeniería Telcom EIRL">
-  <meta property="og:description" content="Conectando Perú con Excelencia">
-  <meta property="og:image" content="/assets/images/og-image.jpg">
-  <meta property="og:url" content="https://ingeneriatelcom.com">
-</head>
-```
+**Causa**: `cargarConvocatoriasPrueba()` llama a `recrearHoja('convocatorias')` que borra y recrea la hoja completa, perdiendo todos los datos incluyendo las URLs de PDF.
+
+**Solución**: No usar `cargarConvocatoriasPrueba()` en producción. Si se necesita recrear la estructura, usar `setupAllSheets()` solo en un spreadsheet vacío o de prueba.
+
+**Fix aplicado**: Los arrays de headers en `setupAllSheets()` y `cargarConvocatoriasPrueba()` ahora incluyen `pdf_url` para que la columna exista desde el principio.
+
+### 3. Columna `pdf_url` no existe en Sheet existente
+
+Si la hoja `convocatorias` fue creada con una versión anterior de `appscript.js` que no incluía `pdf_url`, el campo no existe y los PDFs no se guardan/muestran.
+
+**Solución manual**: Abrir el Google Sheet, ir a la hoja `convocatorias`, agregar manualmente la columna `pdf_url` al final de los headers. Luego re-guardar cualquier convocatoria desde el admin para que se escriba el valor.
+
+### 4. Errores "Uncaught (in promise) Object" en consola
+
+**Causa probable**: Apps Script devuelve HTML de error en lugar de JSON cuando hay excepciones no manejadas. El `.json()` del fetch falla.
+
+**Mitigación**: El `request()` tiene try/catch que captura y loguea el error. No rompe la UI pero tampoco da detalle del error real.
 
 ---
 
-## 📞 Contacto del Proyecto
+## Variables de Entorno
 
-| Recurso | URL/Valor |
-|---------|-----------|
+```env
+# .env (local) / GitHub Secrets (CI/CD)
+
+VITE_APPS_SCRIPT_URL=https://script.google.com/macros/s/TU_ID/exec
+```
+
+El archivo `.env` no se sube al repositorio (está en `.gitignore`). En GitHub Actions se configura como secret `VITE_APPS_SCRIPT_URL`.
+
+---
+
+## Diseño y Estética
+
+**Concepto**: Industrial Premium — azules profundos, acentos cyan eléctrico y amarillo energía.
+
+### Paleta principal
+
+```css
+--primary-950: #0a1628    /* Fondo principal */
+--primary-800: #0f2847    /* Fondos secundarios */
+--accent-electric: #00d4ff /* Highlights, iconos */
+--accent-energy: #fbbf24   /* CTAs, botones primarios */
+```
+
+### Tipografías
+
+- `Orbitron` — títulos y display
+- `Plus Jakarta Sans` — cuerpo de texto
+- `JetBrains Mono` — datos técnicos
+
+### Componentes reutilizables
+
+| Clase CSS | Uso |
+|-----------|-----|
+| `btn-energy` | Botón CTA amarillo principal |
+| `btn-primary` | Botón azul |
+| `btn-secondary` | Botón con borde |
+| `section-title` | Título de sección |
+| `section-subtitle` | Subtítulo de sección |
+| `card` | Tarjeta con fondo oscuro y borde |
+
+---
+
+## Recursos del Proyecto
+
+| Recurso | URL |
+|---------|-----|
 | Sitio Web | https://ingeneriatelcom.com |
-| Dashboard | https://canazachyub.github.io/Telcomdashboard |
+| Dashboard Admin | https://canazachyub.github.io/Telcomdashboard |
+| Google Sheets DB | https://docs.google.com/spreadsheets/d/15ajUr5KqGgs99bsCcp9LnxRaD9mbIWjZArLetk7v4hA |
+| Google Drive CVs | https://drive.google.com/drive/folders/1B2CPcrNxUJtJcu7x8rXs_7_m9m2p9zAV |
+| Repositorio | https://github.com/canazachyub/ingenieria-telcom |
 | Facebook | https://www.facebook.com/profile.php?id=61586657451703 |
 | Email | energysupervision13@gmail.com |
-| Teléfono | +51 946 728 495 |
 
 ---
 
-## 📄 Licencia
+## Historial de Cambios Relevantes
+
+| Versión / Fecha | Cambio |
+|-----------------|--------|
+| Inicial | Migración de HTML estático a React + TypeScript |
+| v1.1 | Integración Google Apps Script + Sheets |
+| v1.2 | Panel de administración completo (CRUD convocatorias, postulaciones, empleados) |
+| v1.3 | Fix autenticación: POST real con body para evitar pérdida de token en URLs largas |
+| v1.4 | Sistema de ficha PDF por convocatoria: subida desde admin, almacenamiento en Drive por ciudad |
+| v1.5 | Expansión dropdown ciudades (~40 ciudades peruanas, incluye Puerto Maldonado) |
+| v1.6 | Botón "Ver Ficha" rediseñado en ámbar/dorado con mejor visibilidad |
+| v1.7 | Eliminación contador "0 postulantes" de tarjetas de trabajo |
+| v1.8 | Fix headers Google Sheet: `pdf_url` incluido en `setupAllSheets` y `cargarConvocatoriasPrueba` |
+| v1.9 | Corrección estadísticas homepage: 27 proyectos, 15+ clientes |
+| v2.0 | CI/CD automático con GitHub Actions |
+| v2.1 | Módulo de Capacitaciones: cursos activos públicos, banco de preguntas, evaluación con webcam y proctoring, revisión admin |
+| v2.2 | Fix Banco de Preguntas admin: endpoint `getPreguntas` + método API + corrección frontend para leer desde Google Sheets |
+
+---
+
+## Checklist de Despliegue (Módulo Capacitaciones)
+
+Al actualizar `appscript.js` en Google Apps Script, ejecutar lo siguiente desde el editor:
+
+1. **`setupAllSheets()`** — crea las 5 hojas nuevas si no existen (no toca hojas existentes)
+2. **Redesplegar Web App** — "Desplegar" → "Administrar despliegues" → editar → "Nueva versión"
+3. **`preAutorizarDrive()`** — pre-autoriza acceso a Drive para guardar fotos webcam
+4. **`preAutorizarMail()`** — pre-autoriza MailApp para enviar correos de resultado
+
+> Solo necesario la primera vez o cuando se agregan hojas/funciones nuevas.
+
+---
 
 © 2025 Ingeniería Telcom EIRL. Todos los derechos reservados.
-
----
-
-**Desarrollado con ⚡ por el equipo de Ingeniería Telcom EIRL**

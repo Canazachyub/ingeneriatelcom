@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -28,7 +28,9 @@ import {
   FaStar,
   FaIdCard,
   FaClipboardCheck,
-  FaPaperPlane
+  FaPaperPlane,
+  FaFilePdf,
+  FaDownload
 } from 'react-icons/fa'
 import Button from '../components/common/Button'
 import { api } from '../api/appScriptApi'
@@ -49,13 +51,14 @@ interface Job {
   fecha_publicacion: string
   fecha_cierre: string
   postulantes_count: number
+  pdf_url?: string
 }
 
 const categories: Record<string, { label: string; color: string; icon: JSX.Element }> = {
-  'Ingenieria': { label: 'Ingenieria', color: 'from-blue-500 to-cyan-500', icon: <FaBuilding /> },
-  'Tecnico': { label: 'Tecnico', color: 'from-orange-500 to-yellow-500', icon: <FaBriefcase /> },
-  'TI': { label: 'Tecnologia / TI', color: 'from-purple-500 to-pink-500', icon: <FaRocket /> },
-  'Administracion': { label: 'Administracion', color: 'from-green-500 to-emerald-500', icon: <FaClipboardCheck /> },
+  'Ingenieria': { label: 'Ingeniería', color: 'from-blue-500 to-cyan-500', icon: <FaBuilding /> },
+  'Tecnico': { label: 'Técnico', color: 'from-orange-500 to-yellow-500', icon: <FaBriefcase /> },
+  'TI': { label: 'Tecnología / TI', color: 'from-purple-500 to-pink-500', icon: <FaRocket /> },
+  'Administracion': { label: 'Administración', color: 'from-green-500 to-emerald-500', icon: <FaClipboardCheck /> },
   'Finanzas': { label: 'Finanzas', color: 'from-emerald-500 to-teal-500', icon: <FaMoneyBillWave /> },
   'RRHH': { label: 'Recursos Humanos', color: 'from-pink-500 to-rose-500', icon: <FaUsers /> },
   'Operaciones': { label: 'Operaciones', color: 'from-amber-500 to-orange-500', icon: <FaBriefcase /> },
@@ -65,31 +68,27 @@ const categories: Record<string, { label: string; color: string; icon: JSX.Eleme
 const modalities: Record<string, { label: string; color: string }> = {
   'Presencial': { label: 'Presencial', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
   'Remoto': { label: 'Remoto', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-  'Hibrido': { label: 'Hibrido', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+  'Hibrido': { label: 'Híbrido', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
 }
 
 const applicationSchema = z.object({
   fullName: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
-  dni: z.string().length(8, 'El DNI debe tener 8 digitos'),
-  email: z.string().email('Ingresa un email valido'),
-  phone: z.string().min(9, 'Ingresa un telefono valido'),
+  dni: z.string().length(8, 'El DNI debe tener 8 dígitos'),
+  email: z.string().email('Ingresa un email válido'),
+  phone: z.string().min(9, 'Ingresa un teléfono válido'),
   linkedIn: z.string().url('Ingresa una URL valida').optional().or(z.literal('')),
   coverLetter: z.string().optional(),
   expectedSalary: z.string().optional(),
   availability: z.string().min(1, 'Selecciona tu disponibilidad'),
-  terms: z.boolean().refine(val => val === true, 'Debes aceptar los terminos'),
+  terms: z.boolean().refine(val => val === true, 'Debes aceptar los términos'),
 })
 
 type ApplicationFormData = z.infer<typeof applicationSchema>
 
-const steps = [
-  { number: 1, title: 'Datos Personales', icon: <FaUser /> },
-  { number: 2, title: 'Documentos', icon: <FaFileAlt /> },
-  { number: 3, title: 'Finalizar', icon: <FaPaperPlane /> },
-]
 
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [job, setJob] = useState<Job | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -98,6 +97,8 @@ export default function JobDetailPage() {
   const [isSuccess, setIsSuccess] = useState(false)
   const [cvFile, setCvFile] = useState<File | null>(null)
   const [showShareTooltip, setShowShareTooltip] = useState(false)
+  const [showStickyBtn, setShowStickyBtn] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
 
   const {
     register,
@@ -113,6 +114,82 @@ export default function JobDetailPage() {
       loadJob()
     }
   }, [id])
+
+  useEffect(() => {
+    if (!job) return
+
+    const employmentTypeMap: Record<string, string> = {
+      'Presencial': 'FULL_TIME',
+      'Remoto': 'TELECOMMUTE',
+      'Hibrido': 'FULL_TIME',
+    }
+
+    const schema: Record<string, unknown> = {
+      '@context': 'https://schema.org/',
+      '@type': 'JobPosting',
+      'title': job.titulo,
+      'description': job.descripcion,
+      'datePosted': job.fecha_publicacion,
+      'validThrough': job.fecha_cierre,
+      'employmentType': employmentTypeMap[job.modalidad] ?? 'FULL_TIME',
+      'hiringOrganization': {
+        '@type': 'Organization',
+        'name': 'Ingeniería Telcom EIRL',
+        'sameAs': 'https://ingeneriatelcom.com',
+        'logo': 'https://ingeneriatelcom.com/assets/images/logo/logo-horizontal.png',
+      },
+      'jobLocation': {
+        '@type': 'Place',
+        'address': {
+          '@type': 'PostalAddress',
+          'addressLocality': job.ubicacion,
+          'addressRegion': 'Perú',
+          'addressCountry': 'PE',
+        },
+      },
+      'jobBenefits': job.beneficios,
+      'qualifications': job.requisitos,
+      'directApply': true,
+      'url': `https://ingeneriatelcom.com/jobs/${job.id}`,
+    }
+
+    if (job.salario_min > 0) {
+      schema['baseSalary'] = {
+        '@type': 'MonetaryAmount',
+        'currency': 'PEN',
+        'value': {
+          '@type': 'QuantitativeValue',
+          'minValue': job.salario_min,
+          'maxValue': job.salario_max,
+          'unitText': 'MONTH',
+        },
+      }
+    }
+
+    let scriptTag = document.getElementById('jobposting-schema') as HTMLScriptElement | null
+    if (!scriptTag) {
+      scriptTag = document.createElement('script')
+      scriptTag.id = 'jobposting-schema'
+      scriptTag.type = 'application/ld+json'
+      document.head.appendChild(scriptTag)
+    }
+    scriptTag.textContent = JSON.stringify(schema)
+
+    return () => {
+      const tag = document.getElementById('jobposting-schema')
+      if (tag) {
+        document.head.removeChild(tag)
+      }
+    }
+  }, [job])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowStickyBtn(window.scrollY > 400)
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   const loadJob = async () => {
     setIsLoading(true)
@@ -139,6 +216,7 @@ export default function JobDetailPage() {
           fecha_publicacion: String(j.fecha_publicacion || j.publishedAt || ''),
           fecha_cierre: String(j.fecha_cierre || j.closingDate || ''),
           postulantes_count: Number(j.postulantes_count || j.applicationsCount || 0),
+          pdf_url: String(j.pdf_url || j.pdfUrl || ''),
         })
       } else {
         setJob(null)
@@ -192,11 +270,11 @@ export default function JobDetailPage() {
       if (result.success) {
         setIsSuccess(true)
       } else {
-        setError(result.error || 'Error al enviar la postulacion')
+        setError(result.error || 'Error al enviar la postulación')
       }
     } catch (err) {
       console.error('Application error:', err)
-      setError('Error al enviar la postulacion')
+      setError('Error al enviar la postulación')
     } finally {
       setIsSubmitting(false)
     }
@@ -204,6 +282,25 @@ export default function JobDetailPage() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    if (file) {
+      setCvFile(file)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
     if (file) {
       setCvFile(file)
     }
@@ -308,9 +405,11 @@ export default function JobDetailPage() {
             <FaExclamationTriangle className="text-4xl text-red-400" />
           </div>
           <h2 className="text-2xl font-display font-bold text-white mb-4">Error</h2>
-          <p className="text-red-400 mb-8">{error}</p>
+          <p className="text-primary-400 mb-8">
+            No pudimos cargar esta convocatoria. Puede que haya sido cerrada o que no esté disponible.
+          </p>
           <Link to="/bolsa-trabajo">
-            <Button variant="primary">Ver todas las vacantes</Button>
+            <Button variant="primary">Ver otras convocatorias</Button>
           </Link>
         </motion.div>
       </div>
@@ -333,10 +432,10 @@ export default function JobDetailPage() {
             Vacante no encontrada
           </h1>
           <p className="text-primary-400 mb-8">
-            La vacante que buscas no existe o ya no esta disponible.
+            No pudimos cargar esta convocatoria. Puede que haya sido cerrada o que no esté disponible.
           </p>
           <Link to="/bolsa-trabajo">
-            <Button variant="primary">Ver todas las vacantes</Button>
+            <Button variant="primary">Ver otras convocatorias</Button>
           </Link>
         </motion.div>
       </div>
@@ -367,10 +466,10 @@ export default function JobDetailPage() {
             transition={{ delay: 0.4 }}
           >
             <h1 className="text-3xl md:text-4xl font-display font-bold text-white mb-4">
-              ¡Postulacion Exitosa!
+              ¡Postulación Exitosa!
             </h1>
             <p className="text-primary-300 text-lg mb-3">
-              Tu postulacion para el puesto de
+              Tu postulación para el puesto de
             </p>
             <p className="text-accent-electric text-xl font-semibold mb-6">
               {job.titulo}
@@ -380,9 +479,9 @@ export default function JobDetailPage() {
             </p>
 
             <div className="bg-primary-800/30 rounded-xl p-6 mb-8 border border-primary-700/50">
-              <p className="text-primary-300 text-sm mb-2">Puedes consultar el estado de tu postulacion con tu DNI en:</p>
+              <p className="text-primary-300 text-sm mb-2">Puedes consultar el estado de tu postulación con tu DNI en:</p>
               <Link to="/mi-postulacion" className="text-accent-electric hover:underline font-medium">
-                Consultar mi postulacion
+                Consultar mi postulación
               </Link>
             </div>
 
@@ -416,13 +515,24 @@ export default function JobDetailPage() {
             animate={{ opacity: 1, y: 0 }}
           >
             {/* Back Button */}
-            <Link
-              to="/bolsa-trabajo"
-              className="inline-flex items-center gap-2 text-white/80 hover:text-white transition-colors mb-6 group"
+            <button
+              onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/bolsa-trabajo')}
+              className="inline-flex items-center gap-2 text-white/80 hover:text-white transition-colors mb-3 group"
             >
               <FaArrowLeft className="group-hover:-translate-x-1 transition-transform" />
-              Volver a Bolsa de Trabajo
-            </Link>
+              ← Volver a Convocatorias
+            </button>
+
+            {/* Breadcrumb */}
+            {job && (
+              <nav className="flex items-center gap-2 text-sm text-primary-400 mb-4">
+                <Link to="/" className="hover:text-accent-electric transition-colors">Inicio</Link>
+                <span>/</span>
+                <Link to="/bolsa-trabajo" className="hover:text-accent-electric transition-colors">Bolsa de Trabajo</Link>
+                <span>/</span>
+                <span className="text-white truncate max-w-xs">{job?.titulo || 'Convocatoria'}</span>
+              </nav>
+            )}
 
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex-1">
@@ -510,7 +620,7 @@ export default function JobDetailPage() {
               <div className="flex items-center gap-2 text-primary-300">
                 <FaClock className={daysRemaining <= 3 ? 'text-red-400' : 'text-accent-energy'} />
                 <span className={daysRemaining <= 3 ? 'text-red-400' : ''}>
-                  <strong className="text-white">{daysRemaining}</strong> {daysRemaining === 1 ? 'dia restante' : 'dias restantes'}
+                  <strong className="text-white">{daysRemaining}</strong> {daysRemaining === 1 ? 'día restante' : 'días restantes'}
                 </span>
               </div>
             )}
@@ -524,15 +634,35 @@ export default function JobDetailPage() {
         </div>
       </div>
 
+      {/* Sticky "Postular Ahora" Button */}
+      <AnimatePresence>
+        {showStickyBtn && (
+          <motion.div
+            initial={{ y: 100 }}
+            animate={{ y: 0 }}
+            exit={{ y: 100 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
+          >
+            <button
+              onClick={() => document.getElementById('formulario-postulacion')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              className="flex items-center gap-3 bg-accent-electric text-primary-950 px-8 py-4 rounded-full font-bold text-lg shadow-2xl shadow-accent-electric/40 hover:bg-accent-electric/90 transition-all hover:scale-105"
+            >
+              <FaRocket />
+              Postular Ahora
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Main Content */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid lg:grid-cols-3 gap-8">
+        <div className="space-y-0">
           {/* Job Details */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="lg:col-span-2 space-y-6"
+            className="max-w-4xl mx-auto space-y-6"
           >
             {/* Description */}
             <div className="bg-primary-900/50 backdrop-blur-sm rounded-2xl border border-primary-700/50 p-6 md:p-8 hover:border-primary-600/50 transition-colors">
@@ -541,7 +671,7 @@ export default function JobDetailPage() {
                   <FaFileAlt className="text-accent-electric" />
                 </div>
                 <h2 className="text-xl md:text-2xl font-display font-bold text-white">
-                  Descripcion del Puesto
+                  Descripción del Puesto
                 </h2>
               </div>
               <p className="text-primary-300 leading-relaxed whitespace-pre-line text-base md:text-lg">
@@ -609,270 +739,338 @@ export default function JobDetailPage() {
               </div>
             )}
           </motion.div>
+        </div>
+      </div>
 
-          {/* Application Form */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="lg:col-span-1"
-          >
-            <div className="bg-gradient-to-b from-primary-800/50 to-primary-900/50 backdrop-blur-sm rounded-2xl border border-primary-700/50 overflow-hidden sticky top-24">
-              {/* Form Header */}
-              <div className={`bg-gradient-to-r ${categoryInfo.color} p-6`}>
-                <h2 className="text-xl font-display font-bold text-white mb-2">
-                  Postular Ahora
-                </h2>
-                <p className="text-white/80 text-sm">
-                  Completa el formulario para aplicar
-                </p>
-              </div>
+      {/* Application Form — full-width section below job details */}
+      <div id="formulario-postulacion" className="mt-12 max-w-2xl mx-auto px-4 pb-16">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          {/* Section Header */}
+          <div className="text-center mb-8">
+            <h2 className="text-2xl md:text-3xl font-display font-bold text-white mb-2">
+              ¿Listo para postular?
+            </h2>
+            <p className="text-primary-300">Completa el formulario en 3 simples pasos</p>
+          </div>
 
-              <div className="p-6">
-                {/* Step Indicator */}
-                <div className="flex items-center justify-between mb-8">
-                  {steps.map((s, i) => (
-                    <div key={s.number} className="flex items-center">
-                      <div className="flex flex-col items-center">
-                        <div
-                          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                            step >= s.number
-                              ? 'bg-accent-electric text-white shadow-lg shadow-accent-electric/30'
-                              : 'bg-primary-700 text-primary-400'
-                          }`}
-                        >
-                          {step > s.number ? <FaCheckCircle /> : s.icon}
-                        </div>
-                        <span className={`text-xs mt-2 ${step >= s.number ? 'text-accent-electric' : 'text-primary-500'}`}>
-                          {s.title}
-                        </span>
-                      </div>
-                      {i < steps.length - 1 && (
-                        <div className={`w-8 md:w-12 h-0.5 mx-1 ${step > s.number ? 'bg-accent-electric' : 'bg-primary-700'}`} />
-                      )}
-                    </div>
-                  ))}
+          {job.pdf_url && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 relative overflow-hidden rounded-2xl border border-amber-400/40 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15"
+            >
+              {/* Glow strip */}
+              <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-amber-400 to-transparent" />
+
+              <div className="p-5 flex flex-col sm:flex-row items-center gap-5">
+                {/* Icon */}
+                <div className="w-14 h-14 rounded-xl bg-amber-400/20 border border-amber-400/30 flex items-center justify-center flex-shrink-0">
+                  <FaFilePdf className="text-amber-400 text-2xl" />
                 </div>
 
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-xl"
+                {/* Text */}
+                <div className="flex-1 text-center sm:text-left">
+                  <div className="flex items-center gap-2 justify-center sm:justify-start mb-1">
+                    <span className="text-amber-400 text-xs font-bold uppercase tracking-widest">Lectura obligatoria</span>
+                  </div>
+                  <p className="text-white font-bold text-base">Ficha Oficial de Postulación</p>
+                  <p className="text-primary-300 text-sm mt-0.5">
+                    Contiene requisitos detallados, funciones, documentos necesarios y pasos del proceso.
+                    <span className="text-amber-400 font-medium"> Léela antes de postular.</span>
+                  </p>
+                </div>
+
+                {/* Buttons */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <a
+                    href={job.pdf_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-white font-semibold rounded-xl transition-all shadow-lg shadow-amber-500/30 text-sm"
                   >
-                    <p className="text-red-400 text-sm flex items-center gap-2">
-                      <FaExclamationTriangle />
-                      {error}
-                    </p>
-                  </motion.div>
-                )}
+                    <FaDownload />
+                    Ver Ficha
+                  </a>
+                </div>
+              </div>
 
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                  <AnimatePresence mode="wait">
-                    {step === 1 && (
-                      <motion.div
-                        key="step1"
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        className="space-y-4"
-                      >
-                        <div className="relative">
-                          <FaUser className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
-                          <input
-                            {...register('fullName')}
-                            placeholder="Nombre completo *"
-                            className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
-                          />
-                          {errors.fullName && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.fullName.message}</p>}
-                        </div>
+              {/* Bottom strip */}
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
+            </motion.div>
+          )}
 
-                        <div className="relative">
-                          <FaIdCard className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
-                          <input
-                            {...register('dni')}
-                            placeholder="DNI (8 digitos) *"
-                            maxLength={8}
-                            className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
-                          />
-                          {errors.dni && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.dni.message}</p>}
-                        </div>
+          <div className="bg-gradient-to-b from-primary-800/50 to-primary-900/50 backdrop-blur-sm rounded-2xl border border-primary-700/50 overflow-hidden">
+            {/* Form Header */}
+            <div className={`bg-gradient-to-r ${categoryInfo.color} p-6`}>
+              <h3 className="text-xl font-display font-bold text-white mb-1">
+                {job.titulo}
+              </h3>
+              <p className="text-white/80 text-sm">
+                Ingeniería Telcom EIRL · {job.ubicacion}
+              </p>
+            </div>
 
-                        <div className="relative">
-                          <FaEnvelope className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
-                          <input
-                            {...register('email')}
-                            type="email"
-                            placeholder="Email *"
-                            className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
-                          />
-                          {errors.email && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.email.message}</p>}
-                        </div>
-
-                        <div className="relative">
-                          <FaPhone className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
-                          <input
-                            {...register('phone')}
-                            placeholder="Telefono *"
-                            className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
-                          />
-                          {errors.phone && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.phone.message}</p>}
-                        </div>
-
-                        <div className="relative">
-                          <FaLinkedin className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
-                          <input
-                            {...register('linkedIn')}
-                            placeholder="LinkedIn (opcional)"
-                            className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
-                          />
-                        </div>
-
-                        <Button type="button" onClick={handleNextStep} className="w-full py-3.5">
-                          Continuar
-                        </Button>
-                      </motion.div>
+            <div className="p-6">
+              {/* Improved Step Indicator */}
+              <div className="flex items-center justify-center gap-2 mb-8">
+                {[
+                  { s: 1, label: 'Datos' },
+                  { s: 2, label: 'CV' },
+                  { s: 3, label: 'Confirmar' },
+                ].map(({ s, label }) => (
+                  <div key={s} className="flex items-center gap-2">
+                    <div className="flex flex-col items-center gap-1">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                        step === s
+                          ? 'bg-accent-electric text-primary-950 scale-110'
+                          : step > s
+                          ? 'bg-green-500 text-white'
+                          : 'bg-primary-700 text-primary-400'
+                      }`}>
+                        {step > s ? '✓' : s}
+                      </div>
+                      <span className={`text-xs ${step >= s ? 'text-accent-electric' : 'text-primary-500'}`}>
+                        {label}
+                      </span>
+                    </div>
+                    {s < 3 && (
+                      <div className={`w-12 h-0.5 mb-4 ${step > s ? 'bg-green-500' : 'bg-primary-700'}`} />
                     )}
+                  </div>
+                ))}
+              </div>
 
-                    {step === 2 && (
-                      <motion.div
-                        key="step2"
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        className="space-y-4"
-                      >
-                        <div>
-                          <label className="block text-sm text-primary-300 mb-2 font-medium">
-                            Curriculum Vitae (PDF, DOC, DOCX)
-                          </label>
-                          <label className={`flex flex-col items-center justify-center w-full h-36 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
-                            cvFile
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-xl"
+                >
+                  <p className="text-red-400 text-sm flex items-center gap-2">
+                    <FaExclamationTriangle />
+                    {error}
+                  </p>
+                </motion.div>
+              )}
+
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                <AnimatePresence mode="wait">
+                  {step === 1 && (
+                    <motion.div
+                      key="step1"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-4"
+                    >
+                      <div className="relative">
+                        <FaUser className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
+                        <input
+                          {...register('fullName')}
+                          placeholder="Nombre completo *"
+                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                        />
+                        {errors.fullName && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.fullName.message}</p>}
+                      </div>
+
+                      <div className="relative">
+                        <FaIdCard className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
+                        <input
+                          {...register('dni')}
+                          placeholder="DNI (8 dígitos) *"
+                          maxLength={8}
+                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                        />
+                        {errors.dni && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.dni.message}</p>}
+                      </div>
+
+                      <div className="relative">
+                        <FaEnvelope className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
+                        <input
+                          {...register('email')}
+                          type="email"
+                          placeholder="Email *"
+                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                        />
+                        {errors.email && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.email.message}</p>}
+                      </div>
+
+                      <div className="relative">
+                        <FaPhone className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
+                        <input
+                          {...register('phone')}
+                          placeholder="Teléfono *"
+                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                        />
+                        {errors.phone && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.phone.message}</p>}
+                      </div>
+
+                      <div className="relative">
+                        <FaLinkedin className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
+                        <input
+                          {...register('linkedIn')}
+                          placeholder="LinkedIn (opcional)"
+                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                        />
+                      </div>
+
+                      <Button type="button" onClick={handleNextStep} className="w-full py-3.5">
+                        Continuar
+                      </Button>
+                    </motion.div>
+                  )}
+
+                  {step === 2 && (
+                    <motion.div
+                      key="step2"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-4"
+                    >
+                      <div>
+                        <label className="block text-sm text-primary-300 mb-2 font-medium">
+                          Curriculum Vitae (PDF, DOC, DOCX)
+                        </label>
+                        <label
+                          className={`flex flex-col items-center justify-center w-full min-h-32 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+                            isDragging
+                              ? 'border-accent-electric bg-accent-electric/20 scale-[1.02]'
+                              : cvFile
                               ? 'border-accent-electric bg-accent-electric/10'
                               : 'border-primary-600 hover:border-accent-electric hover:bg-primary-800/50'
-                          }`}>
-                            {cvFile ? (
-                              <>
-                                <FaCheckCircle className="text-3xl text-accent-electric mb-2" />
-                                <span className="text-sm text-accent-electric font-medium">{cvFile.name}</span>
-                                <span className="text-xs text-primary-500 mt-1">Clic para cambiar</span>
-                              </>
-                            ) : (
-                              <>
-                                <FaUpload className="text-3xl text-primary-500 mb-2" />
-                                <span className="text-sm text-primary-400 font-medium">Haz clic para subir tu CV</span>
-                                <span className="text-xs text-primary-600 mt-1">Max 10MB</span>
-                              </>
-                            )}
-                            <input
-                              type="file"
-                              className="hidden"
-                              accept=".pdf,.doc,.docx"
-                              onChange={handleFileChange}
-                            />
-                          </label>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm text-primary-300 mb-2 font-medium">
-                            Carta de presentacion (opcional)
-                          </label>
-                          <textarea
-                            {...register('coverLetter')}
-                            placeholder="Cuentanos por que eres ideal para este puesto..."
-                            rows={4}
-                            className="w-full px-4 py-3 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric resize-none transition-all"
-                          />
-                        </div>
-
-                        <div className="flex gap-3">
-                          <Button type="button" variant="secondary" onClick={() => setStep(1)} className="flex-1 py-3">
-                            Atras
-                          </Button>
-                          <Button type="button" onClick={handleNextStep} className="flex-1 py-3">
-                            Continuar
-                          </Button>
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {step === 3 && (
-                      <motion.div
-                        key="step3"
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        className="space-y-4"
-                      >
-                        <div className="relative">
-                          <FaMoneyBillWave className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
+                          }`}
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDrop}
+                        >
+                          {cvFile ? (
+                            <div className="flex flex-col items-center py-6">
+                              <FaCheckCircle className="text-4xl text-accent-electric mb-3" />
+                              <span className="text-sm text-accent-electric font-medium px-4 text-center">{cvFile.name}</span>
+                              <span className="text-xs text-primary-500 mt-2">Clic o arrastra para cambiar</span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center py-8">
+                              <FaUpload className={`text-4xl mb-3 transition-colors ${isDragging ? 'text-accent-electric' : 'text-primary-500'}`} />
+                              <span className={`text-sm font-medium transition-colors ${isDragging ? 'text-accent-electric' : 'text-primary-400'}`}>
+                                {isDragging ? 'Suelta el archivo aquí' : 'Haz clic o arrastra tu CV aquí'}
+                              </span>
+                              <span className="text-xs text-primary-600 mt-1">PDF, DOC, DOCX · Max 10MB</span>
+                            </div>
+                          )}
                           <input
-                            {...register('expectedSalary')}
-                            placeholder="Pretension salarial en S/ (opcional)"
-                            type="number"
-                            className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.doc,.docx"
+                            onChange={handleFileChange}
                           />
-                        </div>
+                        </label>
+                      </div>
 
-                        <div className="relative">
-                          <FaClock className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500 pointer-events-none" />
-                          <select
-                            {...register('availability')}
-                            className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric appearance-none cursor-pointer transition-all"
-                          >
-                            <option value="" className="bg-primary-800">Disponibilidad para iniciar *</option>
-                            <option value="inmediata" className="bg-primary-800">Inmediata</option>
-                            <option value="1-semana" className="bg-primary-800">1 semana</option>
-                            <option value="2-semanas" className="bg-primary-800">2 semanas</option>
-                            <option value="1-mes" className="bg-primary-800">1 mes</option>
-                          </select>
-                          {errors.availability && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.availability.message}</p>}
-                        </div>
+                      <div>
+                        <label className="block text-sm text-primary-300 mb-2 font-medium">
+                          Carta de presentación (opcional)
+                        </label>
+                        <textarea
+                          {...register('coverLetter')}
+                          placeholder="Cuéntanos por qué eres ideal para este puesto..."
+                          rows={4}
+                          className="w-full px-4 py-3 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric resize-none transition-all"
+                        />
+                      </div>
 
-                        <div className="bg-primary-800/30 rounded-xl p-4 border border-primary-700/50">
-                          <label className="flex items-start gap-3 cursor-pointer">
-                            <input
-                              {...register('terms')}
-                              type="checkbox"
-                              className="mt-1 w-4 h-4 rounded border-primary-600 text-accent-electric focus:ring-accent-electric focus:ring-offset-0 bg-primary-800"
-                            />
-                            <span className="text-sm text-primary-300 leading-relaxed">
-                              Acepto los <span className="text-accent-electric">terminos y condiciones</span> y autorizo el tratamiento de mis datos personales para fines de seleccion.
+                      <div className="flex gap-3">
+                        <Button type="button" variant="secondary" onClick={() => setStep(1)} className="flex-1 py-3">
+                          Atras
+                        </Button>
+                        <Button type="button" onClick={handleNextStep} className="flex-1 py-3">
+                          Continuar
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {step === 3 && (
+                    <motion.div
+                      key="step3"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="space-y-4"
+                    >
+                      <div className="relative">
+                        <FaMoneyBillWave className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
+                        <input
+                          {...register('expectedSalary')}
+                          placeholder="Pretensión salarial en S/ (opcional)"
+                          type="number"
+                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                        />
+                      </div>
+
+                      <div className="relative">
+                        <FaClock className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500 pointer-events-none" />
+                        <select
+                          {...register('availability')}
+                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric appearance-none cursor-pointer transition-all"
+                        >
+                          <option value="" className="bg-primary-800">Disponibilidad para iniciar *</option>
+                          <option value="inmediata" className="bg-primary-800">Inmediata</option>
+                          <option value="1-semana" className="bg-primary-800">1 semana</option>
+                          <option value="2-semanas" className="bg-primary-800">2 semanas</option>
+                          <option value="1-mes" className="bg-primary-800">1 mes</option>
+                        </select>
+                        {errors.availability && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.availability.message}</p>}
+                      </div>
+
+                      <div className="bg-primary-800/30 rounded-xl p-4 border border-primary-700/50">
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <input
+                            {...register('terms')}
+                            type="checkbox"
+                            className="mt-1 w-4 h-4 rounded border-primary-600 text-accent-electric focus:ring-accent-electric focus:ring-offset-0 bg-primary-800"
+                          />
+                          <span className="text-sm text-primary-300 leading-relaxed">
+                            Acepto los <span className="text-accent-electric">términos y condiciones</span> y autorizo el tratamiento de mis datos personales para fines de selección.
+                          </span>
+                        </label>
+                        {errors.terms && <p className="text-red-400 text-xs mt-2">{errors.terms.message}</p>}
+                      </div>
+
+                      <div className="flex gap-3">
+                        <Button type="button" variant="secondary" onClick={() => setStep(2)} className="flex-1 py-3">
+                          Atras
+                        </Button>
+                        <Button
+                          type="submit"
+                          isLoading={isSubmitting}
+                          className="flex-1 py-3"
+                        >
+                          {isSubmitting ? (
+                            <span className="flex items-center justify-center gap-2">
+                              <FaSpinner className="animate-spin" />
+                              Enviando...
                             </span>
-                          </label>
-                          {errors.terms && <p className="text-red-400 text-xs mt-2">{errors.terms.message}</p>}
-                        </div>
-
-                        <div className="flex gap-3">
-                          <Button type="button" variant="secondary" onClick={() => setStep(2)} className="flex-1 py-3">
-                            Atras
-                          </Button>
-                          <Button
-                            type="submit"
-                            isLoading={isSubmitting}
-                            className="flex-1 py-3"
-                          >
-                            {isSubmitting ? (
-                              <span className="flex items-center justify-center gap-2">
-                                <FaSpinner className="animate-spin" />
-                                Enviando...
-                              </span>
-                            ) : (
-                              <span className="flex items-center justify-center gap-2">
-                                <FaPaperPlane />
-                                Enviar Postulacion
-                              </span>
-                            )}
-                          </Button>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </form>
-              </div>
+                          ) : (
+                            <span className="flex items-center justify-center gap-2">
+                              <FaPaperPlane />
+                              Enviar Postulación
+                            </span>
+                          )}
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </form>
             </div>
-          </motion.div>
-        </div>
+          </div>
+        </motion.div>
       </div>
     </div>
   )

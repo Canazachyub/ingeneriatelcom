@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FaPlus,
@@ -15,6 +16,8 @@ import {
   FaMoneyBillWave,
   FaUsers,
   FaExclamationTriangle,
+  FaFilePdf,
+  FaUpload,
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
@@ -32,9 +35,12 @@ interface JobData {
   salario_max: number
   estado: string
   prioridad: string
+  urgente?: boolean | string
   fecha_publicacion: string
   fecha_cierre: string
   postulantes_count: number
+  vacantes?: number
+  imagen: string
 }
 
 const categories = [
@@ -48,7 +54,15 @@ const categories = [
   { value: 'Otros', label: 'Otros' },
 ]
 
-const cities = ['Tacna', 'Puno', 'Juliaca', 'Arequipa', 'Moquegua', 'Lima', 'Cusco', 'Ilo']
+const cities = [
+  'Tacna', 'Puno', 'Juliaca', 'Arequipa', 'Moquegua', 'Lima', 'Cusco', 'Ilo',
+  'Puerto Maldonado', 'Madre de Dios', 'Abancay', 'Ayacucho', 'Huancayo',
+  'Huancavelica', 'Ica', 'Chincha', 'Pisco', 'Nazca', 'Trujillo', 'Piura',
+  'Chiclayo', 'Cajamarca', 'Chimbote', 'Huaraz', 'Iquitos', 'Pucallpa',
+  'Tarapoto', 'Moyobamba', 'Tumbes', 'Sullana', 'Talara', 'Paita',
+  'Tingo María', 'Huánuco', 'Cerro de Pasco', 'Satipo', 'La Merced',
+  'Callao', 'San Martín', 'Bagua', 'Chachapoyas', 'Jaén',
+]
 
 const modalities = [
   { value: 'Presencial', label: 'Presencial' },
@@ -82,7 +96,12 @@ export default function JobsManagementPage() {
     prioridad: 'media',
     fecha_cierre: '',
     estado: 'activo',
+    imagen: '',
+    pdf_url: '',
   })
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false)
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
 
@@ -98,6 +117,9 @@ export default function JobsManagementPage() {
     if (result.success && result.data) {
       const mappedJobs = (result.data as unknown[]).map((job: unknown) => {
         const j = job as Record<string, unknown>
+        const urgente = j.urgente === true || j.urgente === 'TRUE' || j.urgente === 'true'
+        const rawPrioridad = String(j.prioridad || j.priority || '')
+        const prioridad = rawPrioridad || (urgente ? 'alta' : 'media')
         return {
           id: String(j.id || ''),
           titulo: String(j.titulo || j.title || ''),
@@ -110,10 +132,13 @@ export default function JobsManagementPage() {
           salario_min: Number(j.salario_min || j.salaryMin || 0),
           salario_max: Number(j.salario_max || j.salaryMax || 0),
           estado: String(j.estado || j.status || 'activo'),
-          prioridad: String(j.prioridad || j.priority || 'media'),
+          prioridad,
+          urgente: j.urgente as boolean | string | undefined,
           fecha_publicacion: String(j.fecha_publicacion || j.publishedAt || ''),
           fecha_cierre: String(j.fecha_cierre || j.closingDate || ''),
           postulantes_count: Number(j.postulantes_count || j.applicationsCount || 0),
+          vacantes: j.vacantes ? Number(j.vacantes) : undefined,
+          imagen: String(j.imagen || ''),
         }
       })
       setJobs(mappedJobs)
@@ -147,7 +172,11 @@ export default function JobsManagementPage() {
         prioridad: job.prioridad,
         fecha_cierre: job.fecha_cierre ? job.fecha_cierre.split('T')[0] : '',
         estado: job.estado,
+        imagen: job.imagen || '',
+        pdf_url: (job as unknown as Record<string, unknown>).pdf_url as string || '',
       })
+      setPdfPreviewUrl((job as unknown as Record<string, unknown>).pdf_url as string || '')
+      setPdfFile(null)
     } else {
       setEditingJob(null)
       const nextMonth = new Date()
@@ -165,15 +194,55 @@ export default function JobsManagementPage() {
         prioridad: 'media',
         fecha_cierre: nextMonth.toISOString().split('T')[0],
         estado: 'activo',
+        imagen: '',
+        pdf_url: '',
       })
+      setPdfPreviewUrl('')
+      setPdfFile(null)
     }
     setShowModal(true)
+  }
+
+  const handlePdfUpload = async (file: File): Promise<string> => {
+    setIsUploadingPdf(true)
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      reader.onload = async () => {
+        const base64 = (reader.result as string).split(',')[1]
+        const result = await api.uploadJobPdf({
+          fileContent: base64,
+          fileName: file.name,
+          mimeType: file.type || 'application/pdf',
+          ciudad: formData.ubicacion,
+          convocatoriaId: editingJob?.id,
+        })
+        setIsUploadingPdf(false)
+        if (result.success && result.data) {
+          resolve((result.data as Record<string, unknown>).viewUrl as string)
+        } else {
+          setMessage({ type: 'error', text: 'Error al subir el PDF: ' + (result.error || '') })
+          resolve('')
+        }
+      }
+      reader.onerror = () => {
+        setIsUploadingPdf(false)
+        resolve('')
+      }
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
     setMessage({ type: '', text: '' })
+
+    // Upload PDF if a new file was selected
+    let pdfUrl = formData.pdf_url || pdfPreviewUrl
+    if (pdfFile) {
+      pdfUrl = await handlePdfUpload(pdfFile)
+      if (!pdfUrl) { setIsSaving(false); return }
+    }
 
     const jobData = {
       titulo: formData.titulo,
@@ -188,13 +257,15 @@ export default function JobsManagementPage() {
       prioridad: formData.prioridad,
       fecha_cierre: formData.fecha_cierre,
       estado: formData.estado,
+      imagen: formData.imagen || '',
+      pdf_url: pdfUrl,
     }
 
     let result
     if (editingJob) {
-      result = await api.updateJobAdmin(editingJob.id, jobData)
+      result = await api.updateJobAdmin(editingJob.id, jobData as unknown as Record<string, unknown>)
     } else {
-      result = await api.createJobAdmin(jobData)
+      result = await api.createJobAdmin(jobData as unknown as Record<string, unknown>)
     }
 
     setIsSaving(false)
@@ -370,13 +441,25 @@ export default function JobsManagementPage() {
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
+                      {(job.urgente === true || job.urgente === 'TRUE' || job.urgente === 'true') && (
+                        <span className="px-2 py-1 rounded-full text-xs font-bold bg-red-600/30 text-red-400 border border-red-500/40">
+                          <FaExclamationTriangle className="inline mr-1" />
+                          URGENTE
+                        </span>
+                      )}
                       {job.prioridad === 'alta' && getPriorityBadge(job.prioridad)}
                       <span className="px-2 py-1 rounded-full text-xs font-medium bg-accent-electric/20 text-accent-electric">
                         {job.categoria}
                       </span>
                       {getStatusBadge(job.estado)}
                     </div>
-                    <h3 className="text-lg font-semibold text-white mb-2">{job.titulo}</h3>
+                    <div className="flex items-center gap-2 mb-2">
+                      {job.imagen && (
+                        <img src={job.imagen} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                      )}
+                      <h3 className="text-lg font-semibold text-white">{job.titulo}</h3>
+                    </div>
                     <p className="text-primary-300 text-sm mb-3 line-clamp-2">{job.descripcion}</p>
                     <div className="flex flex-wrap gap-4 text-sm text-primary-400">
                       <span className="flex items-center gap-1">
@@ -392,9 +475,22 @@ export default function JobsManagementPage() {
                         <FaUsers className="text-blue-400" />
                         {job.postulantes_count || 0} postulantes
                       </span>
+                      {job.vacantes != null && (
+                        <span className="flex items-center gap-1 text-purple-400">
+                          <FaBriefcase />
+                          {job.vacantes} {job.vacantes === 1 ? 'vacante' : 'vacantes'}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Link
+                      to="/admin/postulaciones"
+                      className="px-3 py-1.5 text-xs text-accent-electric border border-accent-electric/40 rounded-lg hover:bg-accent-electric/10 transition-colors whitespace-nowrap"
+                      title="Ver postulaciones de esta convocatoria"
+                    >
+                      Ver postulaciones
+                    </Link>
                     <button
                       onClick={() => handleToggleStatus(job)}
                       className={`p-2 rounded-lg transition-colors ${
@@ -514,7 +610,7 @@ export default function JobsManagementPage() {
                       onChange={(e) => setFormData({ ...formData, requisitos: e.target.value })}
                       required
                       rows={3}
-                      placeholder="Separar cada requisito con | (Ej: Titulo universitario|3 anos de experiencia|Licencia de conducir)"
+                      placeholder="Separa cada item con | (barra vertical)"
                       className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric resize-none"
                     />
                     <p className="text-xs text-primary-500 mt-1">Usa | para separar requisitos</p>
@@ -529,7 +625,7 @@ export default function JobsManagementPage() {
                       value={formData.beneficios}
                       onChange={(e) => setFormData({ ...formData, beneficios: e.target.value })}
                       rows={2}
-                      placeholder="Ej: Sueldo competitivo|Seguro de salud|Capacitaciones"
+                      placeholder="Separa cada item con | (barra vertical)"
                       className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric resize-none"
                     />
                     <p className="text-xs text-primary-500 mt-1">Usa | para separar beneficios</p>
@@ -644,6 +740,79 @@ export default function JobsManagementPage() {
                         <option value="inactivo">Inactiva (oculta)</option>
                       </select>
                     </div>
+                  </div>
+
+                  {/* Imagen */}
+                  <div>
+                    <label className="block text-sm text-primary-300 mb-2">
+                      URL de Imagen (opcional)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://... (imagen representativa del puesto)"
+                      className="w-full px-4 py-3 bg-primary-800/50 border border-primary-700 rounded-lg text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric transition-colors text-sm"
+                      value={formData.imagen || ''}
+                      onChange={(e) => setFormData({...formData, imagen: e.target.value})}
+                    />
+                    {formData.imagen && (
+                      <div className="mt-2 w-full h-32 rounded-lg overflow-hidden border border-primary-700">
+                        <img src={formData.imagen} alt="Preview" className="w-full h-full object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                      </div>
+                    )}
+                    <p className="text-xs text-primary-500 mt-1">
+                      Usa una URL de imagen directa o sube a Google Drive y comparte el enlace
+                    </p>
+                  </div>
+
+                  {/* Ficha PDF */}
+                  <div>
+                    <label className="block text-sm font-medium text-primary-300 mb-2">
+                      Ficha de Postulacion (PDF)
+                    </label>
+                    {pdfPreviewUrl && (
+                      <div className="mb-2 flex items-center gap-2 p-2 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                        <FaFilePdf className="text-blue-400 flex-shrink-0" />
+                        <a
+                          href={pdfPreviewUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 text-xs truncate flex-1"
+                        >
+                          PDF actual (clic para ver)
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => { setPdfPreviewUrl(''); setFormData(prev => ({ ...prev, pdf_url: '' })) }}
+                          className="text-red-400 hover:text-red-300 text-xs"
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    )}
+                    <label className="flex items-center justify-center gap-2 w-full px-4 py-3 border-2 border-dashed border-primary-600 rounded-lg cursor-pointer hover:border-accent-electric/50 transition-colors">
+                      <FaUpload className="text-primary-400" />
+                      <span className="text-primary-400 text-sm">
+                        {pdfFile ? pdfFile.name : 'Subir PDF (bases, ficha tecnica, etc.)'}
+                      </span>
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) { setPdfFile(file); setPdfPreviewUrl('') }
+                        }}
+                      />
+                    </label>
+                    {isUploadingPdf && (
+                      <p className="text-xs text-accent-electric mt-1 flex items-center gap-1">
+                        <FaSpinner className="animate-spin" /> Subiendo PDF a Drive...
+                      </p>
+                    )}
+                    <p className="text-xs text-primary-500 mt-1">
+                      Se guardara en Google Drive › Fichas_Postulacion › {formData.ubicacion || 'Ciudad'}
+                    </p>
                   </div>
 
                   {/* Buttons */}

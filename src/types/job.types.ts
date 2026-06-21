@@ -53,6 +53,8 @@ export interface JobPosting {
   publishedAt: Date
   closingDate?: Date
   applicationsCount: number
+  imagen?: string
+  pdf_url?: string
 }
 
 // JobApplication - matches backend 16-column structure:

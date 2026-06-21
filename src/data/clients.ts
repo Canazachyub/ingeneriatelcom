@@ -16,13 +16,13 @@ export const clients: Client[] = [
   {
     id: '3',
     name: 'ELECTRO SUR ESTE S.A.A',
-    logo: 'https://media.licdn.com/dms/image/C560BAQFt6nwFdOcNuA/company-logo_200_200/0/1566622834797?e=2147483647&v=beta&t=l3XAykiPTelGua0UwQz3xy9_x6m_dTH8RiaK-1ofnWs',
+    logo: 'https://www.else.com.pe/ArchivosTransparencia/mof/logo.gif',
     description: 'Proyectos estrategicos para la mejora del servicio electrico.',
   },
   {
     id: '4',
     name: 'ELECTRO UCAYALI S.A.',
-    logo: 'https://yt3.googleusercontent.com/ytc/APkrFKbp78TA5HOAcprcbLI0WUlJXEi3UAVPGtjdVIGs=s900-c-k-c0x00ffffff-no-rj',
+    logo: 'https://www.contrataciones.pe/organizaciones/licitaciones-emp-concesionaria-electricidad-ucayali-sa.png',
     description: 'Infraestructura electrica moderna en la region amazonica.',
   },
   {

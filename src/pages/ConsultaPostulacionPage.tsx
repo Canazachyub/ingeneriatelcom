@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import Breadcrumb from '../components/common/Breadcrumb'
 import {
   FaSearch,
   FaArrowLeft,
@@ -27,6 +28,7 @@ import {
 } from '../types/postulacion.types'
 
 export default function ConsultaPostulacionPage() {
+  const navigate = useNavigate()
   const [dni, setDni] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<ConsultaPostulacionResponse | null>(null)
@@ -83,16 +85,17 @@ export default function ConsultaPostulacionPage() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <Link
-            to="/"
+          <button
+            onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')}
             className="inline-flex items-center gap-2 text-primary-400 hover:text-accent-electric transition-colors mb-4"
           >
             <FaArrowLeft />
             Volver al Inicio
-          </Link>
+          </button>
           <h1 className="text-3xl md:text-4xl font-display font-bold text-white mb-2">
             Consulta tu Postulación
           </h1>
+          <Breadcrumb items={[{ label: 'Inicio', href: '/' }, { label: 'Consultar Postulación' }]} />
           <p className="text-primary-300">
             Ingresa tu DNI para ver el estado de tu postulación
           </p>

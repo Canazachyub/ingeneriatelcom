@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   FaSearch,
   FaMapMarkerAlt,
@@ -17,7 +17,8 @@ import {
   FaTimes,
   FaCalendarAlt,
   FaArrowRight,
-  FaIdCard
+  FaIdCard,
+  FaEnvelope
 } from 'react-icons/fa'
 import { api } from '../api/appScriptApi'
 
@@ -37,13 +38,14 @@ interface Job {
   fecha_publicacion: string
   fecha_cierre: string
   postulantes_count: number
+  imagen?: string
 }
 
 const categories: Record<string, { label: string; color: string; bgColor: string; icon: JSX.Element }> = {
-  'Ingenieria': { label: 'Ingenieria', color: 'text-blue-400', bgColor: 'bg-blue-500/20', icon: <FaBuilding /> },
-  'Tecnico': { label: 'Tecnico', color: 'text-orange-400', bgColor: 'bg-orange-500/20', icon: <FaBriefcase /> },
-  'TI': { label: 'Tecnologia / TI', color: 'text-purple-400', bgColor: 'bg-purple-500/20', icon: <FaRocket /> },
-  'Administracion': { label: 'Administracion', color: 'text-green-400', bgColor: 'bg-green-500/20', icon: <FaClipboardCheck /> },
+  'Ingenieria': { label: 'Ingeniería', color: 'text-blue-400', bgColor: 'bg-blue-500/20', icon: <FaBuilding /> },
+  'Tecnico': { label: 'Técnico', color: 'text-orange-400', bgColor: 'bg-orange-500/20', icon: <FaBriefcase /> },
+  'TI': { label: 'Tecnología / TI', color: 'text-purple-400', bgColor: 'bg-purple-500/20', icon: <FaRocket /> },
+  'Administracion': { label: 'Administración', color: 'text-green-400', bgColor: 'bg-green-500/20', icon: <FaClipboardCheck /> },
   'Finanzas': { label: 'Finanzas', color: 'text-emerald-400', bgColor: 'bg-emerald-500/20', icon: <FaMoneyBillWave /> },
   'RRHH': { label: 'Recursos Humanos', color: 'text-pink-400', bgColor: 'bg-pink-500/20', icon: <FaUsers /> },
   'Operaciones': { label: 'Operaciones', color: 'text-amber-400', bgColor: 'bg-amber-500/20', icon: <FaBriefcase /> },
@@ -53,10 +55,11 @@ const categories: Record<string, { label: string; color: string; bgColor: string
 const modalities: Record<string, { label: string; color: string }> = {
   'Presencial': { label: 'Presencial', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
   'Remoto': { label: 'Remoto', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-  'Hibrido': { label: 'Hibrido', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+  'Hibrido': { label: 'Híbrido', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
 }
 
 export default function JobsPage() {
+  const navigate = useNavigate()
   const [jobs, setJobs] = useState<Job[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -67,6 +70,20 @@ export default function JobsPage() {
 
   useEffect(() => {
     loadJobs()
+  }, [])
+
+  useEffect(() => {
+    document.title = 'Bolsa de Trabajo | Ingeniería Telcom EIRL — Empleos en Ingeniería, Software y TIC'
+    const metaDesc = document.querySelector('meta[name="description"]')
+    if (metaDesc) {
+      metaDesc.setAttribute('content', 'Bolsa de trabajo de Ingeniería Telcom EIRL. Encuentra empleos en ingeniería eléctrica, software, TIC, minería y construcción en Tacna, Puno y todo el Perú. Postula en línea.')
+    }
+    return () => {
+      document.title = 'Ingeniería Telcom EIRL | Software, Ingeniería Eléctrica, Minería y Soluciones TIC para el Perú'
+      if (metaDesc) {
+        metaDesc.setAttribute('content', 'Ingeniería Telcom EIRL — Software, Ingeniería Eléctrica, Minería y Soluciones TIC para el Perú. Bolsa de trabajo activa: empleos en ingeniería, tecnología y construcción.')
+      }
+    }
   }, [])
 
   const loadJobs = async () => {
@@ -95,6 +112,7 @@ export default function JobsPage() {
             fecha_publicacion: String(j.fecha_publicacion || j.publishedAt || ''),
             fecha_cierre: String(j.fecha_cierre || j.closingDate || ''),
             postulantes_count: Number(j.postulantes_count || j.applicationsCount || 0),
+            imagen: String(j.imagen || j.image || ''),
           }
         })
         const activeJobs = mappedJobs.filter(job => job.estado === 'activo')
@@ -167,13 +185,19 @@ export default function JobsPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <Link
-              to="/"
-              className="inline-flex items-center gap-2 text-white/80 hover:text-white transition-colors mb-6 group"
+            <button
+              onClick={() => window.history.length <= 1 ? navigate('/') : navigate(-1)}
+              className="inline-flex items-center gap-2 text-white/80 hover:text-white transition-colors mb-2 group"
             >
               <FaArrowLeft className="group-hover:-translate-x-1 transition-transform" />
-              Volver al Inicio
-            </Link>
+              Volver
+            </button>
+
+            <nav className="flex items-center gap-2 text-sm text-primary-400 mb-6">
+              <Link to="/" className="hover:text-accent-electric transition-colors">Inicio</Link>
+              <span>/</span>
+              <span className="text-white">Bolsa de Trabajo</span>
+            </nav>
 
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div>
@@ -181,8 +205,8 @@ export default function JobsPage() {
                   Bolsa de Trabajo
                 </h1>
                 <p className="text-xl text-white/90 max-w-2xl">
-                  Encuentra tu proxima oportunidad laboral en Ingenieria Telcom.
-                  Unete a nuestro equipo de profesionales.
+                  Encuentra tu próxima oportunidad laboral en Ingeniería Telcom.
+                  Únete a nuestro equipo de profesionales.
                 </p>
               </div>
 
@@ -213,7 +237,7 @@ export default function JobsPage() {
               <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
               <input
                 type="text"
-                placeholder="Buscar puesto, ubicacion..."
+                placeholder="Buscar puesto, ubicación..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-11 pr-4 py-2.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
@@ -241,10 +265,11 @@ export default function JobsPage() {
 
               <Link
                 to="/mi-postulacion"
+                title="¿Ya postulaste? Consulta el estado de tu postulación aquí"
                 className="flex items-center gap-2 px-4 py-2.5 bg-accent-energy/20 border border-accent-energy/50 text-accent-energy rounded-xl hover:bg-accent-energy/30 transition-all"
               >
                 <FaIdCard />
-                <span className="hidden sm:inline">Consultar Postulacion</span>
+                <span className="hidden sm:inline">Consultar Postulación</span>
               </Link>
             </div>
           </div>
@@ -264,7 +289,7 @@ export default function JobsPage() {
                     onChange={(e) => setCategoryFilter(e.target.value)}
                     className="px-4 py-2.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white focus:outline-none focus:border-accent-electric transition-all cursor-pointer"
                   >
-                    <option value="">Todas las categorias</option>
+                    <option value="">Todas las categorías</option>
                     {Object.entries(categories).map(([key, { label }]) => (
                       <option key={key} value={key}>{label}</option>
                     ))}
@@ -371,6 +396,29 @@ export default function JobsPage() {
                           </div>
                         )}
 
+                        {/* Job Image */}
+                        {job.imagen && (
+                          <div className="w-full h-44 rounded-xl overflow-hidden mb-4 -mt-1 relative">
+                            <img
+                              src={job.imagen}
+                              alt={job.titulo}
+                              className="w-full h-full object-cover"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                            />
+                            <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-primary-900/80 to-transparent" />
+                          </div>
+                        )}
+                        {!job.imagen && (
+                          <div className={`w-full h-20 rounded-xl overflow-hidden mb-4 -mt-1 bg-gradient-to-r ${
+                            job.categoria === 'Ingenieria' ? 'from-blue-600/40 to-cyan-600/40' :
+                            job.categoria === 'TI' ? 'from-purple-600/40 to-pink-600/40' :
+                            job.categoria === 'Tecnico' ? 'from-orange-600/40 to-yellow-600/40' :
+                            'from-primary-700/60 to-primary-800/60'
+                          } flex items-center justify-center`}>
+                            <FaBriefcase className="text-3xl text-white/30" />
+                          </div>
+                        )}
+
                         {/* Category & Modality */}
                         <div className="flex flex-wrap gap-2 mb-4">
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg ${categoryInfo.bgColor} ${categoryInfo.color}`}>
@@ -400,7 +448,7 @@ export default function JobsPage() {
                           {daysRemaining !== null && daysRemaining > 0 && (
                             <div className={`flex items-center gap-2 text-sm ${daysRemaining <= 3 ? 'text-red-400' : 'text-primary-400'}`}>
                               <FaCalendarAlt className={daysRemaining <= 3 ? 'text-red-400' : 'text-primary-500'} />
-                              <span>{daysRemaining} {daysRemaining === 1 ? 'dia' : 'dias'} restantes</span>
+                              <span>{daysRemaining} {daysRemaining === 1 ? 'día' : 'días'} restantes</span>
                             </div>
                           )}
                         </div>
@@ -411,13 +459,9 @@ export default function JobsPage() {
                         </p>
 
                         {/* Footer */}
-                        <div className="flex items-center justify-between pt-4 border-t border-primary-700/50">
-                          <div className="flex items-center gap-2 text-sm text-primary-400">
-                            <FaUsers className="text-primary-500" />
-                            <span>{job.postulantes_count || 0} postulantes</span>
-                          </div>
+                        <div className="flex items-center justify-end pt-4 border-t border-primary-700/50">
                           <span className="flex items-center gap-1 text-accent-electric font-semibold text-sm group-hover:gap-2 transition-all">
-                            Ver mas <FaArrowRight className="text-xs" />
+                            Ver más <FaArrowRight className="text-xs" />
                           </span>
                         </div>
                       </div>
@@ -434,24 +478,46 @@ export default function JobsPage() {
                 animate={{ opacity: 1, y: 0 }}
                 className="text-center py-16"
               >
-                <div className="w-24 h-24 bg-primary-800/50 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <FaBriefcase className="text-5xl text-primary-600" />
-                </div>
-                <h3 className="text-xl font-display font-semibold text-white mb-2">
-                  {hasActiveFilters ? 'No se encontraron resultados' : 'No hay vacantes disponibles'}
-                </h3>
-                <p className="text-primary-400 mb-6 max-w-md mx-auto">
-                  {hasActiveFilters
-                    ? 'Intenta con otros filtros o terminos de busqueda.'
-                    : 'Vuelve pronto para ver nuevas oportunidades laborales.'}
-                </p>
-                {hasActiveFilters && (
-                  <button
-                    onClick={clearFilters}
-                    className="px-6 py-3 bg-accent-electric text-white rounded-xl hover:bg-accent-electric/90 transition-colors font-medium"
-                  >
-                    Limpiar filtros
-                  </button>
+                {jobs.length === 0 ? (
+                  /* Truly empty — no jobs at all */
+                  <>
+                    <div className="w-20 h-20 bg-primary-800/50 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <FaBriefcase className="text-4xl text-accent-electric" />
+                    </div>
+                    <h3 className="text-xl font-display font-semibold text-white mb-3">
+                      Próximamente nuevas oportunidades
+                    </h3>
+                    <p className="text-primary-300 mb-6 max-w-md mx-auto">
+                      En este momento no tenemos vacantes publicadas, pero constantemente buscamos talento.
+                      Déjanos tu información y te contactaremos cuando surja una oportunidad.
+                    </p>
+                    <a
+                      href="mailto:energysupervision13@gmail.com?subject=Postulación Espontánea&body=Hola, me interesa formar parte del equipo de Ingeniería Telcom EIRL. Adjunto mi CV."
+                      className="inline-flex items-center gap-2 bg-accent-electric text-primary-950 px-6 py-3 rounded-lg font-semibold hover:bg-accent-electric/90 transition-colors"
+                    >
+                      <FaEnvelope className="text-lg" />
+                      Enviar CV Espontáneo
+                    </a>
+                  </>
+                ) : (
+                  /* Jobs exist but filter returns 0 */
+                  <>
+                    <div className="w-20 h-20 bg-primary-800/50 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <FaSearch className="text-4xl text-primary-500" />
+                    </div>
+                    <h3 className="text-xl font-display font-semibold text-white mb-3">
+                      No encontramos resultados para tu búsqueda
+                    </h3>
+                    <p className="text-primary-400 mb-6 max-w-md mx-auto">
+                      Intenta con otros filtros o términos de búsqueda.
+                    </p>
+                    <button
+                      onClick={clearFilters}
+                      className="px-6 py-3 bg-accent-electric text-white rounded-xl hover:bg-accent-electric/90 transition-colors font-medium"
+                    >
+                      Limpiar filtros
+                    </button>
+                  </>
                 )}
               </motion.div>
             )}

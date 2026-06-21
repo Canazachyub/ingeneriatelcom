@@ -42,12 +42,12 @@ export default function Footer() {
             <ul className="space-y-2">
               {footerNavigation.quickLinks.map((item) => (
                 <li key={item.href}>
-                  <a
-                    href={item.href}
+                  <Link
+                    to={item.href.startsWith('#') ? '/' + item.href : item.href}
                     className="text-primary-300 hover:text-accent-electric transition-colors duration-200 text-sm"
                   >
                     {item.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
               <li>

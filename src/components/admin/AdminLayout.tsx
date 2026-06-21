@@ -15,6 +15,8 @@ import {
   FaServer,
   FaClock,
   FaChartLine,
+  FaGraduationCap,
+  FaClipboardList,
 } from 'react-icons/fa'
 import { useAuth } from '../../context/AuthContext'
 
@@ -48,6 +50,13 @@ const navigationSections = [
     title: 'Comunicacion',
     items: [
       { name: 'Mensajes', href: '/admin/mensajes', icon: FaEnvelope },
+    ]
+  },
+  {
+    title: 'Capacitaciones',
+    items: [
+      { name: 'Gestión de Cursos', href: '/admin/capacitaciones', icon: FaGraduationCap },
+      { name: 'Evaluaciones', href: '/admin/evaluaciones', icon: FaClipboardList },
     ]
   },
   {

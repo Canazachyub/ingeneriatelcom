@@ -27,3 +27,11 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Claude Code memory
+.claude/
+
+# Data files / Office temp
+*.xlsx
+*.csv
+~$*

@@ -76,7 +76,7 @@ export default function ContactSection() {
     },
     {
       icon: <FaPhone className="text-xl text-accent-electric" />,
-      label: 'Telefono',
+      label: 'Teléfono',
       value: config.companyInfo.phone,
       href: `tel:${config.companyInfo.phone.replace(/\s/g, '')}`,
     },
@@ -88,7 +88,7 @@ export default function ContactSection() {
     },
     {
       icon: <FaMapMarkerAlt className="text-xl text-accent-electric" />,
-      label: 'Direccion',
+      label: 'Dirección',
       value: config.companyInfo.address,
     },
   ]
@@ -112,7 +112,7 @@ export default function ContactSection() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="section-title"
           >
-            Contactanos
+            Contáctanos
           </motion.h2>
           <motion.p
             initial={{ opacity: 0, y: 20 }}
@@ -133,7 +133,7 @@ export default function ContactSection() {
           >
             <Card hover={false} className="h-full">
               <h3 className="text-xl font-display font-semibold text-white mb-6">
-                Informacion de Contacto
+                Información de Contacto
               </h3>
               <div className="space-y-6">
                 {contactInfo.map((item, index) => (
@@ -160,7 +160,7 @@ export default function ContactSection() {
 
               {/* Social Links */}
               <div className="mt-8 pt-6 border-t border-primary-700/50">
-                <p className="text-sm text-primary-400 mb-4">Siguenos en redes sociales</p>
+                <p className="text-sm text-primary-400 mb-4">Síguenos en redes sociales</p>
                 <div className="flex gap-3">
                   <a
                     href={config.companyInfo.facebook}
@@ -171,6 +171,17 @@ export default function ContactSection() {
                     <FaFacebook className="text-white" />
                   </a>
                 </div>
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-primary-700/50">
+                <p className="text-sm text-primary-400 mb-3">Nuestra Ubicación</p>
+                <iframe
+                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d120757.35!2d-70.0635!3d-18.0146!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x915006cc5ec6d3e7%3A0x42948a7d2e65d0da!2sTacna%2C%20Per%C3%BA!5e0!3m2!1ses!2spe!4v1"
+                  className="w-full h-44 rounded-lg border border-primary-700/50"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  title="Ubicación Ingeniería Telcom EIRL - Tacna, Perú"
+                />
               </div>
             </Card>
           </motion.div>
@@ -183,7 +194,7 @@ export default function ContactSection() {
           >
             <Card hover={false}>
               <h3 className="text-xl font-display font-semibold text-white mb-6">
-                Envianos un Mensaje
+                Envíanos un Mensaje
               </h3>
 
               {isSuccess && (
@@ -218,7 +229,7 @@ export default function ContactSection() {
 
                 <div>
                   <label className="block text-sm text-primary-300 mb-2">
-                    Correo electronico *
+                    Correo electrónico *
                   </label>
                   <input
                     {...register('email')}

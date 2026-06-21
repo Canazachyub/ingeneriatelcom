@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FaEye, FaCheckCircle, FaExclamationCircle, FaClock,
-  FaTimes, FaImage, FaExternalLinkAlt, FaFilter
+  FaTimes, FaImage, FaExternalLinkAlt, FaFilter, FaArrowLeft, FaListUl
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
-import { Evaluacion, Capacitacion } from '../../types/capacitacion.types'
+import { Evaluacion, Capacitacion, Pregunta } from '../../types/capacitacion.types'
 
 const ESTADO_LABELS: Record<string, string> = {
   pendiente_revision: 'Pendiente',
@@ -24,6 +25,7 @@ const ESTADO_COLORS: Record<string, string> = {
 }
 
 export default function EvaluacionesPage() {
+  const navigate = useNavigate()
   const [evaluaciones, setEvaluaciones] = useState<Evaluacion[]>([])
   const [capacitaciones, setCapacitaciones] = useState<Capacitacion[]>([])
   const [loading, setLoading] = useState(true)
@@ -35,6 +37,8 @@ export default function EvaluacionesPage() {
   const [retroalimentacion, setRetroalimentacion] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [toast, setToast] = useState('')
+  const [preguntasDetalle, setPreguntasDetalle] = useState<Pregunta[]>([])
+  const [loadingPreguntas, setLoadingPreguntas] = useState(false)
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -54,11 +58,35 @@ export default function EvaluacionesPage() {
 
   useEffect(() => { loadData() }, [filtroEstado, filtroCap])
 
-  const abrirRevision = (ev: Evaluacion) => {
+  const abrirRevision = async (ev: Evaluacion) => {
     setSeleccionada(ev)
-    setNotaFinal(ev.nota_final !== undefined ? String(ev.nota_final) : String(ev.puntaje_auto || ''))
+    const yaRevisada = ev.estado === 'aprobado' || ev.estado === 'observado'
+    setNotaFinal(yaRevisada && ev.nota_final !== undefined
+      ? String(ev.nota_final)
+      : String(ev.puntaje_auto ?? '')
+    )
     setRetroalimentacion(ev.retroalimentacion || '')
+    setPreguntasDetalle([])
+    setLoadingPreguntas(true)
+    const res = await api.getPreguntas(ev.capacitacion_id)
+    if (res.success && res.data) setPreguntasDetalle(res.data)
+    setLoadingPreguntas(false)
   }
+
+  const parseJson = <T,>(s?: string, fallback: T = [] as unknown as T): T => {
+    if (!s) return fallback
+    try { return JSON.parse(s) } catch { return fallback }
+  }
+
+  const getTextoOpcion = (pq: Pregunta, key: string): string => {
+    const map: Record<string, string | undefined> = {
+      A: pq.opcion_a, B: pq.opcion_b, C: pq.opcion_c, D: pq.opcion_d,
+    }
+    return map[key?.toUpperCase()] || key || '—'
+  }
+
+  const normalizar = (s?: string) =>
+    (s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 
   const handleRevisar = async (estado: 'aprobado' | 'observado') => {
     if (!seleccionada) return
@@ -114,8 +142,15 @@ export default function EvaluacionesPage() {
       </AnimatePresence>
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Revisión de Evaluaciones</h1>
-        <p className="text-gray-500 text-sm mt-1">Revisa, califica y envía resultados por correo</p>
+        <button
+          onClick={() => navigate('/admin')}
+          className="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-3 transition-colors group"
+        >
+          <FaArrowLeft className="group-hover:-translate-x-1 transition-transform" />
+          Volver al Dashboard
+        </button>
+        <h1 className="text-2xl font-bold text-white">Revisión de Evaluaciones</h1>
+        <p className="text-gray-400 text-sm mt-1">Revisa, califica y envía resultados por correo</p>
       </div>
 
       {/* Filtros */}
@@ -124,7 +159,7 @@ export default function EvaluacionesPage() {
         <select
           value={filtroEstado}
           onChange={e => setFiltroEstado(e.target.value)}
-          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
         >
           <option value="">Todos los estados</option>
           <option value="pendiente_revision">Pendientes</option>
@@ -135,7 +170,7 @@ export default function EvaluacionesPage() {
         <select
           value={filtroCap}
           onChange={e => setFiltroCap(e.target.value)}
-          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
         >
           <option value="">Todas las capacitaciones</option>
           {capacitaciones.map(c => (
@@ -316,6 +351,98 @@ export default function EvaluacionesPage() {
                   </div>
                 )}
 
+                {/* Desglose de respuestas */}
+                {(() => {
+                  const idsAsignados: string[] = parseJson(seleccionada.preguntas_asignadas, [])
+                  const respuestas: Record<string, string> = parseJson(seleccionada.respuestas, {})
+                  const pregs = idsAsignados
+                    .map(id => preguntasDetalle.find(p => String(p.id) === String(id)))
+                    .filter(Boolean) as Pregunta[]
+
+                  if (loadingPreguntas) return (
+                    <div className="text-center py-4 text-gray-400 text-sm">Cargando preguntas...</div>
+                  )
+                  if (!idsAsignados.length || !pregs.length) return null
+
+                  const correctas = pregs.filter(p => {
+                    const dada = respuestas[p.id]
+                    return p.tipo === 'multiple'
+                      ? normalizar(dada) === normalizar(p.respuesta_correcta)
+                      : normalizar(dada) === normalizar(p.respuesta_correcta)
+                  }).length
+
+                  return (
+                    <div>
+                      <h4 className="font-semibold text-gray-700 text-sm mb-3 flex items-center justify-between">
+                        <span className="flex items-center gap-2"><FaListUl className="text-blue-400" />Detalle de respuestas</span>
+                        <span className="text-xs font-normal text-gray-500">
+                          {correctas}/{pregs.length} correctas
+                        </span>
+                      </h4>
+                      <div className="space-y-2">
+                        {pregs.map((pq, i) => {
+                          const dada = respuestas[pq.id]
+                          const correcta = pq.tipo === 'multiple'
+                            ? normalizar(dada) === normalizar(pq.respuesta_correcta)
+                            : normalizar(dada) === normalizar(pq.respuesta_correcta)
+                          const sinResponder = !dada
+
+                          return (
+                            <div
+                              key={pq.id}
+                              className={`rounded-xl border px-3 py-2.5 text-xs ${
+                                sinResponder
+                                  ? 'border-gray-200 bg-gray-50'
+                                  : correcta
+                                  ? 'border-green-200 bg-green-50'
+                                  : 'border-red-200 bg-red-50'
+                              }`}
+                            >
+                              <div className="flex items-start gap-2">
+                                <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 ${
+                                  sinResponder ? 'bg-gray-300 text-white'
+                                  : correcta ? 'bg-green-500 text-white'
+                                  : 'bg-red-500 text-white'
+                                }`}>
+                                  {sinResponder ? '?' : correcta ? '✓' : '✗'}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-gray-700 leading-snug mb-1">
+                                    {i + 1}. {pq.pregunta}
+                                  </p>
+                                  {pq.tipo === 'multiple' ? (
+                                    <div className="space-y-0.5">
+                                      <p className={correcta ? 'text-green-700' : 'text-red-600'}>
+                                        Respondió: <strong>{dada ? `${dada} — ${getTextoOpcion(pq, dada)}` : 'Sin respuesta'}</strong>
+                                      </p>
+                                      {!correcta && pq.respuesta_correcta && (
+                                        <p className="text-green-700">
+                                          Correcta: <strong>{pq.respuesta_correcta} — {getTextoOpcion(pq, pq.respuesta_correcta)}</strong>
+                                        </p>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-0.5">
+                                      <p className={correcta ? 'text-green-700' : 'text-red-600'}>
+                                        Respondió: <strong>"{dada || 'Sin respuesta'}"</strong>
+                                      </p>
+                                      {!correcta && pq.respuesta_correcta && (
+                                        <p className="text-green-700">
+                                          Referencia: <strong>"{pq.respuesta_correcta}"</strong>
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
+
                 {/* Revisión */}
                 {(seleccionada.estado === 'pendiente_revision' || seleccionada.estado === 'en_curso') && (
                   <div className="space-y-4">
@@ -329,7 +456,7 @@ export default function EvaluacionesPage() {
                         step={0.5}
                         value={notaFinal}
                         onChange={e => setNotaFinal(e.target.value)}
-                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg font-bold text-center"
+                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg font-bold text-center text-gray-900 bg-white"
                       />
                     </div>
                     <div>
@@ -339,7 +466,7 @@ export default function EvaluacionesPage() {
                         onChange={e => setRetroalimentacion(e.target.value)}
                         rows={3}
                         placeholder="Escribe comentarios para el trabajador..."
-                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
+                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none text-gray-900 bg-white"
                       />
                     </div>
 

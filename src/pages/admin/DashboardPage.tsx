@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useToast } from '../../context/ToastContext'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -18,6 +19,8 @@ import {
   FaChartLine,
   FaEnvelope,
   FaPlus,
+  FaGraduationCap,
+  FaClipboardList,
 } from 'react-icons/fa'
 import { api, DashboardStats } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
@@ -45,6 +48,14 @@ export default function DashboardPage() {
   const [attendance, setAttendance] = useState<AttendanceToday | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const toast = useToast()
+
+  useEffect(() => {
+    if (!sessionStorage.getItem('admin_welcomed')) {
+      toast.info('Panel de administración cargado correctamente')
+      sessionStorage.setItem('admin_welcomed', 'true')
+    }
+  }, [])
 
   useEffect(() => {
     loadData()
@@ -336,6 +347,24 @@ export default function DashboardPage() {
                     </div>
                     <span className="text-primary-200 text-sm font-medium">Kiosko</span>
                   </a>
+                  <Link
+                    to="/admin/capacitaciones"
+                    className="group p-4 bg-primary-800/50 rounded-xl hover:bg-indigo-500/20 hover:border-indigo-500/30 border border-transparent transition-all text-center"
+                  >
+                    <div className="w-12 h-12 bg-indigo-500/20 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                      <FaGraduationCap className="text-xl text-indigo-400" />
+                    </div>
+                    <span className="text-primary-200 text-sm font-medium">Cursos</span>
+                  </Link>
+                  <Link
+                    to="/admin/evaluaciones"
+                    className="group p-4 bg-primary-800/50 rounded-xl hover:bg-violet-500/20 hover:border-violet-500/30 border border-transparent transition-all text-center"
+                  >
+                    <div className="w-12 h-12 bg-violet-500/20 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                      <FaClipboardList className="text-xl text-violet-400" />
+                    </div>
+                    <span className="text-primary-200 text-sm font-medium">Evaluaciones</span>
+                  </Link>
                 </div>
               </motion.div>
             </div>
