@@ -8,6 +8,12 @@ import {
   GeoLocation,
   EstadoPostulacion
 } from '../types/postulacion.types'
+import {
+  Capacitacion,
+  Pregunta,
+  IniciarEvaluacionResponse,
+  Evaluacion,
+} from '../types/capacitacion.types'
 
 // Helper function to map backend status strings to frontend EstadoPostulacion type
 function mapBackendEstado(estado: string | undefined | null): EstadoPostulacion {
@@ -160,7 +166,7 @@ class AppScriptApi {
 
   private async request<T>(
     action: string,
-    _method: 'GET' | 'POST' = 'GET',
+    method: 'GET' | 'POST' = 'GET',
     data?: Record<string, unknown>
   ): Promise<ApiResponse<T>> {
     if (!this.baseUrl) {
@@ -174,17 +180,29 @@ class AppScriptApi {
     const token = this.getToken()
     const requestData = token ? { ...data, token } : data
 
-    // Encode data as URL parameter to avoid CORS preflight
-    // Google Apps Script handles GET requests better for CORS
-    if (requestData && Object.keys(requestData).length > 0) {
-      url.searchParams.set('payload', JSON.stringify(requestData))
-    }
-
     try {
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        redirect: 'follow',
-      })
+      let response: Response
+
+      if (method === 'POST' && requestData && Object.keys(requestData).length > 0) {
+        // POST with body: avoids URL length limits for large payloads (createJob, etc.)
+        // Content-Type: text/plain avoids CORS preflight — doPost in Apps Script handles it
+        response = await fetch(url.toString(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(requestData),
+          redirect: 'follow',
+        })
+      } else {
+        // GET with URL params for read-only / lightweight requests
+        if (requestData && Object.keys(requestData).length > 0) {
+          url.searchParams.set('payload', JSON.stringify(requestData))
+        }
+        response = await fetch(url.toString(), {
+          method: 'GET',
+          redirect: 'follow',
+        })
+      }
+
       return response.json()
     } catch (error) {
       console.error('API request failed:', error)
@@ -286,6 +304,16 @@ class AppScriptApi {
     return this.request<void>('deleteJob', 'POST', { id })
   }
 
+  async uploadJobPdf(params: {
+    fileContent: string
+    fileName: string
+    mimeType: string
+    ciudad: string
+    convocatoriaId?: string
+  }): Promise<ApiResponse<{ fileId: string; fileName: string; viewUrl: string; downloadUrl: string }>> {
+    return this.request('uploadJobPdf', 'POST', params as unknown as Record<string, unknown>)
+  }
+
   // Applications Management
   async getApplicationsAdmin(jobId?: string): Promise<ApiResponse<JobApplication[]>> {
     return this.request<JobApplication[]>('getApplicationsAdmin', 'POST', { jobId })
@@ -297,7 +325,16 @@ class AppScriptApi {
 
   // Jobs
   async getJobs(): Promise<ApiResponse<JobPosting[]>> {
-    return this.request<JobPosting[]>('getJobs')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await this.request<any[]>('getJobs')
+    if (!result.success || !result.data) return result as ApiResponse<JobPosting[]>
+    return {
+      ...result,
+      data: result.data.map((j: any) => ({
+        ...j,
+        imagen: String(j.imagen || j.image || ''),
+      })) as JobPosting[],
+    }
   }
 
   async getJobById(id: string): Promise<ApiResponse<JobPosting>> {
@@ -306,8 +343,16 @@ class AppScriptApi {
     url.searchParams.set('id', id)
 
     try {
-      const response = await fetch(url.toString())
-      return response.json()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result: ApiResponse<any> = await (await fetch(url.toString())).json()
+      if (!result.success || !result.data) return result as ApiResponse<JobPosting>
+      return {
+        ...result,
+        data: {
+          ...result.data,
+          imagen: String(result.data.imagen || result.data.image || ''),
+        } as JobPosting,
+      }
     } catch (error) {
       console.error('API request failed:', error)
       return { success: false, error: 'Network error' }
@@ -607,6 +652,104 @@ class AppScriptApi {
     hoursWorked?: number
   }>>> {
     return this.request('getAttendances', 'GET', filters)
+  }
+
+  // ============================================
+  // SISTEMA DE CAPACITACIONES Y EVALUACIONES
+  // ============================================
+
+  async getCapacitaciones(): Promise<ApiResponse<Capacitacion[]>> {
+    return this.request<Capacitacion[]>('getCapacitaciones', 'GET')
+  }
+
+  async getCapacitacionById(id: string): Promise<ApiResponse<Capacitacion>> {
+    return this.request<Capacitacion>('getCapacitacionById', 'GET', { id })
+  }
+
+  async iniciarEvaluacion(data: {
+    capacitacion_id: string
+    dni: string
+    nombres: string
+    email: string
+  }): Promise<ApiResponse<IniciarEvaluacionResponse>> {
+    return this.request<IniciarEvaluacionResponse>('iniciarEvaluacion', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async submitEvaluacion(data: {
+    evaluacion_id: string
+    respuestas: Record<string, string>
+    salidas_pestana: number
+    fotos_url: string[]
+    duracion_seg: number
+  }): Promise<ApiResponse<{ puntaje_auto: number; tiene_llenado: boolean }>> {
+    return this.request('submitEvaluacion', 'POST', {
+      ...data,
+      respuestas: JSON.stringify(data.respuestas),
+      fotos_url: JSON.stringify(data.fotos_url),
+    })
+  }
+
+  async guardarFotoWebcam(data: {
+    evaluacion_id: string
+    capacitacion_id: string
+    dni: string
+    fileContent: string
+    fileName: string
+    mimeType: string
+  }): Promise<ApiResponse<{ foto_url: string; foto_id: string }>> {
+    return this.request('guardarFotoWebcam', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async registrarEventoLog(data: {
+    evaluacion_id: string
+    tipo_evento: string
+    detalle?: string
+  }): Promise<ApiResponse<null>> {
+    return this.request('registrarEventoLog', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  // Admin — capacitaciones CRUD
+  async crearCapacitacion(data: Omit<Capacitacion, 'id' | 'fecha_creacion'>): Promise<ApiResponse<{ id: string }>> {
+    return this.request('crearCapacitacion', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async actualizarCapacitacion(data: Partial<Capacitacion> & { id: string }): Promise<ApiResponse<null>> {
+    return this.request('actualizarCapacitacion', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async eliminarCapacitacion(id: string): Promise<ApiResponse<null>> {
+    return this.request('eliminarCapacitacion', 'POST', { id })
+  }
+
+  // Admin — preguntas CRUD
+  async crearPregunta(data: Omit<Pregunta, 'id'>): Promise<ApiResponse<{ id: string }>> {
+    return this.request('crearPregunta', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async actualizarPregunta(data: Partial<Pregunta> & { id: string }): Promise<ApiResponse<null>> {
+    return this.request('actualizarPregunta', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async eliminarPregunta(id: string): Promise<ApiResponse<null>> {
+    return this.request('eliminarPregunta', 'POST', { id })
+  }
+
+  // Admin — evaluaciones
+  async getEvaluaciones(filtros?: {
+    estado?: string
+    capacitacion_id?: string
+  }): Promise<ApiResponse<Evaluacion[]>> {
+    return this.request<Evaluacion[]>('getEvaluaciones', 'POST', filtros)
+  }
+
+  async revisarEvaluacion(data: {
+    id: string
+    nota_final: number
+    retroalimentacion: string
+    estado: 'aprobado' | 'observado'
+    revisado_por?: string
+  }): Promise<ApiResponse<null>> {
+    return this.request('revisarEvaluacion', 'POST', data as unknown as Record<string, unknown>)
   }
 }
 

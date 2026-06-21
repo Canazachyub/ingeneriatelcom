@@ -9,7 +9,7 @@
 const SHEET_ID = '15ajUr5KqGgs99bsCcp9LnxRaD9mbIWjZArLetk7v4hA';
 const DRIVE_FOLDER_ID = '1B2CPcrNxUJtJcu7x8rXs_7_m9m2p9zAV';
 const NOTIFICATION_EMAIL = 'energysupervision13@gmail.com';
-const ADMIN_PASSWORD = 'telcom2017'; // Cambiar en produccion
+const ADMIN_PASSWORD = 'telcom2017!Seguro'; // IMPORTANTE: cambiar antes de produccion
 
 // ============================================
 // ENDPOINTS PRINCIPALES
@@ -38,7 +38,14 @@ function doGet(e) {
       'historialPostulaciones',
       'verificarEmpleado',
       'marcarAsistencia',
-      'obtenerAsistenciasHoy'
+      'obtenerAsistenciasHoy',
+      // CAPACITACIONES Y EVALUACIONES (publicas)
+      'getCapacitaciones',
+      'getCapacitacionById',
+      'iniciarEvaluacion',
+      'submitEvaluacion',
+      'guardarFotoWebcam',
+      'registrarEventoLog'
     ];
 
     if (!publicActions.includes(action)) {
@@ -71,6 +78,8 @@ function doGet(e) {
         return jsonResponse(updateJobStatus(data));
       case 'deleteJob':
         return jsonResponse(deleteJob(data));
+      case 'uploadJobPdf':
+        return jsonResponse(uploadJobPdf(data));
 
       // === EMPLEADOS ===
       case 'getEmployees':
@@ -180,6 +189,40 @@ function doGet(e) {
       case 'getAttendances':
         return jsonResponse(getAttendances(data.fecha || e.parameter.fecha, data.employeeId || e.parameter.employeeId));
 
+      // ========== CAPACITACIONES (PUBLICO) ==========
+      case 'getCapacitaciones':
+        return jsonResponse(getCapacitaciones());
+      case 'getCapacitacionById':
+        return jsonResponse(getCapacitacionById(data.id || e.parameter.id));
+
+      // ========== EVALUACIONES (PUBLICO) ==========
+      case 'iniciarEvaluacion':
+        return jsonResponse(iniciarEvaluacion(data));
+      case 'submitEvaluacion':
+        return jsonResponse(submitEvaluacion(data));
+      case 'guardarFotoWebcam':
+        return jsonResponse(guardarFotoWebcam(data));
+      case 'registrarEventoLog':
+        return jsonResponse(registrarEventoLog(data));
+
+      // ========== CAPACITACIONES ADMIN (requieren token) ==========
+      case 'crearCapacitacion':
+        return jsonResponse(crearCapacitacion(data));
+      case 'actualizarCapacitacion':
+        return jsonResponse(actualizarCapacitacion(data));
+      case 'eliminarCapacitacion':
+        return jsonResponse(eliminarCapacitacion(data));
+      case 'crearPregunta':
+        return jsonResponse(crearPregunta(data));
+      case 'actualizarPregunta':
+        return jsonResponse(actualizarPregunta(data));
+      case 'eliminarPregunta':
+        return jsonResponse(eliminarPregunta(data));
+      case 'getEvaluaciones':
+        return jsonResponse(getEvaluaciones(data));
+      case 'revisarEvaluacion':
+        return jsonResponse(revisarEvaluacion(data));
+
       default:
         return jsonResponse({ success: false, error: 'Accion no valida: ' + action });
     }
@@ -282,7 +325,11 @@ function getAllJobs() {
 
   const jobs = data.slice(1)
     .filter(row => row[0] !== '')
-    .map(row => rowToObject(headers, row));
+    .map(row => {
+      const job = rowToObject(headers, row);
+      if (job.imagen === undefined) job.imagen = '';
+      return job;
+    });
 
   return { success: true, data: jobs };
 }
@@ -452,6 +499,57 @@ function createUser(data) {
     data: { id: id, tempPassword: tempPassword },
     message: 'Usuario creado. Credenciales enviadas por email.'
   };
+}
+
+// Get or create a subfolder by name inside a parent folder
+function getOrCreateFolder(parentFolder, folderName) {
+  const folders = parentFolder.getFoldersByName(folderName);
+  if (folders.hasNext()) return folders.next();
+  return parentFolder.createFolder(folderName);
+}
+
+// Upload a PDF for a job posting, organized by city
+function uploadJobPdf(data) {
+  // data: { fileContent (base64), fileName, mimeType, ciudad, convocatoriaId }
+  try {
+    if (!data.fileContent || !data.fileName) {
+      return { success: false, error: 'Archivo requerido' };
+    }
+
+    const mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+    const fichasFolder = getOrCreateFolder(mainFolder, 'Fichas_Postulacion');
+    const cityName = (data.ciudad || 'General').replace(/[\\/:*?"<>|]/g, '_');
+    const cityFolder = getOrCreateFolder(fichasFolder, cityName);
+
+    // If replacing an old file for this job, delete it
+    if (data.convocatoriaId) {
+      const oldFiles = cityFolder.getFilesByName(data.fileName);
+      while (oldFiles.hasNext()) {
+        oldFiles.next().setTrashed(true);
+      }
+    }
+
+    const decodedBytes = Utilities.base64Decode(data.fileContent);
+    const blob = Utilities.newBlob(
+      decodedBytes,
+      data.mimeType || 'application/pdf',
+      data.fileName
+    );
+    const file = cityFolder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    return {
+      success: true,
+      data: {
+        fileId: file.getId(),
+        fileName: file.getName(),
+        viewUrl: 'https://drive.google.com/file/d/' + file.getId() + '/view',
+        downloadUrl: 'https://drive.google.com/uc?export=download&id=' + file.getId()
+      }
+    };
+  } catch (e) {
+    return { success: false, error: 'Error subiendo PDF: ' + e.message };
+  }
 }
 
 function generateTempPassword() {
@@ -1007,7 +1105,21 @@ function getActiveJobs() {
       const estado = estadoCol >= 0 ? row[estadoCol] : row[10];
       return estado === 'activo';
     })
-    .map(row => rowToObject(headers, row));
+    .map(row => {
+      const job = rowToObject(headers, row);
+      // Normalizar campos para compatibilidad con frontend
+      if (!job.prioridad) {
+        job.prioridad = (job.urgente === true || job.urgente === 'TRUE' || job.urgente === 'VERDADERO') ? 'alta' : 'media';
+      }
+      if (!job.fecha_publicacion) {
+        job.fecha_publicacion = job.fecha_inicio || job.createdAt || '';
+      }
+      if (job.postulantes_count === undefined || job.postulantes_count === '') {
+        job.postulantes_count = 0;
+      }
+      if (job.imagen === undefined) job.imagen = '';
+      return job;
+    });
 
   return { success: true, data: jobs };
 }
@@ -1022,37 +1134,60 @@ function getJobById(id) {
   if (!job) {
     return { success: false, error: 'Convocatoria no encontrada' };
   }
-  
-  return { success: true, data: rowToObject(headers, job) };
+
+  const jobObj = rowToObject(headers, job);
+  // Normalizar campos para compatibilidad con frontend
+  if (!jobObj.prioridad) {
+    jobObj.prioridad = (jobObj.urgente === true || jobObj.urgente === 'TRUE') ? 'alta' : 'media';
+  }
+  if (!jobObj.fecha_publicacion) {
+    jobObj.fecha_publicacion = jobObj.fecha_inicio || jobObj.createdAt || '';
+  }
+  if (jobObj.postulantes_count === undefined || jobObj.postulantes_count === '') {
+    jobObj.postulantes_count = 0;
+  }
+  if (jobObj.imagen === undefined) jobObj.imagen = '';
+  return { success: true, data: jobObj };
 }
 
 function createJob(data) {
   const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
+  const headers = sheet.getDataRange().getValues()[0];
   const id = generateSequentialId('convocatorias', 'JOB');
-
-  // Estructura: id, titulo, categoria, descripcion, requisitos, beneficios,
-  //             ubicacion, modalidad, salario_min, salario_max, vacantes,
-  //             fecha_inicio, fecha_cierre, estado, urgente, createdAt, updatedAt
   const now = new Date();
-  const row = [
-    id,
-    data.titulo,
-    data.categoria,
-    data.descripcion,
-    data.requisitos,
-    data.beneficios,
-    data.ubicacion,
-    data.modalidad,
-    data.salario_min || '',
-    data.salario_max || '',
-    data.vacantes || 1,
-    data.fecha_inicio || now,
-    data.fecha_cierre || '',
-    'activo',
-    data.urgente || false,
-    now,
-    now
-  ];
+
+  // Mapa de valores — soporta tanto la estructura vieja (urgente, vacantes, fecha_inicio)
+  // como la nueva (prioridad, postulantes_count, fecha_publicacion)
+  const fieldMap = {
+    'id': id,
+    'titulo': data.titulo,
+    'categoria': data.categoria,
+    'descripcion': data.descripcion,
+    'requisitos': data.requisitos,
+    'beneficios': data.beneficios,
+    'ubicacion': data.ubicacion,
+    'modalidad': data.modalidad,
+    'salario_min': data.salario_min || '',
+    'salario_max': data.salario_max || '',
+    'vacantes': data.vacantes || 1,
+    'estado': data.estado || 'activo',
+    'urgente': data.urgente !== undefined ? data.urgente : (data.prioridad === 'alta'),
+    'prioridad': data.prioridad || (data.urgente ? 'alta' : 'media'),
+    'fecha_inicio': data.fecha_inicio || data.fecha_publicacion || now,
+    'fecha_publicacion': data.fecha_publicacion || data.fecha_inicio || now,
+    'fecha_cierre': data.fecha_cierre || '',
+    'postulantes_count': 0,
+    'imagen': data.imagen || '',
+    'pdf_url': data.pdf_url || '',
+    'createdAt': now,
+    'updatedAt': now,
+  };
+
+  // Construir fila en el orden real de los headers del sheet
+  const row = headers.map(header => {
+    if (header === '') return '';
+    return fieldMap.hasOwnProperty(header) ? fieldMap[header] : '';
+  });
 
   sheet.appendRow(row);
 
@@ -1087,6 +1222,8 @@ function updateJob(data) {
       if (data.fecha_cierre !== undefined) sheet.getRange(i + 1, getColNum('fecha_cierre')).setValue(data.fecha_cierre);
       if (data.estado !== undefined) sheet.getRange(i + 1, getColNum('estado')).setValue(data.estado);
       if (data.urgente !== undefined) sheet.getRange(i + 1, getColNum('urgente')).setValue(data.urgente);
+      if (data.imagen !== undefined) sheet.getRange(i + 1, getColNum('imagen')).setValue(data.imagen);
+      if (data.pdf_url !== undefined) sheet.getRange(i + 1, getColNum('pdf_url')).setValue(data.pdf_url);
 
       // Actualizar updatedAt
       const updatedAtCol = getColNum('updatedAt');
@@ -1172,28 +1309,40 @@ function submitApplication(data) {
   }
 
   const now = new Date();
+  const headers = sheet.getDataRange().getValues()[0];
 
-  // Estructura: id, jobId, jobTitle, fullName, dni, email, phone, linkedIn, coverLetter,
-  //             expectedSalary, availability, cvUrl, status, notes, createdAt, updatedAt
-  const row = [
-    id,
-    data.jobId,
-    jobTitle,
-    data.fullName,
-    data.dni,
-    data.email,
-    data.phone,
-    data.linkedIn || '',
-    data.coverLetter || '',
-    data.expectedSalary || '',
-    data.availability,
-    cvUrl,
-    'pendiente',
-    '',  // notes
-    now, // createdAt
-    now  // updatedAt
-  ];
-
+  const fieldMap = {
+    'id': id,
+    'jobId': data.jobId,
+    'convocatoria_id': data.jobId,
+    'jobTitle': jobTitle,
+    'titulo_convocatoria': jobTitle,
+    'fullName': data.fullName || data.nombre_completo || '',
+    'nombre_completo': data.fullName || data.nombre_completo || '',
+    'dni': data.dni,
+    'email': data.email,
+    'phone': data.phone || data.telefono || '',
+    'telefono': data.phone || data.telefono || '',
+    'linkedIn': data.linkedIn || '',
+    'linkedin': data.linkedIn || '',
+    'coverLetter': data.coverLetter || '',
+    'carta_presentacion': data.coverLetter || '',
+    'expectedSalary': data.expectedSalary || '',
+    'pretension_salarial': data.expectedSalary || '',
+    'availability': data.availability || '',
+    'disponibilidad': data.availability || '',
+    'cvUrl': cvUrl,
+    'cv_url': cvUrl,
+    'cvFileName': data.cvFileName || '',
+    'cv_nombre': data.cvFileName || '',
+    'status': 'pendiente',
+    'estado': 'pendiente',
+    'notes': '',
+    'createdAt': now,
+    'fecha_postulacion': now,
+    'updatedAt': now,
+  };
+  const row = headers.map(h => fieldMap.hasOwnProperty(h) ? fieldMap[h] : '');
   sheet.appendRow(row);
   incrementApplicationCount(data.jobId);
 
@@ -1337,16 +1486,14 @@ function incrementApplicationCount(jobId) {
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
 
-  // Buscar columna de aplicaciones dinamicamente
-  const appCountCol = headers.indexOf('aplicaciones');
-  if (appCountCol < 0) {
-    // Si no existe la columna, no hacer nada
-    return;
-  }
+  // Buscar columna de conteo (soporta ambos nombres)
+  let appCountCol = headers.indexOf('postulantes_count');
+  if (appCountCol < 0) appCountCol = headers.indexOf('aplicaciones');
+  if (appCountCol < 0) return; // columna no encontrada
 
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] === jobId) {
-      const count = data[i][appCountCol] || 0;
+      const count = parseInt(data[i][appCountCol]) || 0;
       sheet.getRange(i + 1, appCountCol + 1).setValue(count + 1);
       break;
     }
@@ -1894,7 +2041,7 @@ function setupAllSheets() {
     convocatorias.appendRow([
       'id', 'titulo', 'categoria', 'descripcion', 'requisitos', 'beneficios',
       'ubicacion', 'modalidad', 'salario_min', 'salario_max', 'estado',
-      'prioridad', 'fecha_publicacion', 'fecha_cierre', 'postulantes_count'
+      'prioridad', 'fecha_publicacion', 'fecha_cierre', 'postulantes_count', 'imagen', 'pdf_url'
     ]);
   }
   
@@ -1917,7 +2064,51 @@ function setupAllSheets() {
       'id', 'nombre', 'email', 'telefono', 'asunto', 'mensaje', 'fecha', 'estado'
     ]);
   }
-  
+
+  // ===== HOJAS DE CAPACITACIONES Y EVALUACIONES =====
+  let capacitaciones = ss.getSheetByName('capacitaciones');
+  if (!capacitaciones) {
+    capacitaciones = ss.insertSheet('capacitaciones');
+    capacitaciones.appendRow([
+      'id', 'titulo', 'descripcion', 'material_url', 'categoria',
+      'num_preguntas', 'nota_minima', 'tiempo_limite_min', 'foto_intervalo_seg',
+      'estado', 'fecha_creacion'
+    ]);
+  }
+
+  let banco_preguntas = ss.getSheetByName('banco_preguntas');
+  if (!banco_preguntas) {
+    banco_preguntas = ss.insertSheet('banco_preguntas');
+    banco_preguntas.appendRow([
+      'id', 'capacitacion_id', 'pregunta', 'tipo',
+      'opcion_a', 'opcion_b', 'opcion_c', 'opcion_d',
+      'respuesta_correcta', 'justificacion', 'dificultad', 'puntaje', 'estado'
+    ]);
+  }
+
+  let evaluaciones = ss.getSheetByName('evaluaciones');
+  if (!evaluaciones) {
+    evaluaciones = ss.insertSheet('evaluaciones');
+    evaluaciones.appendRow([
+      'id', 'capacitacion_id', 'dni', 'nombres', 'email',
+      'preguntas_asignadas', 'respuestas', 'puntaje_auto', 'salidas_pestana',
+      'fotos_url', 'hora_inicio', 'hora_fin', 'duracion_seg', 'estado',
+      'nota_final', 'retroalimentacion', 'revisado_por', 'fecha_revision'
+    ]);
+  }
+
+  let eval_fotos = ss.getSheetByName('eval_fotos');
+  if (!eval_fotos) {
+    eval_fotos = ss.insertSheet('eval_fotos');
+    eval_fotos.appendRow(['id', 'evaluacion_id', 'foto_url', 'timestamp', 'orden']);
+  }
+
+  let eval_logs = ss.getSheetByName('eval_logs');
+  if (!eval_logs) {
+    eval_logs = ss.insertSheet('eval_logs');
+    eval_logs.appendRow(['id', 'evaluacion_id', 'tipo_evento', 'detalle', 'timestamp']);
+  }
+
   return 'Todas las hojas creadas exitosamente. Ejecuta createDefaultAdmin() para crear el usuario administrador.';
 }
 
@@ -2738,7 +2929,7 @@ function cargarConvocatoriasPrueba() {
   const encabezados = [
     'id', 'titulo', 'categoria', 'descripcion', 'requisitos', 'beneficios',
     'ubicacion', 'modalidad', 'salario_min', 'salario_max', 'vacantes',
-    'fecha_inicio', 'fecha_cierre', 'estado', 'urgente', 'createdAt', 'updatedAt'
+    'fecha_inicio', 'fecha_cierre', 'estado', 'urgente', 'pdf_url', 'createdAt', 'updatedAt'
   ];
 
   const sheet = recrearHoja(ss, 'convocatorias', encabezados);
@@ -2998,3 +3189,532 @@ function limpiarDatosPrueba() {
 
   return 'Datos de prueba eliminados (se mantuvieron las cabeceras)';
 }
+
+
+// ============================================================
+// MODULO CAPACITACIONES Y EVALUACIONES
+// ============================================================
+
+// --- Helpers ---
+
+function seededRandom(seed) {
+  var s = (seed >>> 0) || 1;
+  return function() {
+    s = (Math.imul(1664525, s) + 1013904223) | 0;
+    return (s >>> 0) / 4294967295;
+  };
+}
+
+function normalizar(str) {
+  return (str || '').toString().trim().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function matchFlexible(respuesta, correcta) {
+  return normalizar(respuesta) === normalizar(correcta);
+}
+
+function shuffleArray(arr, rng) {
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(rng() * (i + 1));
+    var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+  }
+  return a;
+}
+
+// --- CRUD Capacitaciones ---
+
+function getCapacitaciones() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('capacitaciones');
+  if (!sheet) return { success: false, error: 'Hoja capacitaciones no encontrada' };
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var rows = data.slice(1)
+    .filter(function(r) { return r[0] !== ''; })
+    .map(function(r) { return rowToObject(headers, r); })
+    .filter(function(c) { return c.estado === 'activo'; });
+  return { success: true, data: rows };
+}
+
+function getCapacitacionById(id) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('capacitaciones');
+  if (!sheet) return { success: false, error: 'Hoja capacitaciones no encontrada' };
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(id)) {
+      return { success: true, data: rowToObject(headers, data[i]) };
+    }
+  }
+  return { success: false, error: 'Capacitacion no encontrada' };
+}
+
+function crearCapacitacion(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('capacitaciones');
+  if (!sheet) return { success: false, error: 'Hoja capacitaciones no encontrada' };
+  var id = 'CAP' + Utilities.getUuid().substring(0, 8).toUpperCase();
+  sheet.appendRow([
+    id,
+    data.titulo || '',
+    data.descripcion || '',
+    data.material_url || '',
+    data.categoria || '',
+    data.num_preguntas || 15,
+    data.nota_minima || 14,
+    data.tiempo_limite_min || 30,
+    data.foto_intervalo_seg || 20,
+    data.estado || 'borrador',
+    new Date().toISOString()
+  ]);
+  return { success: true, data: { id: id }, message: 'Capacitacion creada' };
+}
+
+function actualizarCapacitacion(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('capacitaciones');
+  if (!sheet) return { success: false, error: 'Hoja no encontrada' };
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(data.id)) {
+      var fieldMap = {
+        titulo: data.titulo, descripcion: data.descripcion,
+        material_url: data.material_url, categoria: data.categoria,
+        num_preguntas: data.num_preguntas, nota_minima: data.nota_minima,
+        tiempo_limite_min: data.tiempo_limite_min, foto_intervalo_seg: data.foto_intervalo_seg,
+        estado: data.estado
+      };
+      headers.forEach(function(h, col) {
+        if (fieldMap.hasOwnProperty(h) && fieldMap[h] !== undefined) {
+          sheet.getRange(i + 1, col + 1).setValue(fieldMap[h]);
+        }
+      });
+      return { success: true, message: 'Capacitacion actualizada' };
+    }
+  }
+  return { success: false, error: 'Capacitacion no encontrada' };
+}
+
+function eliminarCapacitacion(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('capacitaciones');
+  if (!sheet) return { success: false, error: 'Hoja no encontrada' };
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(data.id)) {
+      sheet.deleteRow(i + 1);
+      return { success: true, message: 'Capacitacion eliminada' };
+    }
+  }
+  return { success: false, error: 'Capacitacion no encontrada' };
+}
+
+// --- CRUD Banco de Preguntas ---
+
+function crearPregunta(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('banco_preguntas');
+  if (!sheet) return { success: false, error: 'Hoja banco_preguntas no encontrada' };
+  var id = 'PQ' + Utilities.getUuid().substring(0, 8).toUpperCase();
+  sheet.appendRow([
+    id,
+    data.capacitacion_id || '',
+    data.pregunta || '',
+    data.tipo || 'multiple',
+    data.opcion_a || '',
+    data.opcion_b || '',
+    data.opcion_c || '',
+    data.opcion_d || '',
+    data.respuesta_correcta || '',
+    data.justificacion || '',
+    data.dificultad || 'media',
+    data.puntaje || 1,
+    data.estado || 'activa'
+  ]);
+  return { success: true, data: { id: id }, message: 'Pregunta creada' };
+}
+
+function actualizarPregunta(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('banco_preguntas');
+  if (!sheet) return { success: false, error: 'Hoja no encontrada' };
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(data.id)) {
+      var fieldMap = {
+        pregunta: data.pregunta, tipo: data.tipo,
+        opcion_a: data.opcion_a, opcion_b: data.opcion_b,
+        opcion_c: data.opcion_c, opcion_d: data.opcion_d,
+        respuesta_correcta: data.respuesta_correcta,
+        justificacion: data.justificacion, dificultad: data.dificultad,
+        puntaje: data.puntaje, estado: data.estado
+      };
+      headers.forEach(function(h, col) {
+        if (fieldMap.hasOwnProperty(h) && fieldMap[h] !== undefined) {
+          sheet.getRange(i + 1, col + 1).setValue(fieldMap[h]);
+        }
+      });
+      return { success: true, message: 'Pregunta actualizada' };
+    }
+  }
+  return { success: false, error: 'Pregunta no encontrada' };
+}
+
+function eliminarPregunta(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('banco_preguntas');
+  if (!sheet) return { success: false, error: 'Hoja no encontrada' };
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(data.id)) {
+      sheet.deleteRow(i + 1);
+      return { success: true, message: 'Pregunta eliminada' };
+    }
+  }
+  return { success: false, error: 'Pregunta no encontrada' };
+}
+
+// --- Evaluaciones ---
+
+function iniciarEvaluacion(data) {
+  var capacitacion_id = data.capacitacion_id;
+  var dni = String(data.dni || '').trim();
+  var nombres = data.nombres || '';
+  var email = data.email || '';
+
+  if (!capacitacion_id || !dni || !nombres || !email) {
+    return { success: false, error: 'Faltan campos obligatorios: capacitacion_id, dni, nombres, email' };
+  }
+
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+
+  var capResult = getCapacitacionById(capacitacion_id);
+  if (!capResult.success) return { success: false, error: 'Capacitacion no encontrada' };
+  var cap = capResult.data;
+  if (cap.estado !== 'activo') return { success: false, error: 'Esta capacitacion no esta disponible' };
+
+  // Verificar intento unico
+  var evalSheet = ss.getSheetByName('evaluaciones');
+  if (!evalSheet) return { success: false, error: 'Hoja evaluaciones no encontrada' };
+  var evalData = evalSheet.getDataRange().getValues();
+  var evalHeaders = evalData[0];
+  var capIdCol = evalHeaders.indexOf('capacitacion_id');
+  var dniCol2 = evalHeaders.indexOf('dni');
+  var estadoCol = evalHeaders.indexOf('estado');
+  for (var i = 1; i < evalData.length; i++) {
+    if (String(evalData[i][capIdCol]) === String(capacitacion_id) &&
+        String(evalData[i][dniCol2]) === dni &&
+        evalData[i][estadoCol] !== 'abandonado') {
+      return { success: false, error: 'Ya existe un intento registrado para esta capacitacion con este DNI' };
+    }
+  }
+
+  // Cargar preguntas activas
+  var bancoSheet = ss.getSheetByName('banco_preguntas');
+  if (!bancoSheet) return { success: false, error: 'Banco de preguntas no encontrado' };
+  var bancoData = bancoSheet.getDataRange().getValues();
+  var bancoHeaders = bancoData[0];
+  var bCapCol = bancoHeaders.indexOf('capacitacion_id');
+  var bEstCol = bancoHeaders.indexOf('estado');
+  var todasPreguntas = [];
+  for (var j = 1; j < bancoData.length; j++) {
+    if (String(bancoData[j][bCapCol]) === String(capacitacion_id) &&
+        bancoData[j][bEstCol] === 'activa') {
+      todasPreguntas.push(rowToObject(bancoHeaders, bancoData[j]));
+    }
+  }
+  if (todasPreguntas.length === 0) {
+    return { success: false, error: 'No hay preguntas activas para esta capacitacion' };
+  }
+
+  var seed = parseInt(dni.replace(/\D/g, ''), 10) || 12345678;
+  var rng = seededRandom(seed);
+  var numPreguntass = parseInt(cap.num_preguntas, 10) || 15;
+
+  var faciles = todasPreguntas.filter(function(p) { return p.dificultad === 'facil'; });
+  var medias  = todasPreguntas.filter(function(p) { return p.dificultad === 'media'; });
+  var dificiles = todasPreguntas.filter(function(p) { return p.dificultad === 'dificil'; });
+  var seleccionadas = [];
+
+  if (faciles.length > 0 || medias.length > 0 || dificiles.length > 0) {
+    var nFacil = Math.round(numPreguntass * 0.30);
+    var nDificil = Math.round(numPreguntass * 0.20);
+    var nMedia = numPreguntass - nFacil - nDificil;
+    seleccionadas = seleccionadas
+      .concat(shuffleArray(faciles, rng).slice(0, nFacil))
+      .concat(shuffleArray(medias, rng).slice(0, nMedia))
+      .concat(shuffleArray(dificiles, rng).slice(0, nDificil));
+    if (seleccionadas.length < numPreguntass) {
+      var todas = shuffleArray(todasPreguntas, rng);
+      var ids = seleccionadas.map(function(p) { return p.id; });
+      for (var k = 0; k < todas.length && seleccionadas.length < numPreguntass; k++) {
+        if (ids.indexOf(todas[k].id) < 0) seleccionadas.push(todas[k]);
+      }
+    }
+  } else {
+    seleccionadas = shuffleArray(todasPreguntas, rng).slice(0, numPreguntass);
+  }
+
+  var preguntasParaCliente = seleccionadas.map(function(p, idx) {
+    var rngP = seededRandom(seed + idx + 1);
+    var opciones = [];
+    if (p.opcion_a) opciones.push({ key: 'A', texto: p.opcion_a });
+    if (p.opcion_b) opciones.push({ key: 'B', texto: p.opcion_b });
+    if (p.opcion_c) opciones.push({ key: 'C', texto: p.opcion_c });
+    if (p.opcion_d) opciones.push({ key: 'D', texto: p.opcion_d });
+    return {
+      id: p.id,
+      pregunta: p.pregunta,
+      tipo: p.tipo,
+      opciones: shuffleArray(opciones, rngP),
+      puntaje: p.puntaje
+    };
+  });
+
+  var evalId = 'EVAL' + Utilities.getUuid().substring(0, 8).toUpperCase();
+  var horaInicio = new Date().toISOString();
+  var preguntasIds = JSON.stringify(seleccionadas.map(function(p) { return p.id; }));
+  evalSheet.appendRow([
+    evalId, capacitacion_id, dni, nombres, email,
+    preguntasIds, '', '', 0, '',
+    horaInicio, '', '', 'en_curso',
+    '', '', '', ''
+  ]);
+
+  return {
+    success: true,
+    data: {
+      evaluacion_id: evalId,
+      preguntas: preguntasParaCliente,
+      config: {
+        tiempo_limite_min: cap.tiempo_limite_min || 30,
+        foto_intervalo_seg: cap.foto_intervalo_seg || 20,
+        nota_minima: cap.nota_minima || 14,
+        titulo: cap.titulo
+      }
+    }
+  };
+}
+
+function submitEvaluacion(requestData) {
+  var evaluacion_id = requestData.evaluacion_id;
+  var respuestas = requestData.respuestas;
+  var salidas_pestana = requestData.salidas_pestana || 0;
+  var fotos_url = requestData.fotos_url || '';
+  var duracion_seg = requestData.duracion_seg || 0;
+
+  if (!evaluacion_id) return { success: false, error: 'evaluacion_id requerido' };
+
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var evalSheet = ss.getSheetByName('evaluaciones');
+  if (!evalSheet) return { success: false, error: 'Hoja evaluaciones no encontrada' };
+
+  var evalData = evalSheet.getDataRange().getValues();
+  var evalHeaders = evalData[0];
+  var rowIdx = -1;
+  var evalRow = null;
+  var idCol = evalHeaders.indexOf('id');
+  for (var i = 1; i < evalData.length; i++) {
+    if (String(evalData[i][idCol]) === String(evaluacion_id)) {
+      rowIdx = i + 1;
+      evalRow = rowToObject(evalHeaders, evalData[i]);
+      break;
+    }
+  }
+  if (!evalRow) return { success: false, error: 'Evaluacion no encontrada' };
+  if (evalRow.estado !== 'en_curso') return { success: false, error: 'Esta evaluacion ya fue enviada' };
+
+  var preguntasIds = [];
+  try { preguntasIds = JSON.parse(evalRow.preguntas_asignadas || '[]'); } catch(e) {}
+
+  var bancoSheet = ss.getSheetByName('banco_preguntas');
+  var bancoPorId = {};
+  if (bancoSheet) {
+    var bancoData = bancoSheet.getDataRange().getValues();
+    var bHeaders = bancoData[0];
+    for (var j = 1; j < bancoData.length; j++) {
+      var pObj = rowToObject(bHeaders, bancoData[j]);
+      bancoPorId[pObj.id] = pObj;
+    }
+  }
+
+  var puntajeAuto = 0;
+  var respObj = typeof respuestas === 'string' ? JSON.parse(respuestas) : (respuestas || {});
+  var tieneLlenado = false;
+  preguntasIds.forEach(function(pid) {
+    var p = bancoPorId[pid];
+    if (!p) return;
+    var resp = respObj[pid];
+    if (p.tipo === 'multiple') {
+      if (normalizar(resp) === normalizar(p.respuesta_correcta)) {
+        puntajeAuto += Number(p.puntaje) || 1;
+      }
+    } else {
+      tieneLlenado = true;
+      if (matchFlexible(resp, p.respuesta_correcta)) {
+        puntajeAuto += Number(p.puntaje) || 1;
+      }
+    }
+  });
+
+  var updateMap = {
+    respuestas: JSON.stringify(respObj),
+    puntaje_auto: puntajeAuto,
+    salidas_pestana: salidas_pestana,
+    fotos_url: typeof fotos_url === 'string' ? fotos_url : JSON.stringify(fotos_url),
+    hora_fin: new Date().toISOString(),
+    duracion_seg: duracion_seg,
+    estado: 'pendiente_revision'
+  };
+  evalHeaders.forEach(function(h, col) {
+    if (updateMap.hasOwnProperty(h)) {
+      evalSheet.getRange(rowIdx, col + 1).setValue(updateMap[h]);
+    }
+  });
+
+  return {
+    success: true,
+    data: { puntaje_auto: puntajeAuto, tiene_llenado: tieneLlenado },
+    message: 'Evaluacion recibida. Tu resultado llegara a tu correo tras revision.'
+  };
+}
+
+function getEvaluaciones(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('evaluaciones');
+  if (!sheet) return { success: false, error: 'Hoja no encontrada' };
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var result = rows.slice(1)
+    .filter(function(r) { return r[0] !== ''; })
+    .map(function(r) { return rowToObject(headers, r); });
+  if (data && data.estado) result = result.filter(function(e) { return e.estado === data.estado; });
+  if (data && data.capacitacion_id) result = result.filter(function(e) { return String(e.capacitacion_id) === String(data.capacitacion_id); });
+  result.sort(function(a, b) { return String(b.hora_inicio) > String(a.hora_inicio) ? 1 : -1; });
+  return { success: true, data: result };
+}
+
+function revisarEvaluacion(data) {
+  var id = data.id;
+  var nota_final = data.nota_final;
+  var retroalimentacion = data.retroalimentacion || '';
+  var estado = data.estado;
+
+  if (!id || nota_final === undefined || !estado) return { success: false, error: 'Faltan campos: id, nota_final, estado' };
+  if (['aprobado', 'observado'].indexOf(estado) < 0) return { success: false, error: 'Estado debe ser aprobado u observado' };
+
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('evaluaciones');
+  if (!sheet) return { success: false, error: 'Hoja no encontrada' };
+
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var rowIdx = -1;
+  var evalRow = null;
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(id)) {
+      rowIdx = i + 1;
+      evalRow = rowToObject(headers, rows[i]);
+      break;
+    }
+  }
+  if (!evalRow) return { success: false, error: 'Evaluacion no encontrada' };
+
+  var updateMap = {
+    nota_final: nota_final,
+    retroalimentacion: retroalimentacion,
+    estado: estado,
+    revisado_por: data.revisado_por || 'Admin',
+    fecha_revision: new Date().toISOString()
+  };
+  headers.forEach(function(h, col) {
+    if (updateMap.hasOwnProperty(h)) sheet.getRange(rowIdx, col + 1).setValue(updateMap[h]);
+  });
+
+  var capResult = getCapacitacionById(evalRow.capacitacion_id);
+  var tituloCap = capResult.success ? capResult.data.titulo : 'Capacitacion';
+
+  try {
+    var emailDest = evalRow.email;
+    if (emailDest && emailDest.indexOf('@') > 0) {
+      var estadoLabel = estado === 'aprobado' ? 'APROBADO' : 'OBSERVADO';
+      var colorEstado = estado === 'aprobado' ? '#16a34a' : '#d97706';
+      MailApp.sendEmail({
+        to: emailDest,
+        subject: 'Resultado Evaluacion: ' + tituloCap + ' - ' + estadoLabel,
+        htmlBody: '<p>Estimado/a <strong>' + evalRow.nombres + '</strong>,</p>' +
+          '<p>Hemos revisado tu evaluacion de <strong>' + tituloCap + '</strong>.</p>' +
+          '<table style="border-collapse:collapse;margin:16px 0"><tr>' +
+          '<td style="padding:6px 16px;background:#f1f5f9"><strong>Resultado</strong></td>' +
+          '<td style="padding:6px 16px;color:' + colorEstado + '"><strong>' + estadoLabel + '</strong></td></tr>' +
+          '<tr><td style="padding:6px 16px;background:#f1f5f9"><strong>Nota</strong></td>' +
+          '<td style="padding:6px 16px"><strong>' + nota_final + '</strong></td></tr></table>' +
+          (retroalimentacion ? '<p><strong>Retroalimentacion del evaluador:</strong><br>' + retroalimentacion + '</p>' : '') +
+          '<p>Att,<br><strong>Ingenieria Telcom EIRL</strong></p>'
+      });
+    }
+  } catch(mailErr) {
+    return { success: true, message: 'Revision guardada. Error al enviar correo: ' + mailErr.message };
+  }
+
+  return { success: true, message: 'Revision guardada y correo enviado a ' + evalRow.email };
+}
+
+function guardarFotoWebcam(data) {
+  var fileContent = data.fileContent;
+  var fileName = data.fileName || ('foto_' + new Date().getTime() + '.jpg');
+  var mimeType = data.mimeType || 'image/jpeg';
+  var capacitacion_id = data.capacitacion_id || 'general';
+  var dni = data.dni || 'sin_dni';
+  var evaluacion_id = data.evaluacion_id || '';
+
+  if (!fileContent) return { success: false, error: 'fileContent requerido' };
+
+  try {
+    var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+    var proctoringFolder = getOrCreateFolder(mainFolder, 'Evaluaciones_Proctoring');
+    var capFolder = getOrCreateFolder(proctoringFolder, String(capacitacion_id));
+    var dniFolder = getOrCreateFolder(capFolder, String(dni));
+
+    var blob = Utilities.newBlob(Utilities.base64Decode(fileContent), mimeType, fileName);
+    var file = dniFolder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var fotoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
+
+    if (evaluacion_id) {
+      var ss = SpreadsheetApp.openById(SHEET_ID);
+      var fotosSheet = ss.getSheetByName('eval_fotos');
+      if (fotosSheet) {
+        fotosSheet.appendRow([
+          Utilities.getUuid(), evaluacion_id, fotoUrl, new Date().toISOString(), fotosSheet.getLastRow()
+        ]);
+      }
+    }
+    return { success: true, data: { foto_url: fotoUrl, foto_id: file.getId() } };
+  } catch(e) {
+    return { success: false, error: 'Error al guardar foto: ' + e.message };
+  }
+}
+
+function registrarEventoLog(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('eval_logs');
+  if (!sheet) return { success: false, error: 'Hoja eval_logs no encontrada' };
+  sheet.appendRow([
+    Utilities.getUuid(),
+    data.evaluacion_id || '',
+    data.tipo_evento || 'desconocido',
+    data.detalle || '',
+    new Date().toISOString()
+  ]);
+  return { success: true };
+}
+
+// ============================================================
+// FIN MODULO CAPACITACIONES Y EVALUACIONES
+// ============================================================
