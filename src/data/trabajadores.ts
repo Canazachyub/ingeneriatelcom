@@ -21,8 +21,10 @@ export const TRABAJADORES: TrabajadorFijo[] = [
 export const buscarTrabajador = (dni: string): TrabajadorFijo | undefined =>
   TRABAJADORES.find(t => t.dni === dni)
 
-// Los 4 eventos del día. Horario referencial L-V, pero el registro
-// está habilitado todos los días (no se bloquea por día de semana).
+// Los 4 eventos del día. Jornada L-V de 47h30min semanales (9.5h/día,
+// almuerzo 1:00-2:00 no computable). El registro está habilitado todos
+// los días (no se bloquea por día de semana). Estos valores son el
+// fallback: la fuente editable es la hoja 'config_planilla' del backend.
 export type EventoAsistencia = 'ingreso_manana' | 'salida_manana' | 'ingreso_tarde' | 'salida_tarde'
 
 export interface EventoConfig {

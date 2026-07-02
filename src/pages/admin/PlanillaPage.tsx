@@ -1,0 +1,718 @@
+import { useState, useEffect, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  FaSpinner, FaSync, FaDownload, FaTimes, FaChevronDown, FaChevronRight,
+  FaExclamationTriangle, FaCheckCircle, FaTimesCircle, FaClock, FaCog,
+  FaPrint, FaFileInvoiceDollar, FaPen,
+} from 'react-icons/fa'
+import AdminLayout from '../../components/admin/AdminLayout'
+import { api } from '../../api/appScriptApi'
+import { useAuth } from '../../context/AuthContext'
+import {
+  ConfigPlanilla, CONFIG_DEFAULT, Incidencia, SueldoTrabajador,
+  resumenMensual, calcularDisciplina, descuentoIncidencia, formatoSoles,
+  valorDia, valorMinuto,
+} from '../../utils/planilla'
+
+const TIPO_LABELS: Record<string, string> = {
+  tardanza: 'Tardanza',
+  salida_anticipada: 'Salida anticipada',
+  omision: 'Omisión de marcado',
+  falta: 'Falta',
+}
+
+const ESTADO_BADGE: Record<string, string> = {
+  pendiente: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
+  justificada: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
+  injustificada: 'bg-rose-500/15 text-rose-400 border border-rose-500/30',
+}
+
+const ESTADO_LABELS: Record<string, string> = {
+  pendiente: 'Pendiente de sustento',
+  justificada: 'Justificada',
+  injustificada: 'Injustificada',
+}
+
+const mesActualISO = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+const finDeMes = (mes: string) => {
+  const [y, m] = mes.split('-').map(Number)
+  const d = new Date(y, m, 0)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const inicioTrimestre = (mes: string) => {
+  const [y, m] = mes.split('-').map(Number)
+  const qm = Math.floor((m - 1) / 3) * 3 + 1
+  return `${y}-${String(qm).padStart(2, '0')}-01`
+}
+
+const hoyISO = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const nombreMes = (mes: string) => {
+  const [y, m] = mes.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString('es-PE', { month: 'long', year: 'numeric' })
+}
+
+export default function PlanillaPage() {
+  const { user } = useAuth()
+  const [mes, setMes] = useState(mesActualISO())
+  const [config, setConfig] = useState<ConfigPlanilla>(CONFIG_DEFAULT)
+  const [sueldos, setSueldos] = useState<SueldoTrabajador[]>([])
+  const [incidencias, setIncidencias] = useState<Incidencia[]>([])
+  const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [toast, setToast] = useState('')
+  const [showConfig, setShowConfig] = useState(false)
+  const [configDraft, setConfigDraft] = useState<Record<string, string>>({})
+  const [savingConfig, setSavingConfig] = useState(false)
+
+  // Modal revisión de incidencia
+  const [revisando, setRevisando] = useState<Incidencia | null>(null)
+  const [revEstado, setRevEstado] = useState<'justificada' | 'injustificada'>('justificada')
+  const [revNota, setRevNota] = useState('')
+  const [revSustento, setRevSustento] = useState('')
+  const [guardandoRev, setGuardandoRev] = useState(false)
+
+  // Edición inline de sueldo
+  const [editandoSueldo, setEditandoSueldo] = useState<string | null>(null)
+  const [sueldoDraft, setSueldoDraft] = useState('')
+
+  // Solo el Administrador de Planilla (rol admin o permiso 'planilla') ve montos
+  const autorizado = !!user && (
+    user.role === 'admin' ||
+    (user as unknown as { rol?: string }).rol === 'admin' ||
+    (user as unknown as { permisos?: string[] }).permisos?.some(p => p === 'all' || p === 'planilla')
+  )
+
+  const showToast = (msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(''), 4000)
+  }
+
+  const loadData = async () => {
+    setLoading(true)
+    const [cfgRes, suelRes, incRes] = await Promise.all([
+      api.getConfigPlanilla(),
+      api.getSueldos(),
+      api.getIncidencias({ desde: inicioTrimestre(mes), hasta: finDeMes(mes) }),
+    ])
+    if (cfgRes.success && cfgRes.data) {
+      setConfig({ ...CONFIG_DEFAULT, ...(cfgRes.data as unknown as Partial<ConfigPlanilla>) })
+    }
+    if (suelRes.success && suelRes.data) setSueldos(suelRes.data)
+    else if (suelRes.error) showToast(suelRes.error)
+    if (incRes.success && incRes.data) setIncidencias(incRes.data as unknown as Incidencia[])
+    setLoading(false)
+  }
+
+  useEffect(() => { loadData() }, [mes])
+
+  const handleSincronizar = async () => {
+    setSyncing(true)
+    const hasta = finDeMes(mes) < hoyISO() ? finDeMes(mes) : hoyISO()
+    const res = await api.sincronizarIncidencias(`${mes}-01`, hasta)
+    setSyncing(false)
+    if (res.success && res.data) {
+      showToast(`Sincronizado: ${res.data.creadas} incidencias nuevas, ${res.data.expiradas} expiradas a injustificada`)
+      loadData()
+    } else {
+      showToast('Error: ' + (res.error || 'no se pudo sincronizar'))
+    }
+  }
+
+  // ── Cálculos ─────────────────────────────────────────────
+  const esMesActual = mes === mesActualISO()
+
+  const filas = useMemo(() => {
+    return sueldos.map((t) => {
+      const incTrimestre = incidencias.filter((i) => String(i.dni) === t.dni)
+      const incMes = incTrimestre.filter((i) => String(i.fecha).slice(0, 7) === mes)
+      const resumen = resumenMensual(incMes, t.sueldo, config)
+      const disciplina = calcularDisciplina(incTrimestre)
+      return { trabajador: t, incMes, resumen, disciplina }
+    })
+  }, [sueldos, incidencias, mes, config])
+
+  const totalProyectado = filas.reduce((acc, f) => acc + f.resumen.descuentoProyectado, 0)
+
+  // ── Revisión ─────────────────────────────────────────────
+  const abrirRevision = (inc: Incidencia) => {
+    setRevisando(inc)
+    setRevEstado('justificada')
+    setRevNota(inc.nota || '')
+    setRevSustento(inc.sustento_url || '')
+  }
+
+  const guardarRevision = async () => {
+    if (!revisando) return
+    if (revEstado === 'justificada' && !revNota.trim() && !revSustento.trim()) {
+      showToast('Para justificar se requiere una nota o sustento adjunto')
+      return
+    }
+    setGuardandoRev(true)
+    const res = await api.revisarIncidencia({
+      id: revisando.id,
+      estado: revEstado,
+      nota: revNota,
+      sustento_url: revSustento,
+      revisado_por: user?.name || 'Admin',
+    })
+    setGuardandoRev(false)
+    if (res.success) {
+      showToast(`Incidencia marcada como ${ESTADO_LABELS[revEstado]}`)
+      setRevisando(null)
+      loadData()
+    } else {
+      showToast('Error: ' + res.error)
+    }
+  }
+
+  const guardarSueldo = async (dni: string) => {
+    const nuevo = parseFloat(sueldoDraft)
+    if (isNaN(nuevo) || nuevo <= 0) { showToast('Sueldo inválido'); return }
+    const res = await api.updateSueldo(dni, nuevo)
+    if (res.success) {
+      setSueldos((prev) => prev.map((s) => (s.dni === dni ? { ...s, sueldo: nuevo } : s)))
+      showToast('Sueldo actualizado')
+    } else {
+      showToast('Error: ' + res.error)
+    }
+    setEditandoSueldo(null)
+  }
+
+  const guardarConfig = async () => {
+    setSavingConfig(true)
+    const res = await api.updateConfigPlanilla(configDraft)
+    setSavingConfig(false)
+    if (res.success && res.data) {
+      setConfig({ ...CONFIG_DEFAULT, ...(res.data as unknown as Partial<ConfigPlanilla>) })
+      setShowConfig(false)
+      showToast('Configuración guardada')
+      loadData()
+    } else {
+      showToast('Error: ' + res.error)
+    }
+  }
+
+  // ── Exportar ─────────────────────────────────────────────
+  const exportarCSV = () => {
+    const filasCSV: string[][] = [
+      ['Trabajador', 'Cargo', 'Sueldo (S/)', 'Tardanzas', 'Min. acumulados', 'Faltas injust.',
+        'Faltas just.', 'Omisiones', 'Salidas anticipadas', 'Pendientes',
+        'Descuento confirmado (S/)', 'Descuento proyectado (S/)', 'Alerta disciplinaria'],
+      ...filas.map((f) => [
+        f.trabajador.nombre, f.trabajador.cargo, String(f.trabajador.sueldo),
+        String(f.resumen.tardanzas), String(f.resumen.minutosAcumulados),
+        String(f.resumen.faltasInjustificadas), String(f.resumen.faltasJustificadas),
+        String(f.resumen.omisiones), String(f.resumen.salidasAnticipadas),
+        String(f.resumen.pendientes),
+        f.resumen.descuentoConfirmado.toFixed(2), f.resumen.descuentoProyectado.toFixed(2),
+        f.disciplina.etiqueta || '',
+      ]),
+      [],
+      ['DETALLE DE INCIDENCIAS'],
+      ['Trabajador', 'Fecha', 'Tipo', 'Evento', 'Minutos', 'Grave', 'Estado', 'Descuento parcial (S/)', 'Nota'],
+      ...filas.flatMap((f) => f.incMes.map((i) => [
+        f.trabajador.nombre, String(i.fecha), TIPO_LABELS[i.tipo] || i.tipo, i.evento || '',
+        String(i.minutos ?? ''), i.grave ? 'Sí' : 'No', ESTADO_LABELS[i.estado] || i.estado,
+        descuentoIncidencia(i, f.trabajador.sueldo, config).toFixed(2), i.nota || '',
+      ])),
+    ]
+    const csv = filasCSV.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `planilla_${mes}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  const imprimirTrabajador = (fila: (typeof filas)[0]) => {
+    const { trabajador: t, resumen: r, incMes, disciplina } = fila
+    const filasDetalle = incMes.map((i) => `
+      <tr>
+        <td>${i.fecha}</td><td>${TIPO_LABELS[i.tipo] || i.tipo}</td>
+        <td>${i.evento || '—'}</td><td>${i.minutos ?? '—'}</td>
+        <td>${ESTADO_LABELS[i.estado]}</td>
+        <td style="text-align:right">${descuentoIncidencia(i, t.sueldo, config).toFixed(2)}</td>
+        <td>${i.nota || ''}</td>
+      </tr>`).join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Planilla ${t.nombre} — ${mes}</title>
+      <style>
+        body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:24px}
+        h1{font-size:16px;margin:0}h2{font-size:13px;margin:16px 0 6px}
+        table{border-collapse:collapse;width:100%;margin-top:6px}
+        th,td{border:1px solid #999;padding:4px 8px;text-align:left}
+        th{background:#eee}.tot{font-weight:bold}
+        .disc{color:#b45309;font-weight:bold}
+        .nota{margin-top:14px;font-size:10px;color:#555}
+      </style></head><body>
+      <h1>Ingeniería Telcom EIRL — Resumen de planilla</h1>
+      <p><strong>${t.nombre}</strong> · ${t.cargo} · DNI ${t.dni} · Sueldo ${formatoSoles(t.sueldo)}<br>
+      Periodo: ${nombreMes(mes)} · Valor día: ${formatoSoles(valorDia(t.sueldo, config))} · Valor minuto: S/ ${valorMinuto(t.sueldo, config).toFixed(4)}</p>
+      <h2>Resumen</h2>
+      <table><tr><th>Tardanzas</th><th>Min. acum.</th><th>Faltas injust.</th><th>Faltas just.</th><th>Omisiones</th><th>Salidas antic.</th><th>Descuento referencial</th></tr>
+      <tr><td>${r.tardanzas}</td><td>${r.minutosAcumulados}</td><td>${r.faltasInjustificadas}</td><td>${r.faltasJustificadas}</td><td>${r.omisiones}</td><td>${r.salidasAnticipadas}</td><td class="tot">${formatoSoles(r.descuentoProyectado)}</td></tr></table>
+      ${disciplina.etiqueta ? `<p class="disc">Alerta disciplinaria: ${disciplina.etiqueta} (${disciplina.faltasDisciplinarias} falta(s) disciplinaria(s) en el trimestre)</p>` : ''}
+      <h2>Detalle de incidencias</h2>
+      <table><tr><th>Fecha</th><th>Tipo</th><th>Evento</th><th>Min.</th><th>Estado</th><th>Descuento S/</th><th>Nota</th></tr>${filasDetalle || '<tr><td colspan="7">Sin incidencias</td></tr>'}</table>
+      <p class="nota">DESCUENTO REFERENCIAL (aprox.) — La planilla oficial la decide el Administrador de Planilla.
+      El descuento nunca excede el tiempo no laborado (cláusula 13ª y Anexo 3 del contrato).
+      Generado el ${new Date().toLocaleString('es-PE')}.</p>
+      <script>window.print()</script></body></html>`
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close() }
+  }
+
+  // ── Render ───────────────────────────────────────────────
+  if (!autorizado) {
+    return (
+      <AdminLayout>
+        <div className="text-center py-24">
+          <FaExclamationTriangle className="text-4xl text-amber-400 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-white mb-2">Acceso restringido</h2>
+          <p className="text-gray-400 text-sm">
+            Esta sección es exclusiva del rol Administrador de Planilla.
+          </p>
+        </div>
+      </AdminLayout>
+    )
+  }
+
+  return (
+    <AdminLayout>
+      <div className="space-y-6">
+        {/* Toast */}
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="fixed top-4 right-4 z-50 bg-gray-900 border border-primary-700 text-white px-5 py-3 rounded-xl shadow-xl text-sm max-w-sm"
+            >
+              {toast}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+              <FaFileInvoiceDollar className="text-accent-electric" />
+              Resumen de planilla — <span className="capitalize">{nombreMes(mes)}</span>
+            </h1>
+            <p className="text-gray-400 text-sm mt-0.5">
+              {esMesActual ? 'Proyección al cierre (mes en curso)' : 'Cierre de mes'} ·
+              DESCUENTO REFERENCIAL (aprox.) — la planilla oficial la decide el administrador
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              type="month"
+              value={mes}
+              min="2026-07"
+              onChange={(e) => setMes(e.target.value)}
+              className="px-3 py-2 bg-primary-900 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric"
+            />
+            <button
+              onClick={handleSincronizar}
+              disabled={syncing}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-accent-electric/20 border border-accent-electric/40 text-accent-electric rounded-lg text-sm font-medium hover:bg-accent-electric/30 transition-colors disabled:opacity-50"
+            >
+              {syncing ? <FaSpinner className="animate-spin text-xs" /> : <FaSync className="text-xs" />}
+              Sincronizar incidencias
+            </button>
+            <button
+              onClick={exportarCSV}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary-900 border border-primary-800 text-primary-300 rounded-lg text-sm hover:text-white hover:border-accent-electric/50 transition-colors"
+            >
+              <FaDownload className="text-xs" />
+              CSV
+            </button>
+            <button
+              onClick={() => {
+                setConfigDraft({
+                  ingreso_manana: String(config.ingreso_manana),
+                  salida_manana: String(config.salida_manana),
+                  ingreso_tarde: String(config.ingreso_tarde),
+                  salida_tarde: String(config.salida_tarde),
+                  tolerancia_min: String(config.tolerancia_min),
+                  tardanza_grave_min: String(config.tardanza_grave_min),
+                  jornada_horas: String(config.jornada_horas),
+                  factor_descanso_semanal: String(config.factor_descanso_semanal),
+                  plazo_sustento_horas: String(config.plazo_sustento_horas),
+                  divisor_mes: String(config.divisor_mes),
+                })
+                setShowConfig(!showConfig)
+              }}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-primary-900 border border-primary-800 text-primary-300 rounded-lg text-sm hover:text-white transition-colors"
+            >
+              <FaCog className="text-xs" />
+            </button>
+          </div>
+        </div>
+
+        {/* Config editable */}
+        <AnimatePresence>
+          {showConfig && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="bg-primary-900/60 border border-primary-800 rounded-2xl p-5">
+                <h3 className="text-sm font-semibold text-white mb-4">
+                  Configuración de horario y descuentos (cláusula 13ª / Anexo 3)
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  {([
+                    ['ingreso_manana', 'Ingreso mañana'],
+                    ['salida_manana', 'Salida mañana'],
+                    ['ingreso_tarde', 'Ingreso tarde'],
+                    ['salida_tarde', 'Salida tarde'],
+                    ['tolerancia_min', 'Tolerancia (min)'],
+                    ['tardanza_grave_min', 'Grave desde (min)'],
+                    ['jornada_horas', 'Jornada (horas)'],
+                    ['factor_descanso_semanal', 'Factor dominical'],
+                    ['plazo_sustento_horas', 'Plazo sustento (h)'],
+                    ['divisor_mes', 'Divisor mensual'],
+                  ] as [string, string][]).map(([k, label]) => (
+                    <div key={k}>
+                      <label className="block text-xs text-primary-400 mb-1">{label}</label>
+                      <input
+                        value={configDraft[k] ?? ''}
+                        onChange={(e) => setConfigDraft((prev) => ({ ...prev, [k]: e.target.value }))}
+                        className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-lg text-sm text-white focus:outline-none focus:border-accent-electric"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end gap-2 mt-4">
+                  <button onClick={() => setShowConfig(false)} className="px-4 py-2 text-sm text-primary-400 hover:text-white">
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={guardarConfig}
+                    disabled={savingConfig}
+                    className="px-4 py-2 bg-accent-electric/20 border border-accent-electric/40 text-accent-electric rounded-lg text-sm font-medium hover:bg-accent-electric/30 disabled:opacity-50"
+                  >
+                    {savingConfig ? 'Guardando...' : 'Guardar configuración'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Loading */}
+        {loading && (
+          <div className="flex items-center justify-center py-20">
+            <FaSpinner className="animate-spin text-3xl text-accent-electric" />
+          </div>
+        )}
+
+        {!loading && sueldos.length === 0 && (
+          <div className="text-center py-16 bg-primary-900/60 border border-primary-800 rounded-2xl">
+            <FaExclamationTriangle className="text-3xl text-amber-400 mx-auto mb-3" />
+            <p className="text-gray-300 font-medium">La hoja de sueldos no existe todavía</p>
+            <p className="text-gray-500 text-sm mt-1">Ejecuta <code className="text-accent-electric">setupPlanillaSheets()</code> en el editor de Apps Script y redespliega</p>
+          </div>
+        )}
+
+        {/* Tabla resumen */}
+        {!loading && sueldos.length > 0 && (
+          <div className="bg-primary-900/60 border border-primary-800 rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-primary-800 bg-primary-950/60">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Trabajador</th>
+                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Sueldo</th>
+                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Tard.</th>
+                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Min.</th>
+                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">F. inj.</th>
+                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">F. jus.</th>
+                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Omis.</th>
+                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">S. ant.</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                      Descuento ref. (aprox.)
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Alerta</th>
+                    <th className="px-2" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-primary-800/60">
+                  {filas.map((f) => {
+                    const abierto = expanded === f.trabajador.dni
+                    return (
+                      <>
+                        <tr
+                          key={f.trabajador.dni}
+                          onClick={() => setExpanded(abierto ? null : f.trabajador.dni)}
+                          className="hover:bg-primary-800/30 transition-colors cursor-pointer"
+                        >
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-white leading-tight">{f.trabajador.nombre}</div>
+                            <div className="text-gray-500 text-xs">{f.trabajador.cargo}</div>
+                          </td>
+                          <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            {editandoSueldo === f.trabajador.dni ? (
+                              <div className="flex items-center gap-1 justify-center">
+                                <input
+                                  value={sueldoDraft}
+                                  onChange={(e) => setSueldoDraft(e.target.value)}
+                                  onKeyDown={(e) => e.key === 'Enter' && guardarSueldo(f.trabajador.dni)}
+                                  className="w-20 px-2 py-1 bg-primary-950 border border-accent-electric rounded text-white text-xs text-center"
+                                  autoFocus
+                                />
+                                <button onClick={() => guardarSueldo(f.trabajador.dni)} className="text-emerald-400 text-xs"><FaCheckCircle /></button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setEditandoSueldo(f.trabajador.dni); setSueldoDraft(String(f.trabajador.sueldo)) }}
+                                className="text-gray-300 hover:text-white inline-flex items-center gap-1.5 group"
+                              >
+                                {formatoSoles(f.trabajador.sueldo)}
+                                <FaPen className="text-[9px] text-gray-600 group-hover:text-accent-electric" />
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            <span className={f.resumen.tardanzas > 0 ? 'text-amber-400 font-bold' : 'text-gray-600'}>{f.resumen.tardanzas}</span>
+                          </td>
+                          <td className="px-3 py-3 text-center text-gray-300">{f.resumen.minutosAcumulados}</td>
+                          <td className="px-3 py-3 text-center">
+                            <span className={f.resumen.faltasInjustificadas > 0 ? 'text-rose-400 font-bold' : 'text-gray-600'}>{f.resumen.faltasInjustificadas}</span>
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            <span className={f.resumen.faltasJustificadas > 0 ? 'text-emerald-400 font-bold' : 'text-gray-600'}>{f.resumen.faltasJustificadas}</span>
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            <span className={f.resumen.omisiones > 0 ? 'text-orange-400 font-bold' : 'text-gray-600'}>{f.resumen.omisiones}</span>
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            <span className={f.resumen.salidasAnticipadas > 0 ? 'text-rose-400 font-bold' : 'text-gray-600'}>{f.resumen.salidasAnticipadas}</span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="font-bold text-white">{formatoSoles(f.resumen.descuentoProyectado)}</div>
+                            {f.resumen.pendientes > 0 && (
+                              <div className="text-[10px] text-amber-400">
+                                incluye {f.resumen.pendientes} pendiente{f.resumen.pendientes !== 1 ? 's' : ''} de sustento
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {f.disciplina.etiqueta && (
+                              <span className="inline-block text-xs px-2.5 py-1 rounded-full font-medium bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">
+                                {f.disciplina.etiqueta}
+                              </span>
+                            )}
+                            {f.disciplina.alertas.map((a) => (
+                              <span key={a} className="inline-block text-[10px] px-2 py-0.5 mt-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/25 whitespace-nowrap">
+                                {a}
+                              </span>
+                            ))}
+                          </td>
+                          <td className="px-2 text-gray-500">
+                            {abierto ? <FaChevronDown className="text-xs" /> : <FaChevronRight className="text-xs" />}
+                          </td>
+                        </tr>
+
+                        {/* Detalle expandible */}
+                        {abierto && (
+                          <tr key={f.trabajador.dni + '-det'}>
+                            <td colSpan={11} className="px-4 py-4 bg-primary-950/50">
+                              <div className="flex items-center justify-between mb-3">
+                                <p className="text-xs text-gray-400">
+                                  Valor día: <strong className="text-white">{formatoSoles(valorDia(f.trabajador.sueldo, config))}</strong> ·
+                                  Valor minuto: <strong className="text-white">S/ {valorMinuto(f.trabajador.sueldo, config).toFixed(4)}</strong> ·
+                                  Disciplina trimestre: <strong className="text-white">{f.disciplina.faltasDisciplinarias} falta(s)</strong>
+                                </p>
+                                <button
+                                  onClick={() => imprimirTrabajador(f)}
+                                  className="inline-flex items-center gap-1.5 text-xs text-accent-electric hover:underline"
+                                >
+                                  <FaPrint className="text-[10px]" /> Imprimir / PDF
+                                </button>
+                              </div>
+                              {f.incMes.length === 0 ? (
+                                <p className="text-sm text-gray-500 text-center py-4">Sin incidencias este mes ✓</p>
+                              ) : (
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="text-gray-500 border-b border-primary-800">
+                                      <th className="text-left py-2 pr-3">Fecha</th>
+                                      <th className="text-left py-2 pr-3">Tipo</th>
+                                      <th className="text-left py-2 pr-3">Evento</th>
+                                      <th className="text-center py-2 pr-3">Min.</th>
+                                      <th className="text-left py-2 pr-3">Estado</th>
+                                      <th className="text-right py-2 pr-3">Descuento parcial</th>
+                                      <th className="text-left py-2 pr-3">Nota / sustento</th>
+                                      <th className="py-2" />
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-primary-800/40">
+                                    {[...f.incMes].sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))).map((inc) => (
+                                      <tr key={inc.id}>
+                                        <td className="py-2 pr-3 text-gray-300">{inc.fecha}</td>
+                                        <td className="py-2 pr-3">
+                                          <span className="text-white">{TIPO_LABELS[inc.tipo] || inc.tipo}</span>
+                                          {inc.grave === true && (
+                                            <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 font-bold">GRAVE</span>
+                                          )}
+                                        </td>
+                                        <td className="py-2 pr-3 text-gray-500">{inc.evento || '—'}</td>
+                                        <td className="py-2 pr-3 text-center text-gray-300">{inc.minutos ?? '—'}</td>
+                                        <td className="py-2 pr-3">
+                                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${ESTADO_BADGE[inc.estado]}`}>
+                                            {ESTADO_LABELS[inc.estado]}
+                                          </span>
+                                        </td>
+                                        <td className="py-2 pr-3 text-right font-mono text-white">
+                                          {inc.estado === 'justificada'
+                                            ? <span className="text-emerald-400">S/ 0.00</span>
+                                            : formatoSoles(descuentoIncidencia(inc, f.trabajador.sueldo, config))}
+                                        </td>
+                                        <td className="py-2 pr-3 text-gray-500 max-w-[180px] truncate">
+                                          {inc.sustento_url ? (
+                                            <a href={inc.sustento_url} target="_blank" rel="noopener noreferrer" className="text-accent-electric hover:underline">Ver sustento</a>
+                                          ) : (inc.nota || '—')}
+                                        </td>
+                                        <td className="py-2 text-right">
+                                          <button
+                                            onClick={() => abrirRevision(inc)}
+                                            className="text-xs px-3 py-1 rounded-lg bg-primary-800 text-primary-200 hover:bg-accent-electric/20 hover:text-accent-electric transition-colors"
+                                          >
+                                            Revisar
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-primary-700 bg-primary-950/70">
+                    <td colSpan={8} className="px-4 py-3 text-right text-xs text-gray-400 uppercase tracking-wider font-semibold">
+                      Total {esMesActual ? 'proyectado al cierre' : 'del mes'}
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-accent-electric text-base">
+                      {formatoSoles(totalProyectado)}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <div className="px-4 py-3 border-t border-primary-800 text-[11px] text-gray-500 leading-relaxed">
+              DESCUENTO REFERENCIAL (aprox.) — el sistema no descuenta automáticamente; solo calcula y muestra.
+              El descuento nunca excede el tiempo no laborado. Fórmula: valor_día = sueldo/{config.divisor_mes} ·
+              valor_hora = valor_día/{config.jornada_horas} · valor_minuto = valor_hora/60. Falta injustificada =
+              valor_día × {(1 + config.factor_descanso_semanal).toFixed(1)} (D. Leg. 713). Los cambios de estado quedan en el log de auditoría.
+            </div>
+          </div>
+        )}
+
+        {/* ── Modal revisión ── */}
+        <AnimatePresence>
+          {revisando && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={(e) => { if (e.target === e.currentTarget) setRevisando(null) }}
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-primary-900 border border-primary-700 rounded-2xl w-full max-w-md shadow-2xl"
+              >
+                <div className="flex items-center justify-between px-5 py-4 border-b border-primary-800">
+                  <div>
+                    <h3 className="font-bold text-white text-sm">Revisar incidencia</h3>
+                    <p className="text-xs text-gray-500">
+                      {revisando.nombre} · {revisando.fecha} · {TIPO_LABELS[revisando.tipo]}
+                      {revisando.minutos ? ` · ${revisando.minutos} min` : ''}
+                    </p>
+                  </div>
+                  <button onClick={() => setRevisando(null)} className="p-2 text-gray-400 hover:text-white rounded-lg">
+                    <FaTimes />
+                  </button>
+                </div>
+                <div className="p-5 space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setRevEstado('justificada')}
+                      className={`py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 border transition-all ${
+                        revEstado === 'justificada'
+                          ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
+                          : 'bg-primary-950 border-primary-800 text-gray-500 hover:text-gray-300'
+                      }`}
+                    >
+                      <FaCheckCircle /> Justificada
+                    </button>
+                    <button
+                      onClick={() => setRevEstado('injustificada')}
+                      className={`py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 border transition-all ${
+                        revEstado === 'injustificada'
+                          ? 'bg-rose-500/20 border-rose-500/50 text-rose-400'
+                          : 'bg-primary-950 border-primary-800 text-gray-500 hover:text-gray-300'
+                      }`}
+                    >
+                      <FaTimesCircle /> Injustificada
+                    </button>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-primary-400 mb-1.5">
+                      Nota {revEstado === 'justificada' ? '(descanso médico, licencia, permiso escrito...) *' : '(opcional)'}
+                    </label>
+                    <textarea
+                      value={revNota}
+                      onChange={(e) => setRevNota(e.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric resize-none"
+                      placeholder="Motivo o sustento de la decisión..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-primary-400 mb-1.5">URL del sustento (Drive, opcional)</label>
+                    <input
+                      value={revSustento}
+                      onChange={(e) => setRevSustento(e.target.value)}
+                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric"
+                      placeholder="https://drive.google.com/..."
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-500 flex items-start gap-1.5">
+                    <FaClock className="mt-0.5 shrink-0" />
+                    El cambio quedará registrado en el log de auditoría con tu usuario y fecha.
+                  </p>
+                  <button
+                    onClick={guardarRevision}
+                    disabled={guardandoRev}
+                    className="w-full py-3 bg-accent-electric/20 border border-accent-electric/40 text-accent-electric font-semibold rounded-xl text-sm hover:bg-accent-electric/30 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {guardandoRev && <FaSpinner className="animate-spin" />}
+                    Guardar decisión
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </AdminLayout>
+  )
+}

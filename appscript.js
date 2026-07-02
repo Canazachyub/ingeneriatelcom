@@ -202,6 +202,22 @@ function doGet(e) {
       case 'getJustificaciones':
         return jsonResponse(getJustificaciones(data));
 
+      // ========== PLANILLA: TARDANZAS, FALTAS Y DESCUENTOS (admin) ==========
+      case 'getConfigPlanilla':
+        return jsonResponse(getConfigPlanillaAction());
+      case 'updateConfigPlanilla':
+        return jsonResponse(updateConfigPlanilla(data));
+      case 'getSueldos':
+        return jsonResponse(getSueldos());
+      case 'updateSueldo':
+        return jsonResponse(updateSueldo(data));
+      case 'getIncidencias':
+        return jsonResponse(getIncidencias(data));
+      case 'revisarIncidencia':
+        return jsonResponse(revisarIncidencia(data));
+      case 'sincronizarIncidencias':
+        return jsonResponse(sincronizarIncidencias(data));
+
       // ========== CAPACITACIONES (PUBLICO) ==========
       case 'getCapacitaciones':
         return jsonResponse(getCapacitaciones());
@@ -3973,6 +3989,400 @@ function getJustificaciones(data) {
 
 // ============================================================
 // FIN MODULO ASISTENCIA V2
+// ============================================================
+
+// ============================================================
+// MODULO PLANILLA — TARDANZAS, FALTAS Y DESCUENTOS
+// Clausula 13a y Anexo 3 del contrato. El sistema solo calcula
+// y muestra montos referenciales; no descuenta automaticamente.
+// Hojas: config_planilla, sueldos, incidencias, planilla_log
+// ============================================================
+
+var CONFIG_PLANILLA_DEFAULT = {
+  ingreso_manana: '07:30',
+  salida_manana: '13:00',
+  ingreso_tarde: '14:00',
+  salida_tarde: '18:00',
+  tolerancia_min: 15,
+  tardanza_grave_min: 60,
+  jornada_horas: 9.5,
+  factor_descanso_semanal: 0.2,
+  plazo_sustento_horas: 48,
+  divisor_mes: 30,
+  fecha_operativo: '2026-07-02'
+};
+
+var HEADERS_INCIDENCIAS = [
+  'id', 'dni', 'nombre', 'fecha', 'tipo', 'evento', 'minutos', 'grave',
+  'estado', 'nota', 'sustento_url', 'revisado_por', 'fecha_revision', 'creado_en'
+];
+
+var HEADERS_PLANILLA_LOG = [
+  'id', 'incidencia_id', 'dni', 'accion', 'estado_anterior', 'estado_nuevo',
+  'nota', 'usuario', 'timestamp'
+];
+
+var SUELDOS_INICIALES = [
+  ['46809070', 'Araujo Álvarez, Andrés Steven', 'Coordinador General', 3500],
+  ['73316735', 'Marroquín Concha, Diego Mauricio', 'Analista Legal de Reclamos', 3000],
+  ['74135306', 'Vargas Miranda, Juan Joseph', 'Analista Legal de Reclamos', 1800],
+  ['73354681', 'Cayllahua Zárate, Dalia Avely', 'Analista Junior de Reclamos', 2000],
+  ['74525595', 'León Umeres, Milagros Jhenifer', 'Asistente Administrativo', 1800],
+  ['77383250', 'Condori Cáceres, Jocabed Adriana', 'Tramitador / Digitador', 1500],
+  ['72889070', 'Zárate Castañeda, Mhyalhu Sthefanya', 'Tramitador / Digitador', 1500],
+  ['74147961', 'Hurtado Vega, Marilyn', 'Tramitador / Digitador', 1500]
+];
+
+// Ejecutar UNA VEZ desde el editor (no toca hojas existentes)
+function setupPlanillaSheets() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+
+  if (!ss.getSheetByName('config_planilla')) {
+    var c = ss.insertSheet('config_planilla');
+    c.appendRow(['clave', 'valor']);
+    Object.keys(CONFIG_PLANILLA_DEFAULT).forEach(function(k) {
+      c.appendRow([k, CONFIG_PLANILLA_DEFAULT[k]]);
+    });
+    c.getRange(1, 1, 1, 2).setFontWeight('bold');
+  }
+
+  if (!ss.getSheetByName('sueldos')) {
+    var s = ss.insertSheet('sueldos');
+    s.appendRow(['dni', 'nombre', 'cargo', 'sueldo']);
+    SUELDOS_INICIALES.forEach(function(r) { s.appendRow(r); });
+    s.getRange(1, 1, 1, 4).setFontWeight('bold');
+  }
+
+  if (!ss.getSheetByName('incidencias')) {
+    var i = ss.insertSheet('incidencias');
+    i.appendRow(HEADERS_INCIDENCIAS);
+    i.getRange(1, 1, 1, HEADERS_INCIDENCIAS.length).setFontWeight('bold');
+  }
+
+  if (!ss.getSheetByName('planilla_log')) {
+    var l = ss.insertSheet('planilla_log');
+    l.appendRow(HEADERS_PLANILLA_LOG);
+    l.getRange(1, 1, 1, HEADERS_PLANILLA_LOG.length).setFontWeight('bold');
+  }
+
+  Logger.log('Hojas de planilla listas');
+  return 'Hojas config_planilla, sueldos, incidencias y planilla_log creadas';
+}
+
+// Lee la config combinando defaults + hoja (la hoja manda)
+function leerConfigPlanilla_() {
+  var cfg = {};
+  Object.keys(CONFIG_PLANILLA_DEFAULT).forEach(function(k) { cfg[k] = CONFIG_PLANILLA_DEFAULT[k]; });
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('config_planilla');
+  if (!sheet) return cfg;
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    var clave = String(rows[i][0]).trim();
+    if (!clave || !(clave in cfg)) continue;
+    var valor = rows[i][1];
+    if (valor instanceof Date) {
+      // Sheets convierte "07:30" en Date; volver a HH:mm
+      valor = Utilities.formatDate(valor, 'America/Lima', 'HH:mm');
+    }
+    var num = parseFloat(valor);
+    cfg[clave] = (typeof CONFIG_PLANILLA_DEFAULT[clave] === 'number' && !isNaN(num)) ? num : String(valor);
+  }
+  return cfg;
+}
+
+function getConfigPlanillaAction() {
+  return { success: true, data: leerConfigPlanilla_() };
+}
+
+function updateConfigPlanilla(data) {
+  var valores = data.valores || {};
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('config_planilla');
+  if (!sheet) return { success: false, error: 'Ejecuta setupPlanillaSheets() primero' };
+  var rows = sheet.getDataRange().getValues();
+  Object.keys(valores).forEach(function(k) {
+    if (!(k in CONFIG_PLANILLA_DEFAULT)) return;
+    var found = false;
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]).trim() === k) {
+        sheet.getRange(i + 1, 2).setValue(String(valores[k]));
+        found = true;
+        break;
+      }
+    }
+    if (!found) sheet.appendRow([k, String(valores[k])]);
+  });
+  return { success: true, data: leerConfigPlanilla_() };
+}
+
+function getSueldos() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('sueldos');
+  if (!sheet) return { success: false, error: 'Ejecuta setupPlanillaSheets() primero' };
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var result = rows.slice(1)
+    .filter(function(r) { return r[0] !== ''; })
+    .map(function(r) {
+      var o = rowToObject(headers, r);
+      o.dni = String(o.dni);
+      o.sueldo = Number(o.sueldo) || 0;
+      return o;
+    });
+  return { success: true, data: result };
+}
+
+function updateSueldo(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('sueldos');
+  if (!sheet) return { success: false, error: 'Hoja sueldos no encontrada' };
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var sueldoCol = headers.indexOf('sueldo');
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(data.dni)) {
+      sheet.getRange(i + 1, sueldoCol + 1).setValue(Number(data.sueldo) || 0);
+      return { success: true, message: 'Sueldo actualizado' };
+    }
+  }
+  return { success: false, error: 'DNI no encontrado en hoja sueldos' };
+}
+
+function getIncidencias(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('incidencias');
+  if (!sheet) return { success: true, data: [] };
+  var rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return { success: true, data: [] };
+  var headers = rows[0];
+  var result = rows.slice(1)
+    .filter(function(r) { return r[0] !== ''; })
+    .map(function(r) {
+      var o = rowToObject(headers, r);
+      o.dni = String(o.dni);
+      if (o.fecha instanceof Date) {
+        o.fecha = Utilities.formatDate(o.fecha, 'America/Lima', 'yyyy-MM-dd');
+      }
+      o.minutos = o.minutos === '' ? '' : Number(o.minutos);
+      o.grave = o.grave === true || o.grave === 'TRUE' || o.grave === 'true';
+      return o;
+    });
+  result = filtrarPorRango_(result, data);
+  return { success: true, data: result };
+}
+
+// Solo el Administrador de Planilla llega aqui (token validado en doGet).
+// Cada cambio queda en planilla_log.
+function revisarIncidencia(data) {
+  if (!data.id || !data.estado) return { success: false, error: 'Faltan campos: id, estado' };
+  if (['justificada', 'injustificada', 'pendiente'].indexOf(data.estado) < 0) {
+    return { success: false, error: 'Estado invalido' };
+  }
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('incidencias');
+  if (!sheet) return { success: false, error: 'Hoja incidencias no encontrada' };
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var estadoCol = headers.indexOf('estado');
+  var notaCol = headers.indexOf('nota');
+  var sustentoCol = headers.indexOf('sustento_url');
+  var revisadoCol = headers.indexOf('revisado_por');
+  var fechaRevCol = headers.indexOf('fecha_revision');
+
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === String(data.id)) {
+      var estadoAnterior = rows[i][estadoCol];
+      sheet.getRange(i + 1, estadoCol + 1).setValue(data.estado);
+      if (data.nota !== undefined) sheet.getRange(i + 1, notaCol + 1).setValue(data.nota);
+      if (data.sustento_url !== undefined) sheet.getRange(i + 1, sustentoCol + 1).setValue(data.sustento_url);
+      sheet.getRange(i + 1, revisadoCol + 1).setValue(data.revisado_por || 'Admin');
+      sheet.getRange(i + 1, fechaRevCol + 1).setValue(new Date().toISOString());
+
+      registrarLogPlanilla_(data.id, String(rows[i][1]), 'revision', estadoAnterior, data.estado,
+        data.nota || '', data.revisado_por || 'Admin');
+
+      return { success: true, message: 'Incidencia actualizada a ' + data.estado };
+    }
+  }
+  return { success: false, error: 'Incidencia no encontrada' };
+}
+
+function registrarLogPlanilla_(incidenciaId, dni, accion, estadoAnterior, estadoNuevo, nota, usuario) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('planilla_log');
+  if (!sheet) return;
+  sheet.appendRow([
+    Utilities.getUuid(), incidenciaId, dni, accion,
+    estadoAnterior || '', estadoNuevo || '', nota || '',
+    usuario || 'sistema', new Date().toISOString()
+  ]);
+}
+
+function horaAMinutosPlanilla_(hora) {
+  var parts = String(hora).split(':');
+  return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+}
+
+// Genera incidencias desde asistencias_v2 para el rango [desde, hasta]
+// y auto-expira pendientes cuyo plazo de sustento (48h desde la
+// reincorporacion) ya vencio. Idempotente: no duplica.
+function sincronizarIncidencias(data) {
+  var cfg = leerConfigPlanilla_();
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var incSheet = ss.getSheetByName('incidencias');
+  if (!incSheet) return { success: false, error: 'Ejecuta setupPlanillaSheets() primero' };
+
+  var hoyISO = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
+  var desde = String(data.desde || hoyISO);
+  var hasta = String(data.hasta || hoyISO);
+  if (desde < String(cfg.fecha_operativo)) desde = String(cfg.fecha_operativo);
+  // Solo dias completamente transcurridos se evaluan para falta/omision;
+  // las tardanzas del dia actual si se detectan.
+
+  // Cargar sueldos (lista oficial de trabajadores)
+  var sueldosRes = getSueldos();
+  if (!sueldosRes.success) return sueldosRes;
+  var trabajadores = sueldosRes.data;
+
+  // Indexar registros: dni -> fecha -> evento -> horaMin
+  var regRes = getAsistenciasV2({ desde: desde, hasta: hoyISO });
+  var regIdx = {};
+  (regRes.data || []).forEach(function(r) {
+    var dni = String(r.dni);
+    if (!regIdx[dni]) regIdx[dni] = {};
+    if (!regIdx[dni][r.fecha]) regIdx[dni][r.fecha] = {};
+    regIdx[dni][r.fecha][r.evento] = String(r.hora).slice(0, 5);
+  });
+
+  // Indexar incidencias existentes para no duplicar: dni|fecha|tipo|evento
+  var incRows = incSheet.getDataRange().getValues();
+  var incHeaders = incRows[0];
+  var existentes = {};
+  for (var i = 1; i < incRows.length; i++) {
+    var f = incRows[i][3] instanceof Date
+      ? Utilities.formatDate(incRows[i][3], 'America/Lima', 'yyyy-MM-dd')
+      : String(incRows[i][3]);
+    existentes[String(incRows[i][1]) + '|' + f + '|' + incRows[i][4] + '|' + incRows[i][5]] = true;
+  }
+
+  var ingresos = [
+    { evento: 'ingreso_manana', oficial: cfg.ingreso_manana },
+    { evento: 'ingreso_tarde', oficial: cfg.ingreso_tarde }
+  ];
+  var salidas = [
+    { evento: 'salida_manana', oficial: cfg.salida_manana },
+    { evento: 'salida_tarde', oficial: cfg.salida_tarde }
+  ];
+
+  var creadas = 0;
+  var nuevaFila = function(dni, nombre, fecha, tipo, evento, minutos, grave) {
+    var key = dni + '|' + fecha + '|' + tipo + '|' + (evento || '');
+    if (existentes[key]) return;
+    existentes[key] = true;
+    incSheet.appendRow([
+      Utilities.getUuid(), dni, nombre, fecha, tipo, evento || '',
+      minutos === null ? '' : minutos, grave ? 'TRUE' : 'FALSE',
+      'pendiente', '', '', '', '', new Date().toISOString()
+    ]);
+    creadas++;
+  };
+
+  // Recorrer cada dia habil del rango
+  var d = new Date(desde + 'T00:00:00');
+  var dHasta = new Date(hasta + 'T00:00:00');
+  for (; d <= dHasta; d.setDate(d.getDate() + 1)) {
+    var fecha = Utilities.formatDate(d, 'America/Lima', 'yyyy-MM-dd');
+    var dow = d.getDay();
+    if (dow === 0 || dow === 6) continue; // sabado y domingo no laborables
+    if (fecha > hoyISO) break;
+    var diaTerminado = fecha < hoyISO;
+
+    trabajadores.forEach(function(t) {
+      var regs = (regIdx[t.dni] || {})[fecha] || {};
+      var tieneAlguno = Object.keys(regs).length > 0;
+
+      // FALTA: sin ningun marcado en un dia ya terminado
+      if (!tieneAlguno) {
+        if (diaTerminado) nuevaFila(t.dni, t.nombre, fecha, 'falta', '', null, false);
+        return;
+      }
+
+      // TARDANZAS: desde el minuto 16, minutos TOTALES desde la hora oficial
+      ingresos.forEach(function(ing) {
+        var hora = regs[ing.evento];
+        if (!hora) return;
+        var retraso = horaAMinutosPlanilla_(hora) - horaAMinutosPlanilla_(ing.oficial);
+        if (retraso > cfg.tolerancia_min) {
+          nuevaFila(t.dni, t.nombre, fecha, 'tardanza', ing.evento, retraso, retraso > cfg.tardanza_grave_min);
+        }
+      });
+
+      // SALIDA ANTICIPADA: siempre se marca como grave
+      salidas.forEach(function(sal) {
+        var hora = regs[sal.evento];
+        if (!hora) return;
+        var faltante = horaAMinutosPlanilla_(sal.oficial) - horaAMinutosPlanilla_(hora);
+        if (faltante > 0) {
+          nuevaFila(t.dni, t.nombre, fecha, 'salida_anticipada', sal.evento, faltante, true);
+        }
+      });
+
+      // OMISION: marco algo pero falta algun evento (dia terminado)
+      if (diaTerminado) {
+        var faltantes = [];
+        ingresos.concat(salidas).forEach(function(ev) {
+          if (!regs[ev.evento]) faltantes.push(ev.evento);
+        });
+        if (faltantes.length > 0) {
+          nuevaFila(t.dni, t.nombre, fecha, 'omision', faltantes.join(','), null, false);
+        }
+      }
+    });
+  }
+
+  // AUTO-EXPIRACION: pendientes cuyo plazo de sustento vencio pasan a
+  // injustificada. Reincorporacion = para faltas, el primer dia posterior
+  // con algun marcado; para el resto, el mismo dia de la incidencia.
+  var expiradas = 0;
+  var plazoMs = (Number(cfg.plazo_sustento_horas) || 48) * 3600 * 1000;
+  var ahora = new Date().getTime();
+  incRows = incSheet.getDataRange().getValues();
+  incHeaders = incRows[0];
+  var cEstado = incHeaders.indexOf('estado');
+  var cTipo = incHeaders.indexOf('tipo');
+  var cFecha = incHeaders.indexOf('fecha');
+  var cDni = incHeaders.indexOf('dni');
+
+  for (var j = 1; j < incRows.length; j++) {
+    if (incRows[j][cEstado] !== 'pendiente') continue;
+    var fInc = incRows[j][cFecha] instanceof Date
+      ? Utilities.formatDate(incRows[j][cFecha], 'America/Lima', 'yyyy-MM-dd')
+      : String(incRows[j][cFecha]);
+    var dniInc = String(incRows[j][cDni]);
+    var fechaReinc = fInc;
+
+    if (incRows[j][cTipo] === 'falta') {
+      // Buscar primer dia posterior con registro
+      var fechasDni = Object.keys(regIdx[dniInc] || {}).filter(function(x) { return x > fInc; }).sort();
+      if (fechasDni.length === 0) continue; // aun no se reincorpora
+      fechaReinc = fechasDni[0];
+    }
+
+    var finReinc = new Date(fechaReinc + 'T23:59:59').getTime();
+    if (ahora > finReinc + plazoMs) {
+      incSheet.getRange(j + 1, cEstado + 1).setValue('injustificada');
+      registrarLogPlanilla_(String(incRows[j][0]), dniInc, 'auto_expiracion',
+        'pendiente', 'injustificada', 'Plazo de sustento (48h) vencido sin justificacion', 'sistema');
+      expiradas++;
+    }
+  }
+
+  return { success: true, data: { creadas: creadas, expiradas: expiradas } };
+}
+
+// ============================================================
+// FIN MODULO PLANILLA
 // ============================================================
 
 // ============================================================

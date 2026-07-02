@@ -757,6 +757,48 @@ class AppScriptApi {
     return this.request('getJustificaciones', 'POST', (filtros || {}) as Record<string, unknown>)
   }
 
+  // ============================================
+  // PLANILLA: TARDANZAS, FALTAS Y DESCUENTOS (admin)
+  // ============================================
+
+  async getConfigPlanilla(): Promise<ApiResponse<Record<string, string | number>>> {
+    return this.request('getConfigPlanilla', 'POST', {})
+  }
+
+  async updateConfigPlanilla(valores: Record<string, string | number>): Promise<ApiResponse<Record<string, string | number>>> {
+    return this.request('updateConfigPlanilla', 'POST', { valores })
+  }
+
+  async getSueldos(): Promise<ApiResponse<{ dni: string; nombre: string; cargo: string; sueldo: number }[]>> {
+    return this.request('getSueldos', 'POST', {})
+  }
+
+  async updateSueldo(dni: string, sueldo: number): Promise<ApiResponse<null>> {
+    return this.request('updateSueldo', 'POST', { dni, sueldo })
+  }
+
+  async getIncidencias(filtros?: {
+    dni?: string
+    desde?: string
+    hasta?: string
+  }): Promise<ApiResponse<Record<string, unknown>[]>> {
+    return this.request('getIncidencias', 'POST', (filtros || {}) as Record<string, unknown>)
+  }
+
+  async revisarIncidencia(data: {
+    id: string
+    estado: 'justificada' | 'injustificada' | 'pendiente'
+    nota?: string
+    sustento_url?: string
+    revisado_por?: string
+  }): Promise<ApiResponse<null>> {
+    return this.request('revisarIncidencia', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async sincronizarIncidencias(desde: string, hasta: string): Promise<ApiResponse<{ creadas: number; expiradas: number }>> {
+    return this.request('sincronizarIncidencias', 'POST', { desde, hasta })
+  }
+
   // Admin — capacitaciones CRUD
   async crearCapacitacion(data: Omit<Capacitacion, 'id' | 'fecha_creacion'>): Promise<ApiResponse<{ id: string }>> {
     return this.request('crearCapacitacion', 'POST', data as unknown as Record<string, unknown>)

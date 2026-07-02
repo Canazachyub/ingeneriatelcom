@@ -17,6 +17,7 @@ import {
   FaChartLine,
   FaGraduationCap,
   FaClipboardList,
+  FaFileInvoiceDollar,
 } from 'react-icons/fa'
 import { useAuth } from '../../context/AuthContext'
 
@@ -30,6 +31,7 @@ const navigationSections = [
     items: [
       { name: 'Dashboard', href: '/admin', icon: FaHome },
       { name: 'Asistencias', href: '/admin/asistencias', icon: FaClock },
+      { name: 'Planilla', href: '/admin/planilla', icon: FaFileInvoiceDollar },
     ]
   },
   {

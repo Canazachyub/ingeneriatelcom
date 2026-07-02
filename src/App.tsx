@@ -31,6 +31,7 @@ import ReportsPage from './pages/admin/ReportsPage'
 import ApiTestPage from './pages/admin/ApiTestPage'
 import CapacitacionesManagementPage from './pages/admin/CapacitacionesManagementPage'
 import EvaluacionesAdminPage from './pages/admin/EvaluacionesPage'
+import PlanillaPage from './pages/admin/PlanillaPage'
 
 import { useAuth } from './context/AuthContext'
 import { ToastProvider } from './context/ToastContext'
@@ -215,6 +216,14 @@ function App() {
         element={
           <ProtectedRoute>
             <EvaluacionesAdminPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/planilla"
+        element={
+          <ProtectedRoute>
+            <PlanillaPage />
           </ProtectedRoute>
         }
       />

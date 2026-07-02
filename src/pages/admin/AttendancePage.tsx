@@ -28,7 +28,8 @@ import {
 
 type Tab = 'registros' | 'informe' | 'justificaciones'
 
-const TOLERANCIA_MIN = 10
+// Cláusula 13ª del contrato: 15 min de tolerancia sobre cada hora de ingreso
+const TOLERANCIA_MIN = 15
 
 // El sistema entró en operación el 02/07/2026. Los días previos
 // no cuentan como falta (periodo justificado por implementación).
