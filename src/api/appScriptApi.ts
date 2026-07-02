@@ -708,6 +708,55 @@ class AppScriptApi {
     return this.request('registrarEventoLog', 'POST', data as unknown as Record<string, unknown>)
   }
 
+  // ============================================
+  // ASISTENCIA V2 (FOTO + GPS + JUSTIFICACIONES)
+  // ============================================
+
+  async registrarAsistenciaFoto(data: {
+    dni: string
+    nombre: string
+    cargo: string
+    evento: string
+    gps_lat?: number
+    gps_lng?: number
+    gps_accuracy?: number
+    fileContent: string
+    mimeType?: string
+  }): Promise<ApiResponse<{ evento: string; fecha: string; hora: string; foto_url: string }>> {
+    return this.request('registrarAsistenciaFoto', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async subirJustificacion(data: {
+    dni: string
+    nombre: string
+    cargo: string
+    motivo: string
+    descripcion?: string
+    fileContent?: string
+    fileName?: string
+    mimeType?: string
+  }): Promise<ApiResponse<{ fecha: string; archivo_url: string }>> {
+    return this.request('subirJustificacion', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  // Admin — requieren token
+  async getAsistenciasV2(filtros?: {
+    dni?: string
+    desde?: string
+    hasta?: string
+    evento?: string
+  }): Promise<ApiResponse<Record<string, unknown>[]>> {
+    return this.request('getAsistenciasV2', 'POST', (filtros || {}) as Record<string, unknown>)
+  }
+
+  async getJustificaciones(filtros?: {
+    dni?: string
+    desde?: string
+    hasta?: string
+  }): Promise<ApiResponse<Record<string, unknown>[]>> {
+    return this.request('getJustificaciones', 'POST', (filtros || {}) as Record<string, unknown>)
+  }
+
   // Admin — capacitaciones CRUD
   async crearCapacitacion(data: Omit<Capacitacion, 'id' | 'fecha_creacion'>): Promise<ApiResponse<{ id: string }>> {
     return this.request('crearCapacitacion', 'POST', data as unknown as Record<string, unknown>)

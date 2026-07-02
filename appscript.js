@@ -39,6 +39,9 @@ function doGet(e) {
       'verificarEmpleado',
       'marcarAsistencia',
       'obtenerAsistenciasHoy',
+      // ASISTENCIA V2 (foto + GPS + justificaciones)
+      'registrarAsistenciaFoto',
+      'subirJustificacion',
       // CAPACITACIONES Y EVALUACIONES (publicas)
       'getCapacitaciones',
       'getCapacitacionById',
@@ -188,6 +191,16 @@ function doGet(e) {
         return jsonResponse(obtenerAsistenciasHoy());
       case 'getAttendances':
         return jsonResponse(getAttendances(data.fecha || e.parameter.fecha, data.employeeId || e.parameter.employeeId));
+
+      // ========== ASISTENCIA V2: FOTO + GPS + JUSTIFICACIONES ==========
+      case 'registrarAsistenciaFoto':
+        return jsonResponse(registrarAsistenciaFoto(data));
+      case 'subirJustificacion':
+        return jsonResponse(subirJustificacion(data));
+      case 'getAsistenciasV2':
+        return jsonResponse(getAsistenciasV2(data));
+      case 'getJustificaciones':
+        return jsonResponse(getJustificaciones(data));
 
       // ========== CAPACITACIONES (PUBLICO) ==========
       case 'getCapacitaciones':
@@ -3737,6 +3750,227 @@ function registrarEventoLog(data) {
 
 // ============================================================
 // FIN MODULO CAPACITACIONES Y EVALUACIONES
+// ============================================================
+
+// ============================================================
+// MODULO ASISTENCIA V2 — FOTO + GPS + JUSTIFICACIONES
+// Hojas: 'asistencias' y 'justificaciones'
+// Drive: Asistencias/AAAA-MM-DD/<dni>/<evento>_<timestamp>.jpg
+//        Justificaciones/AAAA-MM-DD/<dni>/just_<timestamp>.<ext>
+// ============================================================
+
+var EVENTOS_ASISTENCIA_V2 = ['ingreso_manana', 'salida_manana', 'ingreso_tarde', 'salida_tarde'];
+
+var HEADERS_ASISTENCIAS_V2 = [
+  'id', 'dni', 'nombre', 'cargo', 'evento', 'fecha', 'hora',
+  'gps_lat', 'gps_lng', 'gps_accuracy', 'foto_url', 'timestamp'
+];
+
+var HEADERS_JUSTIFICACIONES = [
+  'id', 'dni', 'nombre', 'cargo', 'motivo', 'descripcion',
+  'archivo_url', 'fecha', 'timestamp'
+];
+
+// Ejecutar UNA VEZ desde el editor para crear las hojas (no toca hojas existentes)
+function setupAsistenciaSheets() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  if (!ss.getSheetByName('asistencias')) {
+    var s = ss.insertSheet('asistencias');
+    s.appendRow(HEADERS_ASISTENCIAS_V2);
+    s.getRange(1, 1, 1, HEADERS_ASISTENCIAS_V2.length).setFontWeight('bold');
+  }
+  if (!ss.getSheetByName('justificaciones')) {
+    var j = ss.insertSheet('justificaciones');
+    j.appendRow(HEADERS_JUSTIFICACIONES);
+    j.getRange(1, 1, 1, HEADERS_JUSTIFICACIONES.length).setFontWeight('bold');
+  }
+  Logger.log('Hojas asistencias y justificaciones listas');
+}
+
+function getOrCreateAsistenciaSheet_(ss, nombre, headers) {
+  var sheet = ss.getSheetByName(nombre);
+  if (!sheet) {
+    sheet = ss.insertSheet(nombre);
+    sheet.appendRow(headers);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+  }
+  return sheet;
+}
+
+function registrarAsistenciaFoto(data) {
+  var dni = String(data.dni || '');
+  var evento = data.evento || '';
+
+  if (!/^\d{8}$/.test(dni)) return { success: false, error: 'DNI invalido' };
+  if (EVENTOS_ASISTENCIA_V2.indexOf(evento) === -1) return { success: false, error: 'Evento invalido' };
+  if (!data.fileContent) return { success: false, error: 'La foto es obligatoria' };
+
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = getOrCreateAsistenciaSheet_(ss, 'asistencias', HEADERS_ASISTENCIAS_V2);
+
+  var ahora = new Date();
+  var fecha = Utilities.formatDate(ahora, 'America/Lima', 'yyyy-MM-dd');
+  var hora = Utilities.formatDate(ahora, 'America/Lima', 'HH:mm:ss');
+
+  // Evitar doble registro del mismo evento en el mismo dia
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var dniCol = headers.indexOf('dni');
+  var eventoCol = headers.indexOf('evento');
+  var fechaCol = headers.indexOf('fecha');
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][dniCol]) === dni && rows[i][eventoCol] === evento && String(rows[i][fechaCol]) === fecha) {
+      return { success: false, error: 'Ya registraste este evento hoy' };
+    }
+  }
+
+  // Subir foto a Drive: Asistencias/<fecha>/<dni>/
+  var fotoUrl = '';
+  try {
+    var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+    var asisFolder = getOrCreateFolder(mainFolder, 'Asistencias');
+    var fechaFolder = getOrCreateFolder(asisFolder, fecha);
+    var dniFolder = getOrCreateFolder(fechaFolder, dni);
+    var fileName = evento + '_' + ahora.getTime() + '.jpg';
+    var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
+    var file = dniFolder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    fotoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
+  } catch (e) {
+    return { success: false, error: 'Error al guardar la foto: ' + e.message };
+  }
+
+  sheet.appendRow([
+    Utilities.getUuid(),
+    dni,
+    data.nombre || '',
+    data.cargo || '',
+    evento,
+    fecha,
+    hora,
+    data.gps_lat !== undefined ? data.gps_lat : '',
+    data.gps_lng !== undefined ? data.gps_lng : '',
+    data.gps_accuracy !== undefined ? data.gps_accuracy : '',
+    fotoUrl,
+    ahora.toISOString()
+  ]);
+
+  return { success: true, data: { evento: evento, fecha: fecha, hora: hora, foto_url: fotoUrl } };
+}
+
+function subirJustificacion(data) {
+  var dni = String(data.dni || '');
+  if (!/^\d{8}$/.test(dni)) return { success: false, error: 'DNI invalido' };
+  if (!data.motivo) return { success: false, error: 'El motivo es obligatorio' };
+
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = getOrCreateAsistenciaSheet_(ss, 'justificaciones', HEADERS_JUSTIFICACIONES);
+
+  var ahora = new Date();
+  var fecha = Utilities.formatDate(ahora, 'America/Lima', 'yyyy-MM-dd');
+
+  // Archivo adjunto opcional (foto o documento)
+  var archivoUrl = '';
+  if (data.fileContent) {
+    try {
+      var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+      var justFolder = getOrCreateFolder(mainFolder, 'Justificaciones');
+      var fechaFolder = getOrCreateFolder(justFolder, fecha);
+      var dniFolder = getOrCreateFolder(fechaFolder, dni);
+      var fileName = data.fileName || ('just_' + ahora.getTime() + '.jpg');
+      var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
+      var file = dniFolder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      archivoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
+    } catch (e) {
+      return { success: false, error: 'Error al guardar el archivo: ' + e.message };
+    }
+  }
+
+  sheet.appendRow([
+    Utilities.getUuid(),
+    dni,
+    data.nombre || '',
+    data.cargo || '',
+    data.motivo,
+    data.descripcion || '',
+    archivoUrl,
+    fecha,
+    ahora.toISOString()
+  ]);
+
+  return { success: true, data: { fecha: fecha, archivo_url: archivoUrl } };
+}
+
+// ── Admin (requieren token) ─────────────────────────────────
+
+function filtrarPorRango_(result, data) {
+  if (data && data.dni) {
+    result = result.filter(function(r) { return String(r.dni) === String(data.dni); });
+  }
+  if (data && data.desde) {
+    result = result.filter(function(r) { return String(r.fecha) >= String(data.desde); });
+  }
+  if (data && data.hasta) {
+    result = result.filter(function(r) { return String(r.fecha) <= String(data.hasta); });
+  }
+  return result;
+}
+
+function getAsistenciasV2(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('asistencias');
+  if (!sheet) return { success: true, data: [] };
+
+  var rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return { success: true, data: [] };
+
+  var headers = rows[0];
+  var result = rows.slice(1)
+    .filter(function(r) { return r[0] !== ''; })
+    .map(function(r) {
+      var obj = rowToObject(headers, r);
+      // Normalizar fecha/hora por si Sheets las convirtio a Date
+      if (obj.fecha instanceof Date) {
+        obj.fecha = Utilities.formatDate(obj.fecha, 'America/Lima', 'yyyy-MM-dd');
+      }
+      if (obj.hora instanceof Date) {
+        obj.hora = Utilities.formatDate(obj.hora, 'America/Lima', 'HH:mm:ss');
+      }
+      return obj;
+    });
+
+  result = filtrarPorRango_(result, data);
+  if (data && data.evento) {
+    result = result.filter(function(r) { return r.evento === data.evento; });
+  }
+  return { success: true, data: result };
+}
+
+function getJustificaciones(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('justificaciones');
+  if (!sheet) return { success: true, data: [] };
+
+  var rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return { success: true, data: [] };
+
+  var headers = rows[0];
+  var result = rows.slice(1)
+    .filter(function(r) { return r[0] !== ''; })
+    .map(function(r) {
+      var obj = rowToObject(headers, r);
+      if (obj.fecha instanceof Date) {
+        obj.fecha = Utilities.formatDate(obj.fecha, 'America/Lima', 'yyyy-MM-dd');
+      }
+      return obj;
+    });
+
+  return { success: true, data: filtrarPorRango_(result, data) };
+}
+
+// ============================================================
+// FIN MODULO ASISTENCIA V2
 // ============================================================
 
 // ============================================================

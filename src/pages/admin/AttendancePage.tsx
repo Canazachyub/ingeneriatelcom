@@ -1,208 +1,239 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  FaSearch,
   FaSpinner,
   FaCalendarAlt,
   FaClock,
-  FaUserCheck,
-  FaUserTimes,
   FaMapMarkerAlt,
   FaDownload,
-  FaEye,
   FaTimes,
-  FaChevronLeft,
-  FaChevronRight,
+  FaCamera,
+  FaFileAlt,
+  FaExternalLinkAlt,
+  FaFilter,
+  FaTable,
+  FaChartBar,
+  FaCheckCircle,
+  FaExclamationTriangle,
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
+import {
+  TRABAJADORES,
+  EVENTOS,
+  EVENTO_LABELS,
+  RegistroAsistencia,
+  Justificacion,
+} from '../../data/trabajadores'
 
-interface AttendanceRecord {
-  id: string
-  employeeId: string
-  employeeName: string
-  employeeDni: string
-  date: string
-  checkIn: string
-  checkOut: string
-  checkInLat?: number
-  checkInLng?: number
-  checkOutLat?: number
-  checkOutLng?: number
-  status: string
-  hoursWorked?: number
+type Tab = 'registros' | 'informe' | 'justificaciones'
+
+const TOLERANCIA_MIN = 10
+
+// ── Helpers ──────────────────────────────────────────────────
+
+const toLocalISO = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+const inicioSemana = (d: Date) => {
+  const x = new Date(d)
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7))
+  return x
 }
 
-interface AttendanceSummary {
-  fecha: string
-  totalEmpleados: number
-  presentes: number
-  registros: Array<{
-    employeeName: string
-    checkIn: string
-    checkOut: string
-  }>
+const driveId = (url?: string): string => {
+  if (!url) return ''
+  const m = url.match(/\/d\/([^/]+)/)
+  return m ? m[1] : ''
 }
+
+const driveThumb = (url?: string): string => {
+  const id = driveId(url)
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w400` : ''
+}
+
+const mapsLink = (lat?: string | number, lng?: string | number) =>
+  lat && lng ? `https://www.google.com/maps?q=${lat},${lng}` : ''
+
+const horaAMinutos = (hora: string): number => {
+  const [h, m] = hora.split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+
+// Puntualidad solo aplica a ingresos; tolerancia de 10 min
+const esTarde = (evento: string, hora: string): boolean => {
+  const cfg = EVENTOS.find((e) => e.key === evento)
+  if (!cfg || cfg.tipo !== 'ingreso' || !hora) return false
+  return horaAMinutos(hora) > cfg.horaMinutos + TOLERANCIA_MIN
+}
+
+const descargarCSV = (nombre: string, filas: string[][]) => {
+  const csv = filas.map((f) => f.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = nombre
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+// ── Página ───────────────────────────────────────────────────
 
 export default function AttendancePage() {
-  const [records, setRecords] = useState<AttendanceRecord[]>([])
-  const [summary, setSummary] = useState<AttendanceSummary | null>(null)
+  const hoy = new Date()
+  const [tab, setTab] = useState<Tab>('registros')
+  const [registros, setRegistros] = useState<RegistroAsistencia[]>([])
+  const [justificaciones, setJustificaciones] = useState<Justificacion[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
-  const [showLocationModal, setShowLocationModal] = useState(false)
-  const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null)
 
-  useEffect(() => {
-    loadData()
-  }, [selectedDate])
+  // Filtros
+  const [filtroDni, setFiltroDni] = useState('')
+  const [desde, setDesde] = useState(toLocalISO(inicioSemana(hoy)))
+  const [hasta, setHasta] = useState(toLocalISO(hoy))
+  const [filtroEvento, setFiltroEvento] = useState('')
+
+  // Modal foto
+  const [fotoModal, setFotoModal] = useState<RegistroAsistencia | null>(null)
 
   const loadData = async () => {
     setIsLoading(true)
-
-    // Cargar resumen de hoy y registros en paralelo
-    const [summaryResult, recordsResult] = await Promise.all([
-      api.getAttendanceToday(),
-      api.getAttendances({ fecha: selectedDate })
+    const filtros = {
+      dni: filtroDni || undefined,
+      desde: desde || undefined,
+      hasta: hasta || undefined,
+      evento: filtroEvento || undefined,
+    }
+    const [asisRes, justRes] = await Promise.all([
+      api.getAsistenciasV2(filtros),
+      api.getJustificaciones({ dni: filtroDni || undefined, desde: desde || undefined, hasta: hasta || undefined }),
     ])
-
+    if (asisRes.success && asisRes.data) {
+      setRegistros(asisRes.data as unknown as RegistroAsistencia[])
+    } else {
+      setRegistros([])
+    }
+    if (justRes.success && justRes.data) {
+      setJustificaciones(justRes.data as unknown as Justificacion[])
+    } else {
+      setJustificaciones([])
+    }
     setIsLoading(false)
-
-    if (summaryResult.success && summaryResult.data) {
-      setSummary(summaryResult.data)
-    } else {
-      // Datos de ejemplo
-      setSummary({
-        fecha: selectedDate,
-        totalEmpleados: 15,
-        presentes: 12,
-        registros: []
-      })
-    }
-
-    if (recordsResult.success && recordsResult.data) {
-      setRecords(recordsResult.data)
-    } else {
-      // Datos de ejemplo para demo
-      setRecords([
-        {
-          id: '1',
-          employeeId: 'emp1',
-          employeeName: 'Juan Perez',
-          employeeDni: '12345678',
-          date: selectedDate,
-          checkIn: '08:05:23',
-          checkOut: '17:30:45',
-          checkInLat: -18.0146,
-          checkInLng: -70.2536,
-          checkOutLat: -18.0146,
-          checkOutLng: -70.2536,
-          status: 'completed',
-          hoursWorked: 9.42
-        },
-        {
-          id: '2',
-          employeeId: 'emp2',
-          employeeName: 'Maria Garcia',
-          employeeDni: '23456789',
-          date: selectedDate,
-          checkIn: '07:58:12',
-          checkOut: '18:15:30',
-          checkInLat: -15.8402,
-          checkInLng: -70.0219,
-          status: 'completed',
-          hoursWorked: 10.29
-        },
-        {
-          id: '3',
-          employeeId: 'emp3',
-          employeeName: 'Carlos Lopez',
-          employeeDni: '34567890',
-          date: selectedDate,
-          checkIn: '08:45:00',
-          checkOut: '',
-          checkInLat: -16.4090,
-          checkInLng: -71.5375,
-          status: 'in_progress',
-          hoursWorked: 0
-        },
-      ])
-    }
   }
 
-  const filteredRecords = records.filter((record) =>
-    record.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    record.employeeDni.includes(searchTerm)
+  useEffect(() => {
+    loadData()
+  }, [filtroDni, desde, hasta, filtroEvento])
+
+  // Rangos rápidos
+  const setRangoSemana = () => {
+    setDesde(toLocalISO(inicioSemana(new Date())))
+    setHasta(toLocalISO(new Date()))
+  }
+  const setRangoSemanaPasada = () => {
+    const ini = inicioSemana(new Date())
+    ini.setDate(ini.getDate() - 7)
+    const fin = new Date(ini)
+    fin.setDate(fin.getDate() + 6)
+    setDesde(toLocalISO(ini))
+    setHasta(toLocalISO(fin))
+  }
+  const setRangoMes = () => {
+    const d = new Date()
+    setDesde(toLocalISO(new Date(d.getFullYear(), d.getMonth(), 1)))
+    setHasta(toLocalISO(d))
+  }
+
+  const registrosOrdenados = useMemo(
+    () =>
+      [...registros].sort((a, b) =>
+        `${b.fecha} ${b.hora}`.localeCompare(`${a.fecha} ${a.hora}`)
+      ),
+    [registros]
   )
 
-  const changeDate = (days: number) => {
-    const date = new Date(selectedDate)
-    date.setDate(date.getDate() + days)
-    setSelectedDate(date.toISOString().split('T')[0])
-  }
-
-  const formatTime = (time: string) => {
-    if (!time) return '-'
-    return time.substring(0, 5)
-  }
-
-  const formatHours = (hours?: number) => {
-    if (!hours || hours === 0) return '-'
-    const h = Math.floor(hours)
-    const m = Math.round((hours - h) * 60)
-    return `${h}h ${m}m`
-  }
-
-  const getStatusBadge = (record: AttendanceRecord) => {
-    if (!record.checkIn) {
-      return (
-        <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400">
-          Ausente
-        </span>
-      )
+  // ── Informe: resumen por trabajador ────────────────────────
+  const informe = useMemo(() => {
+    // fechas del rango (máx 62 días para no desbordar)
+    const fechas: string[] = []
+    const d0 = new Date(desde + 'T00:00:00')
+    const d1 = new Date(hasta + 'T00:00:00')
+    for (let d = new Date(d0); d <= d1 && fechas.length < 62; d.setDate(d.getDate() + 1)) {
+      fechas.push(toLocalISO(d))
     }
-    if (!record.checkOut) {
-      return (
-        <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400">
-          Trabajando
-        </span>
-      )
+
+    // index: dni → fecha → evento → registro
+    const idx: Record<string, Record<string, Record<string, RegistroAsistencia>>> = {}
+    for (const r of registros) {
+      const dni = String(r.dni)
+      if (!idx[dni]) idx[dni] = {}
+      if (!idx[dni][r.fecha]) idx[dni][r.fecha] = {}
+      idx[dni][r.fecha][r.evento] = r
     }
-    return (
-      <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400">
-        Completado
-      </span>
-    )
+
+    const hoyISO = toLocalISO(new Date())
+    const filas = TRABAJADORES
+      .filter((t) => !filtroDni || t.dni === filtroDni)
+      .map((t) => {
+        const porFecha = idx[t.dni] || {}
+        let diasAsistidos = 0
+        let tardanzas = 0
+        let faltasLV = 0
+        for (const f of fechas) {
+          const evs = porFecha[f]
+          if (evs && Object.keys(evs).length > 0) {
+            diasAsistidos++
+            for (const [ev, reg] of Object.entries(evs)) {
+              if (esTarde(ev, String(reg.hora))) tardanzas++
+            }
+          } else {
+            const dow = new Date(f + 'T00:00:00').getDay()
+            // Falta solo L-V y solo días ya pasados o hoy
+            if (dow >= 1 && dow <= 5 && f <= hoyISO) faltasLV++
+          }
+        }
+        const numJust = justificaciones.filter((j) => String(j.dni) === t.dni).length
+        return { trabajador: t, porFecha, diasAsistidos, tardanzas, faltasLV, numJust }
+      })
+
+    return { fechas, filas }
+  }, [registros, justificaciones, desde, hasta, filtroDni])
+
+  // ── Exportar CSV ───────────────────────────────────────────
+  const exportarRegistros = () => {
+    const filas: string[][] = [
+      ['DNI', 'Nombre', 'Cargo', 'Evento', 'Fecha', 'Hora', 'Puntualidad', 'GPS Lat', 'GPS Lng', 'Precisión (m)', 'Foto'],
+      ...registrosOrdenados.map((r) => [
+        String(r.dni),
+        r.nombre,
+        r.cargo,
+        EVENTO_LABELS[r.evento] || r.evento,
+        r.fecha,
+        String(r.hora),
+        esTarde(r.evento, String(r.hora)) ? 'Tarde' : 'Puntual',
+        String(r.gps_lat ?? ''),
+        String(r.gps_lng ?? ''),
+        String(r.gps_accuracy ?? ''),
+        r.foto_url || '',
+      ]),
+    ]
+    descargarCSV(`asistencias_${desde}_a_${hasta}.csv`, filas)
   }
 
-  const openLocationModal = (record: AttendanceRecord) => {
-    setSelectedRecord(record)
-    setShowLocationModal(true)
+  const exportarInforme = () => {
+    const filas: string[][] = [
+      ['DNI', 'Nombre', 'Cargo', 'Días asistidos', 'Tardanzas', 'Faltas (L-V)', 'Justificaciones'],
+      ...informe.filas.map((f) => [
+        f.trabajador.dni,
+        f.trabajador.nombre,
+        f.trabajador.cargo,
+        String(f.diasAsistidos),
+        String(f.tardanzas),
+        String(f.faltasLV),
+        String(f.numJust),
+      ]),
+    ]
+    descargarCSV(`informe_asistencia_${desde}_a_${hasta}.csv`, filas)
   }
-
-  const exportToCSV = () => {
-    const headers = ['Empleado', 'DNI', 'Fecha', 'Entrada', 'Salida', 'Horas Trabajadas', 'Estado']
-    const rows = filteredRecords.map(r => [
-      r.employeeName,
-      r.employeeDni,
-      r.date,
-      r.checkIn || '-',
-      r.checkOut || '-',
-      r.hoursWorked?.toFixed(2) || '-',
-      !r.checkIn ? 'Ausente' : !r.checkOut ? 'Trabajando' : 'Completado'
-    ])
-
-    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `asistencias-${selectedDate}.csv`
-    link.click()
-  }
-
-  const attendancePercentage = summary
-    ? Math.round((summary.presentes / summary.totalEmpleados) * 100) || 0
-    : 0
 
   return (
     <AdminLayout>
@@ -210,301 +241,437 @@ export default function AttendancePage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-display font-bold text-white">Asistencias</h1>
-            <p className="text-primary-400">Control de asistencia del personal</p>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={exportToCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-800 border border-primary-700 text-primary-200 rounded-lg hover:bg-primary-700 hover:text-white transition-colors"
-            >
-              <FaDownload />
-              Exportar CSV
-            </button>
-            <a
-              href="/asistencia"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-primary flex items-center gap-2"
-            >
-              <FaClock />
-              Abrir Kiosko
-            </a>
-          </div>
-        </div>
-
-        {/* Date Navigation & Summary Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          {/* Date Selector */}
-          <div className="lg:col-span-2 bg-primary-900/50 backdrop-blur-sm rounded-xl border border-primary-800 p-4">
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => changeDate(-1)}
-                className="p-2 text-primary-400 hover:text-white hover:bg-primary-800 rounded-lg transition-colors"
-              >
-                <FaChevronLeft />
-              </button>
-              <div className="flex items-center gap-3">
-                <FaCalendarAlt className="text-accent-electric" />
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="bg-transparent text-white text-lg font-medium focus:outline-none cursor-pointer"
-                />
-              </div>
-              <button
-                onClick={() => changeDate(1)}
-                className="p-2 text-primary-400 hover:text-white hover:bg-primary-800 rounded-lg transition-colors"
-                disabled={selectedDate >= new Date().toISOString().split('T')[0]}
-              >
-                <FaChevronRight />
-              </button>
-            </div>
-            <p className="text-center text-primary-400 text-sm mt-2">
-              {new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-PE', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric'
-              })}
+            <h1 className="text-2xl font-bold text-white">Asistencias</h1>
+            <p className="text-gray-400 text-sm mt-0.5">
+              Registros con foto y GPS · Informes semanales y mensuales
             </p>
           </div>
-
-          {/* Present Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-gradient-to-br from-green-500/20 to-emerald-600/10 backdrop-blur-sm rounded-xl border border-green-500/30 p-4"
+          <button
+            onClick={tab === 'informe' ? exportarInforme : exportarRegistros}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-accent-electric/20 border border-accent-electric/40 text-accent-electric rounded-lg text-sm font-medium hover:bg-accent-electric/30 transition-colors self-start"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
-                <FaUserCheck className="text-xl text-green-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-white">{summary?.presentes || 0}</p>
-                <p className="text-sm text-green-400">Presentes</p>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Absent Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-gradient-to-br from-red-500/20 to-rose-600/10 backdrop-blur-sm rounded-xl border border-red-500/30 p-4"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center">
-                <FaUserTimes className="text-xl text-red-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-white">
-                  {(summary?.totalEmpleados || 0) - (summary?.presentes || 0)}
-                </p>
-                <p className="text-sm text-red-400">Ausentes</p>
-              </div>
-            </div>
-          </motion.div>
+            <FaDownload className="text-xs" />
+            Exportar CSV
+          </button>
         </div>
 
-        {/* Progress Bar */}
-        <div className="bg-primary-900/50 backdrop-blur-sm rounded-xl border border-primary-800 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-primary-300 text-sm">Asistencia del dia</span>
-            <span className="text-white font-semibold">{attendancePercentage}%</span>
-          </div>
-          <div className="h-3 bg-primary-800 rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${attendancePercentage}%` }}
-              transition={{ duration: 1 }}
-              className="h-full bg-gradient-to-r from-accent-electric to-blue-500 rounded-full"
+        {/* Tabs */}
+        <div className="flex items-center gap-1 bg-primary-900 border border-primary-800 rounded-xl p-1 w-fit">
+          {([
+            { key: 'registros', label: 'Registros', icon: FaTable },
+            { key: 'informe', label: 'Informe', icon: FaChartBar },
+            { key: 'justificaciones', label: `Justificaciones (${justificaciones.length})`, icon: FaFileAlt },
+          ] as { key: Tab; label: string; icon: typeof FaTable }[]).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                tab === t.key
+                  ? 'bg-accent-electric/20 text-accent-electric'
+                  : 'text-primary-300 hover:text-white'
+              }`}
+            >
+              <t.icon className="text-xs" />
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Filtros */}
+        <div className="flex flex-wrap items-center gap-3">
+          <FaFilter className="text-primary-500 text-sm" />
+          <select
+            value={filtroDni}
+            onChange={(e) => setFiltroDni(e.target.value)}
+            className="px-3 py-2 bg-primary-900 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric transition-colors"
+          >
+            <option value="">Todos los trabajadores</option>
+            {TRABAJADORES.map((t) => (
+              <option key={t.dni} value={t.dni}>{t.nombre}</option>
+            ))}
+          </select>
+          {tab === 'registros' && (
+            <select
+              value={filtroEvento}
+              onChange={(e) => setFiltroEvento(e.target.value)}
+              className="px-3 py-2 bg-primary-900 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric transition-colors"
+            >
+              <option value="">Todos los eventos</option>
+              {EVENTOS.map((ev) => (
+                <option key={ev.key} value={ev.key}>{ev.label}</option>
+              ))}
+            </select>
+          )}
+          <div className="flex items-center gap-2">
+            <FaCalendarAlt className="text-primary-500 text-xs" />
+            <input
+              type="date"
+              value={desde}
+              onChange={(e) => setDesde(e.target.value)}
+              className="px-3 py-2 bg-primary-900 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric transition-colors"
+            />
+            <span className="text-primary-500 text-xs">a</span>
+            <input
+              type="date"
+              value={hasta}
+              onChange={(e) => setHasta(e.target.value)}
+              className="px-3 py-2 bg-primary-900 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric transition-colors"
             />
           </div>
-          <p className="text-primary-500 text-xs mt-2">
-            {summary?.presentes || 0} de {summary?.totalEmpleados || 0} empleados han marcado asistencia
-          </p>
-        </div>
-
-        {/* Search */}
-        <div className="relative">
-          <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-primary-500" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por nombre o DNI..."
-            className="w-full pl-10 pr-4 py-3 bg-primary-800 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric"
-          />
-        </div>
-
-        {/* Table */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <FaSpinner className="animate-spin text-4xl text-accent-electric mx-auto mb-4" />
-              <p className="text-primary-400">Cargando asistencias...</p>
-            </div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={setRangoSemana} className="px-3 py-1.5 rounded-lg text-xs bg-primary-900 border border-primary-800 text-primary-300 hover:text-white hover:border-accent-electric/50 transition-colors">
+              Esta semana
+            </button>
+            <button onClick={setRangoSemanaPasada} className="px-3 py-1.5 rounded-lg text-xs bg-primary-900 border border-primary-800 text-primary-300 hover:text-white hover:border-accent-electric/50 transition-colors">
+              Semana pasada
+            </button>
+            <button onClick={setRangoMes} className="px-3 py-1.5 rounded-lg text-xs bg-primary-900 border border-primary-800 text-primary-300 hover:text-white hover:border-accent-electric/50 transition-colors">
+              Este mes
+            </button>
           </div>
-        ) : (
-          <div className="bg-primary-900/50 backdrop-blur-sm rounded-xl border border-primary-800 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-primary-800">
-                    <th className="px-6 py-4 text-left text-sm font-medium text-primary-300">Empleado</th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-primary-300">DNI</th>
-                    <th className="px-6 py-4 text-center text-sm font-medium text-primary-300">Entrada</th>
-                    <th className="px-6 py-4 text-center text-sm font-medium text-primary-300">Salida</th>
-                    <th className="px-6 py-4 text-center text-sm font-medium text-primary-300">Horas</th>
-                    <th className="px-6 py-4 text-center text-sm font-medium text-primary-300">Estado</th>
-                    <th className="px-6 py-4 text-center text-sm font-medium text-primary-300">Ubicacion</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRecords.map((record, index) => (
-                    <motion.tr
-                      key={record.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="border-b border-primary-800/50 hover:bg-primary-800/30"
-                    >
-                      <td className="px-6 py-4">
-                        <p className="text-white font-medium">{record.employeeName}</p>
-                      </td>
-                      <td className="px-6 py-4 text-primary-300">{record.employeeDni}</td>
-                      <td className="px-6 py-4 text-center">
-                        <span className={`font-mono ${record.checkIn ? 'text-green-400' : 'text-primary-500'}`}>
-                          {formatTime(record.checkIn)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className={`font-mono ${record.checkOut ? 'text-blue-400' : 'text-primary-500'}`}>
-                          {formatTime(record.checkOut)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="text-white font-medium">
-                          {formatHours(record.hoursWorked)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {getStatusBadge(record)}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {(record.checkInLat || record.checkOutLat) && (
-                          <button
-                            onClick={() => openLocationModal(record)}
-                            className="p-2 text-primary-400 hover:text-accent-electric hover:bg-primary-800 rounded-lg transition-colors"
-                            title="Ver ubicacion"
-                          >
-                            <FaMapMarkerAlt />
-                          </button>
-                        )}
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {filteredRecords.length === 0 && (
-              <div className="text-center py-12 text-primary-400">
-                <FaClock className="text-4xl mx-auto mb-4 opacity-50" />
-                <p>No se encontraron registros de asistencia</p>
-              </div>
-            )}
+        </div>
+
+        {/* Loading */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-20">
+            <FaSpinner className="animate-spin text-3xl text-accent-electric" />
           </div>
         )}
 
-        {/* Location Modal */}
+        {/* ── TAB: REGISTROS ── */}
+        {!isLoading && tab === 'registros' && (
+          registrosOrdenados.length === 0 ? (
+            <div className="text-center py-20">
+              <FaClock className="text-4xl text-primary-600 mx-auto mb-3" />
+              <p className="text-gray-400 font-medium">Sin registros en el rango seleccionado</p>
+            </div>
+          ) : (
+            <div className="bg-primary-900/60 border border-primary-800 rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-primary-800 bg-primary-950/60">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Foto</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Trabajador</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Evento</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider hidden sm:table-cell">Fecha</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Hora</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Puntualidad</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider hidden md:table-cell">GPS</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-primary-800/60">
+                    {registrosOrdenados.map((r) => {
+                      const cfg = EVENTOS.find((e) => e.key === r.evento)
+                      const tarde = esTarde(r.evento, String(r.hora))
+                      const gps = mapsLink(r.gps_lat, r.gps_lng)
+                      return (
+                        <tr key={r.id} className="hover:bg-primary-800/30 transition-colors">
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => setFotoModal(r)}
+                              className="w-14 h-11 rounded-lg overflow-hidden bg-primary-800 border border-primary-700 hover:ring-2 hover:ring-accent-electric transition-all relative group"
+                            >
+                              {r.foto_url ? (
+                                <img
+                                  src={driveThumb(r.foto_url)}
+                                  alt="Foto asistencia"
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                />
+                              ) : (
+                                <FaCamera className="text-primary-600 mx-auto" />
+                              )}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-white leading-tight">{r.nombre}</div>
+                            <div className="text-gray-500 text-xs">{r.cargo}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                              cfg?.tipo === 'ingreso'
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                                : 'bg-rose-500/15 text-rose-400 border border-rose-500/25'
+                            }`}>
+                              {EVENTO_LABELS[r.evento] || r.evento}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center text-gray-300 hidden sm:table-cell">{r.fecha}</td>
+                          <td className="px-4 py-3 text-center font-mono text-white">{String(r.hora).slice(0, 5)}</td>
+                          <td className="px-4 py-3 text-center">
+                            {cfg?.tipo === 'ingreso' ? (
+                              tarde ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-amber-400 font-medium">
+                                  <FaExclamationTriangle className="text-[10px]" /> Tarde
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs text-emerald-400 font-medium">
+                                  <FaCheckCircle className="text-[10px]" /> Puntual
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-gray-600 text-xs">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center hidden md:table-cell">
+                            {gps ? (
+                              <a
+                                href={gps}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs text-accent-electric hover:underline"
+                              >
+                                <FaMapMarkerAlt className="text-[10px]" />
+                                Ver mapa
+                              </a>
+                            ) : (
+                              <span className="text-gray-600 text-xs">Sin GPS</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="px-4 py-3 border-t border-primary-800 text-xs text-gray-500">
+                {registrosOrdenados.length} registro{registrosOrdenados.length !== 1 ? 's' : ''} · {desde} a {hasta}
+              </div>
+            </div>
+          )
+        )}
+
+        {/* ── TAB: INFORME ── */}
+        {!isLoading && tab === 'informe' && (
+          <div className="space-y-4">
+            {/* Resumen por trabajador */}
+            <div className="bg-primary-900/60 border border-primary-800 rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-primary-800 bg-primary-950/60">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Trabajador</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Días asistidos</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Tardanzas</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Faltas (L-V)</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Justif.</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-primary-800/60">
+                    {informe.filas.map((f) => (
+                      <tr key={f.trabajador.dni} className="hover:bg-primary-800/30 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-white leading-tight">{f.trabajador.nombre}</div>
+                          <div className="text-gray-500 text-xs">{f.trabajador.cargo}</div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="text-emerald-400 font-bold">{f.diasAsistidos}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={f.tardanzas > 0 ? 'text-amber-400 font-bold' : 'text-gray-600'}>
+                            {f.tardanzas}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={f.faltasLV > 0 ? 'text-rose-400 font-bold' : 'text-gray-600'}>
+                            {f.faltasLV}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={f.numJust > 0 ? 'text-accent-electric font-bold' : 'text-gray-600'}>
+                            {f.numJust}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Matriz día × eventos */}
+            <div className="bg-primary-900/60 border border-primary-800 rounded-2xl p-4">
+              <h3 className="text-sm font-semibold text-white mb-1">Detalle por día</h3>
+              <p className="text-xs text-gray-500 mb-4">
+                Cada celda muestra los 4 eventos: <span className="text-emerald-400">●</span> puntual ·{' '}
+                <span className="text-amber-400">●</span> tarde · <span className="text-gray-600">●</span> sin registro
+              </p>
+              <div className="overflow-x-auto">
+                <table className="text-xs">
+                  <thead>
+                    <tr>
+                      <th className="text-left pr-4 pb-2 text-gray-400 font-medium sticky left-0 bg-primary-900/95 min-w-[160px]">Trabajador</th>
+                      {informe.fechas.map((f) => {
+                        const d = new Date(f + 'T00:00:00')
+                        const dow = d.getDay()
+                        const finde = dow === 0 || dow === 6
+                        return (
+                          <th key={f} className={`px-1.5 pb-2 font-mono font-normal text-center ${finde ? 'text-primary-600' : 'text-gray-400'}`}>
+                            {f.slice(8)}/{f.slice(5, 7)}
+                          </th>
+                        )
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {informe.filas.map((f) => (
+                      <tr key={f.trabajador.dni} className="border-t border-primary-800/40">
+                        <td className="pr-4 py-2 text-gray-300 sticky left-0 bg-primary-900/95 whitespace-nowrap">
+                          {f.trabajador.nombre.split(',')[0]}
+                        </td>
+                        {informe.fechas.map((fecha) => {
+                          const evs = f.porFecha[fecha] || {}
+                          return (
+                            <td key={fecha} className="px-1.5 py-2 text-center">
+                              <div className="flex gap-0.5 justify-center">
+                                {EVENTOS.map((ev) => {
+                                  const reg = evs[ev.key]
+                                  const color = !reg
+                                    ? 'bg-gray-700'
+                                    : esTarde(ev.key, String(reg.hora))
+                                    ? 'bg-amber-400'
+                                    : 'bg-emerald-400'
+                                  return (
+                                    <span
+                                      key={ev.key}
+                                      title={`${ev.label}: ${reg ? String(reg.hora).slice(0, 5) : 'sin registro'}`}
+                                      className={`w-2 h-2 rounded-full ${color}`}
+                                    />
+                                  )
+                                })}
+                              </div>
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB: JUSTIFICACIONES ── */}
+        {!isLoading && tab === 'justificaciones' && (
+          justificaciones.length === 0 ? (
+            <div className="text-center py-20">
+              <FaFileAlt className="text-4xl text-primary-600 mx-auto mb-3" />
+              <p className="text-gray-400 font-medium">Sin justificaciones en el rango seleccionado</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[...justificaciones]
+                .sort((a, b) => String(b.timestamp || b.fecha).localeCompare(String(a.timestamp || a.fecha)))
+                .map((j) => (
+                  <div key={j.id} className="bg-primary-900/60 border border-primary-800 rounded-2xl p-4">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div>
+                        <p className="font-medium text-white leading-tight">{j.nombre}</p>
+                        <p className="text-gray-500 text-xs">{j.cargo} · DNI {j.dni}</p>
+                      </div>
+                      <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-amber-400/15 text-amber-300 border border-amber-400/25 whitespace-nowrap">
+                        {j.motivo}
+                      </span>
+                    </div>
+                    {j.descripcion && (
+                      <p className="text-sm text-gray-300 mb-3 leading-snug">{j.descripcion}</p>
+                    )}
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">
+                        <FaCalendarAlt className="inline mr-1" />
+                        {j.fecha}
+                      </span>
+                      {j.archivo_url ? (
+                        <a
+                          href={j.archivo_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-accent-electric hover:underline"
+                        >
+                          <FaExternalLinkAlt className="text-[10px]" />
+                          Ver evidencia
+                        </a>
+                      ) : (
+                        <span className="text-gray-600">Sin evidencia adjunta</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )
+        )}
+
+        {/* ── Modal foto ── */}
         <AnimatePresence>
-          {showLocationModal && selectedRecord && (
+          {fotoModal && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-              onClick={() => setShowLocationModal(false)}
+              onClick={() => setFotoModal(null)}
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-primary-900 rounded-xl border border-primary-800 w-full max-w-lg"
                 onClick={(e) => e.stopPropagation()}
+                className="bg-primary-900 border border-primary-700 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl"
               >
-                <div className="flex items-center justify-between p-6 border-b border-primary-800">
-                  <h2 className="text-xl font-display font-semibold text-white flex items-center gap-2">
-                    <FaMapMarkerAlt className="text-accent-electric" />
-                    Ubicacion de Marcado
-                  </h2>
+                <div className="flex items-center justify-between px-5 py-3 border-b border-primary-800">
+                  <div>
+                    <p className="font-semibold text-white text-sm">{fotoModal.nombre}</p>
+                    <p className="text-xs text-gray-500">
+                      {EVENTO_LABELS[fotoModal.evento] || fotoModal.evento} · {fotoModal.fecha} {String(fotoModal.hora).slice(0, 5)}
+                    </p>
+                  </div>
                   <button
-                    onClick={() => setShowLocationModal(false)}
-                    className="text-primary-400 hover:text-white"
+                    onClick={() => setFotoModal(null)}
+                    className="p-2 text-gray-400 hover:text-white hover:bg-primary-800 rounded-lg transition-colors"
                   >
                     <FaTimes />
                   </button>
                 </div>
-                <div className="p-6 space-y-6">
-                  <div className="bg-primary-800/50 rounded-lg p-4">
-                    <p className="text-white font-medium">{selectedRecord.employeeName}</p>
-                    <p className="text-primary-400 text-sm">DNI: {selectedRecord.employeeDni}</p>
-                    <p className="text-primary-400 text-sm">Fecha: {selectedRecord.date}</p>
-                  </div>
-
-                  {selectedRecord.checkInLat && (
-                    <div>
-                      <p className="text-sm text-primary-300 mb-2 flex items-center gap-2">
-                        <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-                        Entrada: {formatTime(selectedRecord.checkIn)}
-                      </p>
-                      <div className="bg-primary-800 rounded-lg p-4">
-                        <p className="text-white font-mono text-sm">
-                          Lat: {selectedRecord.checkInLat?.toFixed(6)}
-                        </p>
-                        <p className="text-white font-mono text-sm">
-                          Lng: {selectedRecord.checkInLng?.toFixed(6)}
-                        </p>
-                        <a
-                          href={`https://www.google.com/maps?q=${selectedRecord.checkInLat},${selectedRecord.checkInLng}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-2 inline-flex items-center gap-1 text-accent-electric text-sm hover:underline"
-                        >
-                          <FaEye className="text-xs" />
-                          Ver en Google Maps
-                        </a>
-                      </div>
-                    </div>
+                <div className="bg-black aspect-[4/3] flex items-center justify-center">
+                  {fotoModal.foto_url ? (
+                    <img
+                      src={driveThumb(fotoModal.foto_url).replace('sz=w400', 'sz=w800')}
+                      alt="Foto de asistencia"
+                      className="w-full h-full object-contain"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                    />
+                  ) : (
+                    <FaCamera className="text-4xl text-primary-700" />
                   )}
-
-                  {selectedRecord.checkOutLat && (
-                    <div>
-                      <p className="text-sm text-primary-300 mb-2 flex items-center gap-2">
-                        <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
-                        Salida: {formatTime(selectedRecord.checkOut)}
-                      </p>
-                      <div className="bg-primary-800 rounded-lg p-4">
-                        <p className="text-white font-mono text-sm">
-                          Lat: {selectedRecord.checkOutLat?.toFixed(6)}
-                        </p>
-                        <p className="text-white font-mono text-sm">
-                          Lng: {selectedRecord.checkOutLng?.toFixed(6)}
-                        </p>
-                        <a
-                          href={`https://www.google.com/maps?q=${selectedRecord.checkOutLat},${selectedRecord.checkOutLng}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-2 inline-flex items-center gap-1 text-accent-electric text-sm hover:underline"
-                        >
-                          <FaEye className="text-xs" />
-                          Ver en Google Maps
-                        </a>
-                      </div>
-                    </div>
+                </div>
+                <div className="px-5 py-3 flex items-center justify-between text-xs">
+                  {mapsLink(fotoModal.gps_lat, fotoModal.gps_lng) ? (
+                    <a
+                      href={mapsLink(fotoModal.gps_lat, fotoModal.gps_lng)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-accent-electric hover:underline"
+                    >
+                      <FaMapMarkerAlt />
+                      {Number(fotoModal.gps_lat).toFixed(5)}, {Number(fotoModal.gps_lng).toFixed(5)}
+                      {fotoModal.gps_accuracy ? ` · ±${Math.round(Number(fotoModal.gps_accuracy))}m` : ''}
+                    </a>
+                  ) : (
+                    <span className="text-gray-600">Sin datos GPS</span>
+                  )}
+                  {fotoModal.foto_url && (
+                    <a
+                      href={fotoModal.foto_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-gray-400 hover:text-white transition-colors"
+                    >
+                      <FaExternalLinkAlt className="text-[10px]" />
+                      Abrir en Drive
+                    </a>
                   )}
                 </div>
               </motion.div>

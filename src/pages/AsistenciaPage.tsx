@@ -1,10 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FaMapMarkerAlt,
   FaSpinner,
-  FaSignInAlt,
-  FaSignOutAlt,
   FaCheckCircle,
   FaTimesCircle,
   FaExclamationTriangle,
@@ -13,23 +11,59 @@ import {
   FaRedo,
   FaWifi,
   FaArrowLeft,
+  FaCamera,
+  FaSun,
+  FaMoon,
+  FaFileAlt,
+  FaPaperclip,
+  FaSyncAlt,
 } from 'react-icons/fa'
 import { Link } from 'react-router-dom'
 import { api } from '../api/appScriptApi'
 import { useGeolocation } from '../hooks/useGeolocation'
-import { VerificarEmpleadoResponse } from '../types/postulacion.types'
+import {
+  buscarTrabajador,
+  TrabajadorFijo,
+  EVENTOS,
+  EventoAsistencia,
+  EVENTO_LABELS,
+  sugerirEvento,
+} from '../data/trabajadores'
 
-type ViewState = 'input' | 'confirm' | 'success' | 'error'
+type ViewState = 'input' | 'menu' | 'camara' | 'justificacion' | 'success' | 'error'
+
+const MOTIVOS_JUSTIFICACION = [
+  'Tardanza',
+  'Inasistencia',
+  'Salida anticipada',
+  'Permiso médico',
+  'Comisión de trabajo',
+  'Otro',
+]
 
 export default function AsistenciaPage() {
   const [dni, setDni] = useState('')
   const [viewState, setViewState] = useState<ViewState>('input')
   const [isLoading, setIsLoading] = useState(false)
-  const [empleado, setEmpleado] = useState<VerificarEmpleadoResponse | null>(null)
-  const [tipoRegistro, setTipoRegistro] = useState<'entrada' | 'salida'>('entrada')
+  const [trabajador, setTrabajador] = useState<TrabajadorFijo | null>(null)
+  const [eventoSel, setEventoSel] = useState<EventoAsistencia | null>(null)
   const [mensaje, setMensaje] = useState('')
   const [horaRegistro, setHoraRegistro] = useState('')
-  const [countdown, setCountdown] = useState(5)
+  const [countdown, setCountdown] = useState(6)
+  const [successTipo, setSuccessTipo] = useState<'asistencia' | 'justificacion'>('asistencia')
+
+  // Cámara
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const [camaraOk, setCamaraOk] = useState(false)
+  const [camaraError, setCamaraError] = useState('')
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null)
+
+  // Justificación
+  const [motivo, setMotivo] = useState(MOTIVOS_JUSTIFICACION[0])
+  const [descripcion, setDescripcion] = useState('')
+  const [archivo, setArchivo] = useState<File | null>(null)
 
   const { location, error: geoError, loading: geoLoading, getLocation } = useGeolocation()
 
@@ -37,13 +71,14 @@ export default function AsistenciaPage() {
     getLocation()
   }, [getLocation])
 
+  // Countdown de reinicio en success/error
   useEffect(() => {
     if (viewState === 'success' || viewState === 'error') {
       const timer = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
             handleReset()
-            return 5
+            return 6
           }
           return prev - 1
         })
@@ -52,54 +87,171 @@ export default function AsistenciaPage() {
     }
   }, [viewState])
 
+  // ── Cámara ─────────────────────────────────────────────────
+  const iniciarCamara = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play().catch(() => {})
+      }
+      setCamaraOk(true)
+      setCamaraError('')
+    } catch {
+      setCamaraError('No se pudo acceder a la cámara. Verifica los permisos del navegador.')
+      setCamaraOk(false)
+    }
+  }
+
+  const detenerCamara = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+    setCamaraOk(false)
+  }, [])
+
+  // Reconectar stream si React remonta el <video> al cambiar de vista
+  useEffect(() => {
+    if (viewState !== 'camara') return
+    if (videoRef.current && streamRef.current && !videoRef.current.srcObject) {
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(() => {})
+    }
+  }, [viewState, fotoPreview])
+
+  // Cleanup al desmontar
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+    }
+  }, [])
+
+  const capturarFoto = () => {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas || !camaraOk) return
+    canvas.width = 640
+    canvas.height = 480
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0, 640, 480)
+    setFotoPreview(canvas.toDataURL('image/jpeg', 0.8))
+  }
+
+  // ── Flujo ──────────────────────────────────────────────────
   const handleKeyPress = (key: string) => {
     if (key === 'backspace') {
       setDni((prev) => prev.slice(0, -1))
     } else if (key === 'enter') {
-      if (dni.length === 8) handleVerificarEmpleado()
+      if (dni.length === 8) handleVerificarDni()
     } else if (dni.length < 8) {
       setDni((prev) => prev + key)
     }
   }
 
-  const handleVerificarEmpleado = async () => {
+  const handleVerificarDni = () => {
     if (dni.length !== 8) return
+    const t = buscarTrabajador(dni)
+    if (t) {
+      setTrabajador(t)
+      setEventoSel(sugerirEvento())
+      setViewState('menu')
+    } else {
+      setMensaje('DNI no registrado. Contacta al Coordinador General.')
+      setViewState('error')
+    }
+  }
+
+  const handleSeleccionEvento = (evento: EventoAsistencia) => {
+    setEventoSel(evento)
+    setFotoPreview(null)
+    setViewState('camara')
+    getLocation()
+    iniciarCamara()
+  }
+
+  const handleRegistrar = async () => {
+    if (!trabajador || !eventoSel || !fotoPreview) return
+    if (!location) {
+      setMensaje('Se requiere GPS activo para registrar. Habilita la ubicación.')
+      return
+    }
     setIsLoading(true)
     try {
-      const response = await api.verificarEmpleado(dni)
-
-      if (response.success && response.data) {
-        // Apps Script devuelve: { id, dni, nombre, cargo, foto, asistenciaHoy }
-        const raw = response.data as unknown as {
-          id: string
-          dni: string
-          nombre: string
-          cargo: string
-          asistenciaHoy: { fecha: string; entrada: string | null; salida: string | null } | null
-        }
-        const tieneEntrada = raw.asistenciaHoy?.entrada
-        const tieneSalida = raw.asistenciaHoy?.salida
-        const sugerencia: 'entrada' | 'salida' = tieneEntrada && !tieneSalida ? 'salida' : 'entrada'
-
-        setEmpleado({
-          encontrado: true,
-          empleado: {
-            dni: raw.dni || dni,
-            nombre: raw.nombre || 'Sin nombre',
-            puesto: raw.cargo || 'Sin cargo',
-            activo: true,
-          },
-          sugerencia,
-          ultimoRegistroHoy: tieneEntrada
-            ? { id: '', dni, fecha: raw.asistenciaHoy?.fecha || '',
-                tipo: tieneEntrada && !tieneSalida ? 'entrada' : 'salida',
-                hora: tieneSalida || tieneEntrada || '', lat: 0, lng: 0, accuracy: 0 }
-            : undefined,
-        })
-        setTipoRegistro(sugerencia)
-        setViewState('confirm')
+      const res = await api.registrarAsistenciaFoto({
+        dni: trabajador.dni,
+        nombre: trabajador.nombre,
+        cargo: trabajador.cargo,
+        evento: eventoSel,
+        gps_lat: location.lat,
+        gps_lng: location.lng,
+        gps_accuracy: location.accuracy,
+        fileContent: fotoPreview.split(',')[1],
+        mimeType: 'image/jpeg',
+      })
+      if (res.success && res.data) {
+        detenerCamara()
+        setHoraRegistro(res.data.hora)
+        setSuccessTipo('asistencia')
+        setViewState('success')
       } else {
-        setMensaje(response.error || 'DNI no encontrado en el sistema')
+        setMensaje(res.error || 'Error al registrar asistencia')
+        detenerCamara()
+        setViewState('error')
+      }
+    } catch {
+      setMensaje('Error de conexión. Intenta de nuevo.')
+      detenerCamara()
+      setViewState('error')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleEnviarJustificacion = async () => {
+    if (!trabajador || !motivo) return
+    setIsLoading(true)
+    try {
+      let fileContent: string | undefined
+      let fileName: string | undefined
+      let mimeType: string | undefined
+
+      if (archivo) {
+        if (archivo.size > 5 * 1024 * 1024) {
+          setMensaje('El archivo no debe superar 5 MB')
+          setIsLoading(false)
+          return
+        }
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(archivo)
+        })
+        fileContent = dataUrl.split(',')[1]
+        fileName = `just_${Date.now()}_${archivo.name}`
+        mimeType = archivo.type || 'application/octet-stream'
+      }
+
+      const res = await api.subirJustificacion({
+        dni: trabajador.dni,
+        nombre: trabajador.nombre,
+        cargo: trabajador.cargo,
+        motivo,
+        descripcion,
+        fileContent,
+        fileName,
+        mimeType,
+      })
+      if (res.success) {
+        setSuccessTipo('justificacion')
+        setHoraRegistro(new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }))
+        setViewState('success')
+      } else {
+        setMensaje(res.error || 'Error al enviar justificación')
         setViewState('error')
       }
     } catch {
@@ -110,46 +262,25 @@ export default function AsistenciaPage() {
     }
   }
 
-  const handleMarcarAsistencia = async (tipo: 'entrada' | 'salida') => {
-    if (!location) {
-      setMensaje('Se requiere ubicación para marcar asistencia')
-      setViewState('error')
-      return
-    }
-    setIsLoading(true)
-    try {
-      const response = await api.marcarAsistencia(dni, tipo, location)
-      if (response.success) {
-        setHoraRegistro(new Date().toLocaleTimeString('es-PE'))
-        setTipoRegistro(tipo)
-        setMensaje(`${tipo === 'entrada' ? 'Entrada' : 'Salida'} registrada correctamente`)
-        setViewState('success')
-      } else {
-        setMensaje(response.error || `Error al registrar ${tipo}`)
-        setViewState('error')
-      }
-    } catch {
-      setMensaje('Error al registrar asistencia')
-      setViewState('error')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   const handleReset = useCallback(() => {
+    detenerCamara()
     setDni('')
     setViewState('input')
-    setEmpleado(null)
+    setTrabajador(null)
+    setEventoSel(null)
     setMensaje('')
     setHoraRegistro('')
-    setCountdown(5)
-  }, [])
+    setCountdown(6)
+    setFotoPreview(null)
+    setMotivo(MOTIVOS_JUSTIFICACION[0])
+    setDescripcion('')
+    setArchivo(null)
+  }, [detenerCamara])
+
+  const eventoConfig = EVENTOS.find((e) => e.key === eventoSel)
 
   return (
-    <div
-      className="flex flex-col bg-[#060d1f]"
-      style={{ minHeight: '100dvh' }}
-    >
+    <div className="flex flex-col bg-[#060d1f]" style={{ minHeight: '100dvh' }}>
       {/* Fondo decorativo */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-32 -left-32 w-80 h-80 rounded-full bg-blue-600/10 blur-3xl" />
@@ -175,7 +306,7 @@ export default function AsistenciaPage() {
       </header>
 
       {/* Contenido principal */}
-      <main className="relative z-10 flex-1 flex flex-col px-4 pb-4">
+      <main className="relative z-10 flex-1 flex flex-col px-4 pb-4 max-w-md w-full mx-auto">
         <AnimatePresence mode="wait">
 
           {/* ── Vista: Ingreso de DNI ── */}
@@ -190,7 +321,6 @@ export default function AsistenciaPage() {
             >
               <RelojTiempoReal />
 
-              {/* Display DNI */}
               <div className="mb-5">
                 <p className="text-center text-xs text-primary-400 mb-3 tracking-widest uppercase">
                   Ingresa tu DNI
@@ -221,115 +351,88 @@ export default function AsistenciaPage() {
                 </div>
               </div>
 
-              {/* Teclado */}
               <TecladoNumerico
                 onKeyPress={handleKeyPress}
-                onSubmit={handleVerificarEmpleado}
-                disabled={isLoading || dni.length !== 8}
-                isLoading={isLoading}
+                onSubmit={handleVerificarDni}
+                disabled={dni.length !== 8}
+                isLoading={false}
               />
             </motion.div>
           )}
 
-          {/* ── Vista: Confirmación empleado ── */}
-          {viewState === 'confirm' && empleado?.empleado && (
+          {/* ── Vista: Menú de eventos ── */}
+          {viewState === 'menu' && trabajador && (
             <motion.div
-              key="confirm"
+              key="menu"
               initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
               transition={{ duration: 0.25 }}
               className="flex flex-col flex-1 justify-center"
             >
-              {/* Card empleado */}
-              <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-6 mb-5">
-                <div className="flex items-center gap-4 mb-5">
+              {/* Card trabajador */}
+              <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-5 mb-5">
+                <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/30 to-cyan-500/20 border border-white/10 flex items-center justify-center flex-shrink-0">
                     <FaUser className="text-2xl text-cyan-400" />
                   </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-white leading-tight">
-                      {empleado.empleado.nombre}
+                  <div className="min-w-0">
+                    <h2 className="text-base font-bold text-white leading-tight">
+                      {trabajador.nombre}
                     </h2>
-                    <p className="text-sm text-primary-400">{empleado.empleado.puesto}</p>
-                    {empleado.empleado.departamento && (
-                      <p className="text-xs text-primary-500">{empleado.empleado.departamento}</p>
-                    )}
+                    <p className="text-sm text-cyan-400/90">{trabajador.cargo}</p>
+                    <p className="text-xs text-primary-500 font-mono">DNI {trabajador.dni}</p>
                   </div>
                 </div>
-
-                {empleado.ultimoRegistroHoy && (
-                  <div className="rounded-xl bg-white/5 px-4 py-2.5 text-sm text-center">
-                    <span className="text-primary-400">Último registro: </span>
-                    <span className="text-white font-medium">
-                      {empleado.ultimoRegistroHoy.tipo === 'entrada' ? 'Entrada' : 'Salida'} a las {empleado.ultimoRegistroHoy.hora}
-                    </span>
-                  </div>
-                )}
               </div>
 
-              {/* Botones entrada / salida */}
+              <p className="text-center text-xs text-primary-400 mb-3 tracking-widest uppercase">
+                ¿Qué deseas registrar?
+              </p>
+
+              {/* 4 eventos */}
               <div className="grid grid-cols-2 gap-3 mb-4">
-                <button
-                  onClick={() => handleMarcarAsistencia('entrada')}
-                  disabled={isLoading || !location}
-                  className={`relative py-6 rounded-2xl font-bold text-base transition-all flex flex-col items-center gap-2 overflow-hidden ${
-                    tipoRegistro === 'entrada'
-                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                      : 'bg-white/5 border border-white/10 text-primary-300 hover:bg-white/10'
-                  } disabled:opacity-40`}
-                >
-                  {tipoRegistro === 'entrada' && (
-                    <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent" />
-                  )}
-                  {isLoading && tipoRegistro === 'entrada' ? (
-                    <FaSpinner className="text-2xl animate-spin" />
-                  ) : (
-                    <FaSignInAlt className="text-2xl" />
-                  )}
-                  <span className="tracking-wider text-sm">ENTRADA</span>
-                  {tipoRegistro === 'entrada' && (
-                    <span className="text-xs opacity-75 font-normal">Sugerido</span>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => handleMarcarAsistencia('salida')}
-                  disabled={isLoading || !location}
-                  className={`relative py-6 rounded-2xl font-bold text-base transition-all flex flex-col items-center gap-2 overflow-hidden ${
-                    tipoRegistro === 'salida'
-                      ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30'
-                      : 'bg-white/5 border border-white/10 text-primary-300 hover:bg-white/10'
-                  } disabled:opacity-40`}
-                >
-                  {tipoRegistro === 'salida' && (
-                    <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent" />
-                  )}
-                  {isLoading && tipoRegistro === 'salida' ? (
-                    <FaSpinner className="text-2xl animate-spin" />
-                  ) : (
-                    <FaSignOutAlt className="text-2xl" />
-                  )}
-                  <span className="tracking-wider text-sm">SALIDA</span>
-                  {tipoRegistro === 'salida' && (
-                    <span className="text-xs opacity-75 font-normal">Sugerido</span>
-                  )}
-                </button>
+                {EVENTOS.map((ev) => {
+                  const sugerido = ev.key === eventoSel
+                  const esManana = ev.key.includes('manana')
+                  const esIngreso = ev.tipo === 'ingreso'
+                  return (
+                    <button
+                      key={ev.key}
+                      onClick={() => handleSeleccionEvento(ev.key)}
+                      className={`relative py-5 px-3 rounded-2xl font-bold transition-all flex flex-col items-center gap-1.5 overflow-hidden border ${
+                        sugerido
+                          ? esIngreso
+                            ? 'bg-emerald-500/90 border-emerald-400 text-white shadow-lg shadow-emerald-500/25'
+                            : 'bg-rose-500/90 border-rose-400 text-white shadow-lg shadow-rose-500/25'
+                          : 'bg-white/5 border-white/10 text-primary-200 hover:bg-white/10'
+                      }`}
+                    >
+                      {esManana ? (
+                        <FaSun className={`text-xl ${sugerido ? 'text-yellow-200' : 'text-yellow-400/70'}`} />
+                      ) : (
+                        <FaMoon className={`text-xl ${sugerido ? 'text-blue-100' : 'text-blue-300/70'}`} />
+                      )}
+                      <span className="text-sm leading-tight text-center">{ev.label}</span>
+                      <span className={`text-xs font-mono font-normal ${sugerido ? 'text-white/80' : 'text-primary-500'}`}>
+                        {ev.horaRef}
+                      </span>
+                      {sugerido && (
+                        <span className="text-[10px] font-normal opacity-80">Sugerido</span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
 
-              {/* GPS info */}
-              {location && (
-                <p className="text-center text-xs text-primary-500 mb-3">
-                  <FaMapMarkerAlt className="inline mr-1 text-cyan-500/60" />
-                  {location.lat.toFixed(5)}, {location.lng.toFixed(5)} · ±{Math.round(location.accuracy)}m
-                </p>
-              )}
-              {!location && (
-                <p className="text-center text-xs text-rose-400/80 mb-3">
-                  <FaExclamationTriangle className="inline mr-1" />
-                  GPS requerido para registrar asistencia
-                </p>
-              )}
+              {/* Botón justificaciones */}
+              <button
+                onClick={() => { setViewState('justificacion') }}
+                className="w-full py-3.5 rounded-2xl bg-amber-400/10 border border-amber-400/30 text-amber-300 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-amber-400/20 transition-all mb-3"
+              >
+                <FaFileAlt />
+                Presentar justificación
+              </button>
 
               <button
                 onClick={handleReset}
@@ -337,6 +440,217 @@ export default function AsistenciaPage() {
               >
                 Cancelar
               </button>
+            </motion.div>
+          )}
+
+          {/* ── Vista: Cámara ── */}
+          {viewState === 'camara' && trabajador && eventoConfig && (
+            <motion.div
+              key="camara"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.25 }}
+              className="flex flex-col flex-1"
+            >
+              <div className="text-center mb-3">
+                <span className={`inline-block px-4 py-1 rounded-full text-xs font-bold tracking-widest ${
+                  eventoConfig.tipo === 'ingreso'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                }`}>
+                  {eventoConfig.label.toUpperCase()} · {eventoConfig.horaRef}
+                </span>
+                <p className="text-xs text-primary-400 mt-2">
+                  Toma una foto para confirmar tu registro
+                </p>
+              </div>
+
+              {/* Preview cámara / foto */}
+              <div className="relative rounded-2xl overflow-hidden bg-slate-900 border border-white/10 mb-4" style={{ aspectRatio: '4/3' }}>
+                {!fotoPreview ? (
+                  <>
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      muted
+                      playsInline
+                      className="w-full h-full object-cover"
+                      style={{ transform: 'scaleX(-1)' }}
+                    />
+                    {camaraOk && (
+                      <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+                        <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                        EN VIVO
+                      </div>
+                    )}
+                    {!camaraOk && !camaraError && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-primary-400 gap-2">
+                        <FaSpinner className="text-2xl animate-spin" />
+                        <span className="text-xs">Iniciando cámara...</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <img src={fotoPreview} alt="Foto capturada" className="w-full h-full object-cover" style={{ transform: 'scaleX(-1)' }} />
+                )}
+              </div>
+              <canvas ref={canvasRef} className="hidden" />
+
+              {camaraError && (
+                <div className="bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl px-4 py-3 text-sm mb-4 flex items-start gap-2">
+                  <FaExclamationTriangle className="mt-0.5 shrink-0" />
+                  <div>
+                    {camaraError}
+                    <button onClick={iniciarCamara} className="block mt-1 text-cyan-400 underline text-xs">
+                      Reintentar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* GPS status */}
+              {location ? (
+                <p className="text-center text-xs text-primary-500 mb-3">
+                  <FaMapMarkerAlt className="inline mr-1 text-cyan-500/60" />
+                  {location.lat.toFixed(5)}, {location.lng.toFixed(5)} · ±{Math.round(location.accuracy)}m
+                </p>
+              ) : (
+                <p className="text-center text-xs text-rose-400/80 mb-3">
+                  <FaExclamationTriangle className="inline mr-1" />
+                  GPS requerido — habilita la ubicación
+                  <button onClick={getLocation} className="ml-2 text-cyan-400 underline">Reintentar</button>
+                </p>
+              )}
+
+              {mensaje && (
+                <p className="text-center text-xs text-rose-400 mb-3">{mensaje}</p>
+              )}
+
+              {/* Acciones */}
+              {!fotoPreview ? (
+                <button
+                  onClick={capturarFoto}
+                  disabled={!camaraOk}
+                  className="w-full py-4 rounded-2xl bg-gradient-to-b from-cyan-400 to-blue-500 text-white font-bold text-base flex items-center justify-center gap-2 shadow-lg shadow-blue-500/30 disabled:opacity-40 mb-3"
+                >
+                  <FaCamera className="text-lg" />
+                  Tomar foto
+                </button>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <button
+                    onClick={() => setFotoPreview(null)}
+                    disabled={isLoading}
+                    className="py-4 rounded-2xl bg-white/5 border border-white/10 text-primary-200 font-semibold flex items-center justify-center gap-2 hover:bg-white/10 disabled:opacity-40"
+                  >
+                    <FaSyncAlt />
+                    Repetir
+                  </button>
+                  <button
+                    onClick={handleRegistrar}
+                    disabled={isLoading || !location}
+                    className="py-4 rounded-2xl bg-emerald-500 text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 disabled:opacity-40"
+                  >
+                    {isLoading ? <FaSpinner className="animate-spin" /> : <FaCheckCircle />}
+                    Registrar
+                  </button>
+                </div>
+              )}
+
+              <button
+                onClick={() => { detenerCamara(); setFotoPreview(null); setMensaje(''); setViewState('menu') }}
+                disabled={isLoading}
+                className="text-center text-sm text-primary-500 hover:text-primary-300 transition-colors py-2"
+              >
+                Volver
+              </button>
+            </motion.div>
+          )}
+
+          {/* ── Vista: Justificación ── */}
+          {viewState === 'justificacion' && trabajador && (
+            <motion.div
+              key="justificacion"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.25 }}
+              className="flex flex-col flex-1"
+            >
+              <div className="text-center mb-4">
+                <span className="inline-block px-4 py-1 rounded-full text-xs font-bold tracking-widest bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                  JUSTIFICACIÓN
+                </span>
+                <p className="text-xs text-primary-400 mt-2">{trabajador.nombre}</p>
+              </div>
+
+              <div className="space-y-4 flex-1">
+                <div>
+                  <label className="block text-xs text-primary-400 uppercase tracking-wider mb-1.5">Motivo *</label>
+                  <select
+                    value={motivo}
+                    onChange={(e) => setMotivo(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-cyan-400/60 appearance-none"
+                  >
+                    {MOTIVOS_JUSTIFICACION.map((m) => (
+                      <option key={m} value={m} className="bg-slate-900 text-white">{m}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-primary-400 uppercase tracking-wider mb-1.5">Descripción</label>
+                  <textarea
+                    value={descripcion}
+                    onChange={(e) => setDescripcion(e.target.value)}
+                    rows={4}
+                    placeholder="Explica brevemente el motivo..."
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder-primary-500 focus:outline-none focus:border-cyan-400/60 resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-primary-400 uppercase tracking-wider mb-1.5">
+                    Evidencia (foto o documento, opcional)
+                  </label>
+                  <label className="w-full flex items-center gap-3 bg-white/5 border border-dashed border-white/20 rounded-xl px-4 py-3.5 text-sm cursor-pointer hover:bg-white/10 transition-all">
+                    <FaPaperclip className="text-cyan-400 shrink-0" />
+                    <span className={archivo ? 'text-white truncate' : 'text-primary-500'}>
+                      {archivo ? archivo.name : 'Tomar foto o adjuntar archivo (máx 5MB)'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      capture="environment"
+                      onChange={(e) => setArchivo(e.target.files?.[0] || null)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {mensaje && (
+                  <p className="text-center text-xs text-rose-400">{mensaje}</p>
+                )}
+              </div>
+
+              <div className="mt-5 space-y-3">
+                <button
+                  onClick={handleEnviarJustificacion}
+                  disabled={isLoading || !motivo}
+                  className="w-full py-4 rounded-2xl bg-amber-400 text-slate-900 font-bold text-base flex items-center justify-center gap-2 shadow-lg shadow-amber-400/25 disabled:opacity-40"
+                >
+                  {isLoading ? <FaSpinner className="animate-spin" /> : <FaFileAlt />}
+                  Enviar justificación
+                </button>
+                <button
+                  onClick={() => { setMensaje(''); setViewState('menu') }}
+                  disabled={isLoading}
+                  className="w-full text-center text-sm text-primary-500 hover:text-primary-300 transition-colors py-2"
+                >
+                  Volver
+                </button>
+              </div>
             </motion.div>
           )}
 
@@ -360,31 +674,37 @@ export default function AsistenciaPage() {
               </motion.div>
 
               <span className={`inline-block px-4 py-1 rounded-full text-xs font-bold tracking-widest mb-4 ${
-                tipoRegistro === 'entrada'
+                successTipo === 'asistencia'
                   ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                  : 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
               }`}>
-                {tipoRegistro === 'entrada' ? 'ENTRADA' : 'SALIDA'} REGISTRADA
+                {successTipo === 'asistencia'
+                  ? `${EVENTO_LABELS[eventoSel || ''] || 'REGISTRO'} REGISTRADO`.toUpperCase()
+                  : 'JUSTIFICACIÓN ENVIADA'}
               </span>
 
               <h2 className="text-xl font-bold text-white mb-1">
-                {empleado?.empleado?.nombre}
+                {trabajador?.nombre}
               </h2>
               <p className="text-4xl font-mono font-bold text-white mb-1">{horaRegistro}</p>
-              {location && (
+              {successTipo === 'asistencia' && location && (
                 <p className="text-xs text-primary-500 mb-6">
                   <FaMapMarkerAlt className="inline mr-1" />
-                  ±{Math.round(location.accuracy)}m de precisión
+                  GPS registrado · ±{Math.round(location.accuracy)}m de precisión
+                </p>
+              )}
+              {successTipo === 'justificacion' && (
+                <p className="text-xs text-primary-500 mb-6">
+                  Tu justificación será revisada por el Coordinador General
                 </p>
               )}
 
-              {/* Barra de countdown */}
               <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden mb-2">
                 <motion.div
                   className="h-full bg-emerald-400 rounded-full"
                   initial={{ width: '100%' }}
                   animate={{ width: '0%' }}
-                  transition={{ duration: 5, ease: 'linear' }}
+                  transition={{ duration: 6, ease: 'linear' }}
                 />
               </div>
               <p className="text-xs text-primary-500">Reiniciando en {countdown}s...</p>
@@ -425,7 +745,7 @@ export default function AsistenciaPage() {
                   className="h-full bg-rose-400 rounded-full"
                   initial={{ width: '100%' }}
                   animate={{ width: '0%' }}
-                  transition={{ duration: 5, ease: 'linear' }}
+                  transition={{ duration: 6, ease: 'linear' }}
                 />
               </div>
               <p className="text-xs text-primary-500">Reiniciando en {countdown}s...</p>
@@ -551,9 +871,6 @@ function TecladoNumerico({ onKeyPress, onSubmit, disabled, isLoading }: TecladoN
                   : 'bg-white/8 border border-white/10 text-white hover:bg-white/14'
                 }
               `}
-              style={{
-                backgroundColor: isEnter && !disabled ? undefined : undefined,
-              }}
             >
               {isBackspace ? (
                 <FaBackspace className="mx-auto text-lg" />
