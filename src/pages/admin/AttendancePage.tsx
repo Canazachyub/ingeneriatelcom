@@ -30,6 +30,13 @@ type Tab = 'registros' | 'informe' | 'justificaciones'
 
 const TOLERANCIA_MIN = 10
 
+// El sistema entró en operación el 02/07/2026. Los días previos
+// no cuentan como falta (periodo justificado por implementación).
+const FECHA_INICIO_REPORTE = '2026-07-01'
+const FECHA_OPERATIVO = '2026-07-02'
+
+const maxFecha = (a: string, b: string) => (a >= b ? a : b)
+
 // ── Helpers ──────────────────────────────────────────────────
 
 const toLocalISO = (d: Date) =>
@@ -88,7 +95,7 @@ export default function AttendancePage() {
 
   // Filtros
   const [filtroDni, setFiltroDni] = useState('')
-  const [desde, setDesde] = useState(toLocalISO(inicioSemana(hoy)))
+  const [desde, setDesde] = useState(maxFecha(toLocalISO(inicioSemana(hoy)), FECHA_INICIO_REPORTE))
   const [hasta, setHasta] = useState(toLocalISO(hoy))
   const [filtroEvento, setFiltroEvento] = useState('')
 
@@ -124,9 +131,9 @@ export default function AttendancePage() {
     loadData()
   }, [filtroDni, desde, hasta, filtroEvento])
 
-  // Rangos rápidos
+  // Rangos rápidos (nunca antes del inicio del reporte)
   const setRangoSemana = () => {
-    setDesde(toLocalISO(inicioSemana(new Date())))
+    setDesde(maxFecha(toLocalISO(inicioSemana(new Date())), FECHA_INICIO_REPORTE))
     setHasta(toLocalISO(new Date()))
   }
   const setRangoSemanaPasada = () => {
@@ -134,12 +141,12 @@ export default function AttendancePage() {
     ini.setDate(ini.getDate() - 7)
     const fin = new Date(ini)
     fin.setDate(fin.getDate() + 6)
-    setDesde(toLocalISO(ini))
+    setDesde(maxFecha(toLocalISO(ini), FECHA_INICIO_REPORTE))
     setHasta(toLocalISO(fin))
   }
   const setRangoMes = () => {
     const d = new Date()
-    setDesde(toLocalISO(new Date(d.getFullYear(), d.getMonth(), 1)))
+    setDesde(maxFecha(toLocalISO(new Date(d.getFullYear(), d.getMonth(), 1)), FECHA_INICIO_REPORTE))
     setHasta(toLocalISO(d))
   }
 
@@ -187,8 +194,8 @@ export default function AttendancePage() {
             }
           } else {
             const dow = new Date(f + 'T00:00:00').getDay()
-            // Falta solo L-V y solo días ya pasados o hoy
-            if (dow >= 1 && dow <= 5 && f <= hoyISO) faltasLV++
+            // Falta solo L-V, días ya transcurridos y desde que el sistema opera
+            if (dow >= 1 && dow <= 5 && f <= hoyISO && f >= FECHA_OPERATIVO) faltasLV++
           }
         }
         const numJust = justificaciones.filter((j) => String(j.dni) === t.dni).length
@@ -496,7 +503,8 @@ export default function AttendancePage() {
               <h3 className="text-sm font-semibold text-white mb-1">Detalle por día</h3>
               <p className="text-xs text-gray-500 mb-4">
                 Cada celda muestra los 4 eventos: <span className="text-emerald-400">●</span> puntual ·{' '}
-                <span className="text-amber-400">●</span> tarde · <span className="text-gray-600">●</span> sin registro
+                <span className="text-amber-400">●</span> tarde · <span className="text-gray-600">●</span> sin registro ·{' '}
+                <span className="text-blue-400/50">●</span> justificado (antes de la implementación)
               </p>
               <div className="overflow-x-auto">
                 <table className="text-xs">
@@ -523,22 +531,26 @@ export default function AttendancePage() {
                         </td>
                         {informe.fechas.map((fecha) => {
                           const evs = f.porFecha[fecha] || {}
+                          const preOperativo = fecha < FECHA_OPERATIVO
                           return (
                             <td key={fecha} className="px-1.5 py-2 text-center">
                               <div className="flex gap-0.5 justify-center">
                                 {EVENTOS.map((ev) => {
                                   const reg = evs[ev.key]
-                                  const color = !reg
-                                    ? 'bg-gray-700'
-                                    : esTarde(ev.key, String(reg.hora))
-                                    ? 'bg-amber-400'
-                                    : 'bg-emerald-400'
+                                  const color = reg
+                                    ? esTarde(ev.key, String(reg.hora))
+                                      ? 'bg-amber-400'
+                                      : 'bg-emerald-400'
+                                    : preOperativo
+                                    ? 'bg-blue-400/25'
+                                    : 'bg-gray-700'
+                                  const title = reg
+                                    ? `${ev.label}: ${String(reg.hora).slice(0, 5)}`
+                                    : preOperativo
+                                    ? `${ev.label}: justificado (antes de la implementación)`
+                                    : `${ev.label}: sin registro`
                                   return (
-                                    <span
-                                      key={ev.key}
-                                      title={`${ev.label}: ${reg ? String(reg.hora).slice(0, 5) : 'sin registro'}`}
-                                      className={`w-2 h-2 rounded-full ${color}`}
-                                    />
+                                    <span key={ev.key} title={title} className={`w-2 h-2 rounded-full ${color}`} />
                                   )
                                 })}
                               </div>
