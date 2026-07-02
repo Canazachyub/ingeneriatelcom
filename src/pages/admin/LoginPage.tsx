@@ -87,7 +87,7 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   className="w-full pl-10 pr-4 py-3 bg-primary-800 border border-primary-700 rounded-lg text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-colors"
-                  placeholder="admin@telcom.com"
+                  placeholder="correo@ejemplo.com"
                 />
               </div>
             </div>
@@ -139,7 +139,7 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-8 text-center text-primary-500 text-sm">
-          Credenciales por defecto: admin@telcom.com / admin123
+          Acceso exclusivo para personal autorizado
         </p>
       </motion.div>
     </div>
