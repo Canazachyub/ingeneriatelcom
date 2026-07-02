@@ -3754,7 +3754,9 @@ function registrarEventoLog(data) {
 
 // ============================================================
 // MODULO ASISTENCIA V2 — FOTO + GPS + JUSTIFICACIONES
-// Hojas: 'asistencias' y 'justificaciones'
+// Hojas: 'asistencias_v2' y 'justificaciones'
+// NOTA: getSheetByName es case-insensitive, por eso NO se usa
+// 'asistencias' (colisiona con la hoja vieja 'Asistencias')
 // Drive: Asistencias/AAAA-MM-DD/<dni>/<evento>_<timestamp>.jpg
 //        Justificaciones/AAAA-MM-DD/<dni>/just_<timestamp>.<ext>
 // ============================================================
@@ -3774,8 +3776,8 @@ var HEADERS_JUSTIFICACIONES = [
 // Ejecutar UNA VEZ desde el editor para crear las hojas (no toca hojas existentes)
 function setupAsistenciaSheets() {
   var ss = SpreadsheetApp.openById(SHEET_ID);
-  if (!ss.getSheetByName('asistencias')) {
-    var s = ss.insertSheet('asistencias');
+  if (!ss.getSheetByName('asistencias_v2')) {
+    var s = ss.insertSheet('asistencias_v2');
     s.appendRow(HEADERS_ASISTENCIAS_V2);
     s.getRange(1, 1, 1, HEADERS_ASISTENCIAS_V2.length).setFontWeight('bold');
   }
@@ -3806,7 +3808,7 @@ function registrarAsistenciaFoto(data) {
   if (!data.fileContent) return { success: false, error: 'La foto es obligatoria' };
 
   var ss = SpreadsheetApp.openById(SHEET_ID);
-  var sheet = getOrCreateAsistenciaSheet_(ss, 'asistencias', HEADERS_ASISTENCIAS_V2);
+  var sheet = getOrCreateAsistenciaSheet_(ss, 'asistencias_v2', HEADERS_ASISTENCIAS_V2);
 
   var ahora = new Date();
   var fecha = Utilities.formatDate(ahora, 'America/Lima', 'yyyy-MM-dd');
@@ -3919,7 +3921,7 @@ function filtrarPorRango_(result, data) {
 
 function getAsistenciasV2(data) {
   var ss = SpreadsheetApp.openById(SHEET_ID);
-  var sheet = ss.getSheetByName('asistencias');
+  var sheet = ss.getSheetByName('asistencias_v2');
   if (!sheet) return { success: true, data: [] };
 
   var rows = sheet.getDataRange().getValues();
