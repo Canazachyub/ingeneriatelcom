@@ -8,12 +8,15 @@ export interface ConfigPlanilla {
   salida_manana: string
   ingreso_tarde: string
   salida_tarde: string
-  tolerancia_min: number
+  tolerancia_manana_min: number // 10 min SOLO sobre el ingreso de 7:30
+  tolerancia_tarde_min: number  // el ingreso de la tarde NO tiene tolerancia (0)
   tardanza_grave_min: number
   jornada_horas: number
   factor_descanso_semanal: number // D. Leg. 713: valor_dia/5 por falta injustificada (configurable)
   plazo_sustento_horas: number
   divisor_mes: number
+  rmv: number                   // Remuneración Mínima Vital (los que la ganan se ajustan solos)
+  salida_autorizada: string     // hora mínima de la salida 5pm autorizada
 }
 
 export const CONFIG_DEFAULT: ConfigPlanilla = {
@@ -21,12 +24,15 @@ export const CONFIG_DEFAULT: ConfigPlanilla = {
   salida_manana: '13:00',
   ingreso_tarde: '14:00',
   salida_tarde: '18:00',
-  tolerancia_min: 15,
+  tolerancia_manana_min: 10,
+  tolerancia_tarde_min: 0,
   tardanza_grave_min: 60,
   jornada_horas: 9.5,
   factor_descanso_semanal: 0.2,
   plazo_sustento_horas: 48,
   divisor_mes: 30,
+  rmv: 1130,
+  salida_autorizada: '17:00',
 }
 
 export type TipoIncidencia = 'tardanza' | 'salida_anticipada' | 'omision' | 'falta'
@@ -53,7 +59,16 @@ export interface SueldoTrabajador {
   nombre: string
   cargo: string
   sueldo: number
+  fecha_inicio?: string
+  usa_rmv?: boolean
+  sede?: string
+  email?: string
 }
+
+// Los trabajadores con usa_rmv ganan la RMV con ajuste automático: si la RMV
+// sube por norma, su sueldo se actualiza solo (parámetro global rmv en la config).
+export const sueldoEfectivo = (t: SueldoTrabajador, cfg: ConfigPlanilla): number =>
+  t.usa_rmv ? cfg.rmv : t.sueldo
 
 // ── Valores base (fórmula exacta del contrato) ──────────────
 
@@ -76,10 +91,11 @@ export const horaAMinutos = (hora: string): number => {
 export function derivarTardanza(
   horaMarcada: string,
   horaOficial: string,
+  toleranciaMin: number,
   cfg: ConfigPlanilla
 ): { minutos: number; grave: boolean } | null {
   const retraso = horaAMinutos(horaMarcada) - horaAMinutos(horaOficial)
-  if (retraso <= cfg.tolerancia_min) return null
+  if (retraso <= toleranciaMin) return null
   return { minutos: retraso, grave: retraso > cfg.tardanza_grave_min }
 }
 
@@ -91,6 +107,28 @@ export function derivarSalidaAnticipada(
   if (faltante <= 0) return null
   // Retiro antes de la salida sin autorización = tardanza grave
   return { minutos: faltante, grave: true }
+}
+
+// ── Salida de la tarde: autorización 5pm y bolsa de compensación ──
+// CON autorización y hora >= salida_autorizada: no es incidencia; la hora
+// no laborada va a la bolsa de horas por compensar (muestreo ELSE).
+// SIN autorización: tardanza grave con los minutos no laborados.
+export type ResultadoSalidaTarde =
+  | { tipo: 'ok' }
+  | { tipo: 'bolsa'; horas: number }
+  | { tipo: 'incidencia'; minutos: number; grave: boolean }
+
+export function evaluarSalidaTarde(
+  horaMarcada: string,
+  autorizado: boolean,
+  cfg: ConfigPlanilla
+): ResultadoSalidaTarde {
+  const faltante = horaAMinutos(cfg.salida_tarde) - horaAMinutos(horaMarcada)
+  if (faltante <= 0) return { tipo: 'ok' }
+  if (autorizado && horaAMinutos(horaMarcada) >= horaAMinutos(cfg.salida_autorizada)) {
+    return { tipo: 'bolsa', horas: Math.round((faltante / 60) * 100) / 100 }
+  }
+  return { tipo: 'incidencia', minutos: faltante, grave: true }
 }
 
 // ── Descuento por incidencia ────────────────────────────────

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   FaSpinner, FaSync, FaDownload, FaTimes, FaChevronDown, FaChevronRight,
   FaExclamationTriangle, FaCheckCircle, FaTimesCircle, FaClock, FaCog,
-  FaPrint, FaFileInvoiceDollar, FaPen,
+  FaPrint, FaFileInvoiceDollar, FaPen, FaUserPlus, FaHourglassHalf,
 } from 'react-icons/fa'
 import AdminLayout from '../../components/admin/AdminLayout'
 import { api } from '../../api/appScriptApi'
@@ -11,7 +11,7 @@ import { useAuth } from '../../context/AuthContext'
 import {
   ConfigPlanilla, CONFIG_DEFAULT, Incidencia, SueldoTrabajador,
   resumenMensual, calcularDisciplina, descuentoIncidencia, formatoSoles,
-  valorDia, valorMinuto,
+  valorDia, valorMinuto, sueldoEfectivo,
 } from '../../utils/planilla'
 
 const TIPO_LABELS: Record<string, string> = {
@@ -85,6 +85,23 @@ export default function PlanillaPage() {
   const [editandoSueldo, setEditandoSueldo] = useState<string | null>(null)
   const [sueldoDraft, setSueldoDraft] = useState('')
 
+  // Bolsa de compensación 5pm
+  const [bolsaSaldos, setBolsaSaldos] = useState<Record<string, number>>({})
+  const [modal5pm, setModal5pm] = useState<SueldoTrabajador | null>(null)
+  const [fecha5pm, setFecha5pm] = useState(hoyISO())
+  const [nota5pm, setNota5pm] = useState('')
+  const [modalMuestreo, setModalMuestreo] = useState<SueldoTrabajador | null>(null)
+  const [horasMuestreo, setHorasMuestreo] = useState('')
+  const [notaMuestreo, setNotaMuestreo] = useState('')
+  const [guardandoBolsa, setGuardandoBolsa] = useState(false)
+
+  // Alta de trabajador
+  const [modalNuevo, setModalNuevo] = useState(false)
+  const [nuevoDraft, setNuevoDraft] = useState({
+    dni: '', nombre: '', cargo: '', sueldo: '', fecha_inicio: hoyISO(), usa_rmv: false, sede: 'Principal', email: '',
+  })
+  const [guardandoNuevo, setGuardandoNuevo] = useState(false)
+
   // Solo el Administrador de Planilla (rol admin o permiso 'planilla') ve montos
   const autorizado = !!user && (
     user.role === 'admin' ||
@@ -99,10 +116,11 @@ export default function PlanillaPage() {
 
   const loadData = async () => {
     setLoading(true)
-    const [cfgRes, suelRes, incRes] = await Promise.all([
+    const [cfgRes, suelRes, incRes, bolsaRes] = await Promise.all([
       api.getConfigPlanilla(),
       api.getSueldos(),
       api.getIncidencias({ desde: inicioTrimestre(mes), hasta: finDeMes(mes) }),
+      api.getBolsaHoras(),
     ])
     if (cfgRes.success && cfgRes.data) {
       setConfig({ ...CONFIG_DEFAULT, ...(cfgRes.data as unknown as Partial<ConfigPlanilla>) })
@@ -110,6 +128,7 @@ export default function PlanillaPage() {
     if (suelRes.success && suelRes.data) setSueldos(suelRes.data)
     else if (suelRes.error) showToast(suelRes.error)
     if (incRes.success && incRes.data) setIncidencias(incRes.data as unknown as Incidencia[])
+    if (bolsaRes.success && bolsaRes.data) setBolsaSaldos(bolsaRes.data.saldos || {})
     setLoading(false)
   }
 
@@ -133,13 +152,14 @@ export default function PlanillaPage() {
 
   const filas = useMemo(() => {
     return sueldos.map((t) => {
+      const sueldo = sueldoEfectivo(t, config)
       const incTrimestre = incidencias.filter((i) => String(i.dni) === t.dni)
       const incMes = incTrimestre.filter((i) => String(i.fecha).slice(0, 7) === mes)
-      const resumen = resumenMensual(incMes, t.sueldo, config)
+      const resumen = resumenMensual(incMes, sueldo, config)
       const disciplina = calcularDisciplina(incTrimestre)
-      return { trabajador: t, incMes, resumen, disciplina }
+      return { trabajador: t, sueldo, incMes, resumen, disciplina, bolsa: bolsaSaldos[t.dni] || 0 }
     })
-  }, [sueldos, incidencias, mes, config])
+  }, [sueldos, incidencias, mes, config, bolsaSaldos])
 
   const totalProyectado = filas.reduce((acc, f) => acc + f.resumen.descuentoProyectado, 0)
 
@@ -188,6 +208,76 @@ export default function PlanillaPage() {
     setEditandoSueldo(null)
   }
 
+  const autorizar5pmHandler = async () => {
+    if (!modal5pm) return
+    setGuardandoBolsa(true)
+    const res = await api.autorizarSalida5pm({
+      dni: modal5pm.dni,
+      fecha: fecha5pm,
+      autorizado_por: user?.name || 'Coordinador General',
+      nota: nota5pm,
+    })
+    setGuardandoBolsa(false)
+    if (res.success) {
+      showToast(`Salida 5pm autorizada para ${modal5pm.nombre} (${fecha5pm}). Sincroniza incidencias para acreditar la bolsa.`)
+      setModal5pm(null)
+      setNota5pm('')
+    } else {
+      showToast('Error: ' + res.error)
+    }
+  }
+
+  const muestreoHandler = async () => {
+    if (!modalMuestreo) return
+    const horas = parseFloat(horasMuestreo)
+    if (isNaN(horas) || horas <= 0) { showToast('Horas inválidas'); return }
+    setGuardandoBolsa(true)
+    const res = await api.registrarMuestreo({
+      dni: modalMuestreo.dni,
+      horas,
+      nota: notaMuestreo || 'Muestreo trimestral ELSE',
+      usuario: user?.name || 'Admin',
+    })
+    setGuardandoBolsa(false)
+    if (res.success && res.data) {
+      showToast(`Bolsa descargada: ${res.data.horas_aplicadas}h aplicadas, saldo ${res.data.saldo_restante}h`)
+      setModalMuestreo(null)
+      setHorasMuestreo('')
+      setNotaMuestreo('')
+      loadData()
+    } else {
+      showToast('Error: ' + res.error)
+    }
+  }
+
+  const crearTrabajadorHandler = async () => {
+    if (!/^\d{8}$/.test(nuevoDraft.dni)) { showToast('DNI inválido (8 dígitos)'); return }
+    if (!nuevoDraft.nombre.trim() || !nuevoDraft.cargo.trim()) { showToast('Nombre y cargo son obligatorios'); return }
+    if (!nuevoDraft.usa_rmv && (isNaN(parseFloat(nuevoDraft.sueldo)) || parseFloat(nuevoDraft.sueldo) <= 0)) {
+      showToast('Sueldo inválido'); return
+    }
+    setGuardandoNuevo(true)
+    const res = await api.crearTrabajador({
+      dni: nuevoDraft.dni,
+      nombre: nuevoDraft.nombre.trim(),
+      cargo: nuevoDraft.cargo.trim(),
+      sueldo: parseFloat(nuevoDraft.sueldo) || 0,
+      fecha_inicio: nuevoDraft.fecha_inicio,
+      usa_rmv: nuevoDraft.usa_rmv,
+      sede: nuevoDraft.sede.trim() || 'Principal',
+      email: nuevoDraft.email.trim(),
+    })
+    setGuardandoNuevo(false)
+    if (res.success) {
+      showToast('Trabajador creado — el kiosko de asistencia ya lo reconoce')
+      setModalNuevo(false)
+      setNuevoDraft({ dni: '', nombre: '', cargo: '', sueldo: '', fecha_inicio: hoyISO(), usa_rmv: false, sede: 'Principal', email: '' })
+      loadData()
+    } else {
+      showToast('Error: ' + res.error)
+    }
+  }
+
   const guardarConfig = async () => {
     setSavingConfig(true)
     const res = await api.updateConfigPlanilla(configDraft)
@@ -205,15 +295,15 @@ export default function PlanillaPage() {
   // ── Exportar ─────────────────────────────────────────────
   const exportarCSV = () => {
     const filasCSV: string[][] = [
-      ['Trabajador', 'Cargo', 'Sueldo (S/)', 'Tardanzas', 'Min. acumulados', 'Faltas injust.',
-        'Faltas just.', 'Omisiones', 'Salidas anticipadas', 'Pendientes',
+      ['Trabajador', 'Cargo', 'Correo', 'Sueldo (S/)', 'Tardanzas', 'Min. acumulados', 'Faltas injust.',
+        'Faltas just.', 'Omisiones', 'Salidas antic. s/aut.', 'Bolsa 5pm (h)', 'Pendientes',
         'Descuento confirmado (S/)', 'Descuento proyectado (S/)', 'Alerta disciplinaria'],
       ...filas.map((f) => [
-        f.trabajador.nombre, f.trabajador.cargo, String(f.trabajador.sueldo),
+        f.trabajador.nombre, f.trabajador.cargo, f.trabajador.email || '', String(f.sueldo),
         String(f.resumen.tardanzas), String(f.resumen.minutosAcumulados),
         String(f.resumen.faltasInjustificadas), String(f.resumen.faltasJustificadas),
         String(f.resumen.omisiones), String(f.resumen.salidasAnticipadas),
-        String(f.resumen.pendientes),
+        f.bolsa.toFixed(2), String(f.resumen.pendientes),
         f.resumen.descuentoConfirmado.toFixed(2), f.resumen.descuentoProyectado.toFixed(2),
         f.disciplina.etiqueta || '',
       ]),
@@ -223,7 +313,7 @@ export default function PlanillaPage() {
       ...filas.flatMap((f) => f.incMes.map((i) => [
         f.trabajador.nombre, String(i.fecha), TIPO_LABELS[i.tipo] || i.tipo, i.evento || '',
         String(i.minutos ?? ''), i.grave ? 'Sí' : 'No', ESTADO_LABELS[i.estado] || i.estado,
-        descuentoIncidencia(i, f.trabajador.sueldo, config).toFixed(2), i.nota || '',
+        descuentoIncidencia(i, f.sueldo, config).toFixed(2), i.nota || '',
       ])),
     ]
     const csv = filasCSV.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -237,12 +327,13 @@ export default function PlanillaPage() {
 
   const imprimirTrabajador = (fila: (typeof filas)[0]) => {
     const { trabajador: t, resumen: r, incMes, disciplina } = fila
+    const sueldoT = fila.sueldo
     const filasDetalle = incMes.map((i) => `
       <tr>
         <td>${i.fecha}</td><td>${TIPO_LABELS[i.tipo] || i.tipo}</td>
         <td>${i.evento || '—'}</td><td>${i.minutos ?? '—'}</td>
         <td>${ESTADO_LABELS[i.estado]}</td>
-        <td style="text-align:right">${descuentoIncidencia(i, t.sueldo, config).toFixed(2)}</td>
+        <td style="text-align:right">${descuentoIncidencia(i, sueldoT, config).toFixed(2)}</td>
         <td>${i.nota || ''}</td>
       </tr>`).join('')
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Planilla ${t.nombre} — ${mes}</title>
@@ -256,11 +347,11 @@ export default function PlanillaPage() {
         .nota{margin-top:14px;font-size:10px;color:#555}
       </style></head><body>
       <h1>Ingeniería Telcom EIRL — Resumen de planilla</h1>
-      <p><strong>${t.nombre}</strong> · ${t.cargo} · DNI ${t.dni} · Sueldo ${formatoSoles(t.sueldo)}<br>
-      Periodo: ${nombreMes(mes)} · Valor día: ${formatoSoles(valorDia(t.sueldo, config))} · Valor minuto: S/ ${valorMinuto(t.sueldo, config).toFixed(4)}</p>
+      <p><strong>${t.nombre}</strong> · ${t.cargo} · DNI ${t.dni} · Sueldo ${formatoSoles(sueldoT)}${t.usa_rmv ? ' (RMV, ajuste automático)' : ''}<br>
+      ${t.email ? `Correo: ${t.email}<br>` : ''}Periodo: ${nombreMes(mes)} · Valor día: ${formatoSoles(valorDia(sueldoT, config))} · Valor minuto: S/ ${valorMinuto(sueldoT, config).toFixed(4)}</p>
       <h2>Resumen</h2>
-      <table><tr><th>Tardanzas</th><th>Min. acum.</th><th>Faltas injust.</th><th>Faltas just.</th><th>Omisiones</th><th>Salidas antic.</th><th>Descuento referencial</th></tr>
-      <tr><td>${r.tardanzas}</td><td>${r.minutosAcumulados}</td><td>${r.faltasInjustificadas}</td><td>${r.faltasJustificadas}</td><td>${r.omisiones}</td><td>${r.salidasAnticipadas}</td><td class="tot">${formatoSoles(r.descuentoProyectado)}</td></tr></table>
+      <table><tr><th>Tardanzas</th><th>Min. acum.</th><th>Faltas injust.</th><th>Faltas just.</th><th>Omisiones</th><th>Salidas antic. s/aut.</th><th>Bolsa 5pm (h)</th><th>Descuento referencial</th></tr>
+      <tr><td>${r.tardanzas}</td><td>${r.minutosAcumulados}</td><td>${r.faltasInjustificadas}</td><td>${r.faltasJustificadas}</td><td>${r.omisiones}</td><td>${r.salidasAnticipadas}</td><td>${fila.bolsa.toFixed(2)}</td><td class="tot">${formatoSoles(r.descuentoProyectado)}</td></tr></table>
       ${disciplina.etiqueta ? `<p class="disc">Alerta disciplinaria: ${disciplina.etiqueta} (${disciplina.faltasDisciplinarias} falta(s) disciplinaria(s) en el trimestre)</p>` : ''}
       <h2>Detalle de incidencias</h2>
       <table><tr><th>Fecha</th><th>Tipo</th><th>Evento</th><th>Min.</th><th>Estado</th><th>Descuento S/</th><th>Nota</th></tr>${filasDetalle || '<tr><td colspan="7">Sin incidencias</td></tr>'}</table>
@@ -338,18 +429,28 @@ export default function PlanillaPage() {
               CSV
             </button>
             <button
+              onClick={() => setModalNuevo(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 rounded-lg text-sm font-medium hover:bg-emerald-500/25 transition-colors"
+            >
+              <FaUserPlus className="text-xs" />
+              Agregar trabajador
+            </button>
+            <button
               onClick={() => {
                 setConfigDraft({
                   ingreso_manana: String(config.ingreso_manana),
                   salida_manana: String(config.salida_manana),
                   ingreso_tarde: String(config.ingreso_tarde),
                   salida_tarde: String(config.salida_tarde),
-                  tolerancia_min: String(config.tolerancia_min),
+                  tolerancia_manana_min: String(config.tolerancia_manana_min),
+                  tolerancia_tarde_min: String(config.tolerancia_tarde_min),
                   tardanza_grave_min: String(config.tardanza_grave_min),
                   jornada_horas: String(config.jornada_horas),
                   factor_descanso_semanal: String(config.factor_descanso_semanal),
                   plazo_sustento_horas: String(config.plazo_sustento_horas),
                   divisor_mes: String(config.divisor_mes),
+                  rmv: String(config.rmv),
+                  salida_autorizada: String(config.salida_autorizada),
                 })
                 setShowConfig(!showConfig)
               }}
@@ -377,12 +478,15 @@ export default function PlanillaPage() {
                     ['salida_manana', 'Salida mañana'],
                     ['ingreso_tarde', 'Ingreso tarde'],
                     ['salida_tarde', 'Salida tarde'],
-                    ['tolerancia_min', 'Tolerancia (min)'],
+                    ['tolerancia_manana_min', 'Tolerancia mañana (min)'],
+                    ['tolerancia_tarde_min', 'Tolerancia tarde (min)'],
                     ['tardanza_grave_min', 'Grave desde (min)'],
                     ['jornada_horas', 'Jornada (horas)'],
                     ['factor_descanso_semanal', 'Factor dominical'],
                     ['plazo_sustento_horas', 'Plazo sustento (h)'],
                     ['divisor_mes', 'Divisor mensual'],
+                    ['rmv', 'RMV (S/)'],
+                    ['salida_autorizada', 'Salida autorizada'],
                   ] as [string, string][]).map(([k, label]) => (
                     <div key={k}>
                       <label className="block text-xs text-primary-400 mb-1">{label}</label>
@@ -441,6 +545,7 @@ export default function PlanillaPage() {
                     <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">F. jus.</th>
                     <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Omis.</th>
                     <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">S. ant.</th>
+                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Bolsa 5pm</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                       Descuento ref. (aprox.)
                     </th>
@@ -461,9 +566,20 @@ export default function PlanillaPage() {
                           <td className="px-4 py-3">
                             <div className="font-medium text-white leading-tight">{f.trabajador.nombre}</div>
                             <div className="text-gray-500 text-xs">{f.trabajador.cargo}</div>
+                            {f.trabajador.email && (
+                              <div className="text-primary-500 text-[11px] truncate max-w-[220px]">{f.trabajador.email}</div>
+                            )}
                           </td>
                           <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                            {editandoSueldo === f.trabajador.dni ? (
+                            {f.trabajador.usa_rmv ? (
+                              <span
+                                className="text-gray-300 inline-flex items-center gap-1.5"
+                                title="Gana la RMV: se ajusta automáticamente con el parámetro rmv de la configuración"
+                              >
+                                {formatoSoles(f.sueldo)}
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-accent-electric/15 text-accent-electric font-bold">RMV</span>
+                              </span>
+                            ) : editandoSueldo === f.trabajador.dni ? (
                               <div className="flex items-center gap-1 justify-center">
                                 <input
                                   value={sueldoDraft}
@@ -476,10 +592,10 @@ export default function PlanillaPage() {
                               </div>
                             ) : (
                               <button
-                                onClick={() => { setEditandoSueldo(f.trabajador.dni); setSueldoDraft(String(f.trabajador.sueldo)) }}
+                                onClick={() => { setEditandoSueldo(f.trabajador.dni); setSueldoDraft(String(f.sueldo)) }}
                                 className="text-gray-300 hover:text-white inline-flex items-center gap-1.5 group"
                               >
-                                {formatoSoles(f.trabajador.sueldo)}
+                                {formatoSoles(f.sueldo)}
                                 <FaPen className="text-[9px] text-gray-600 group-hover:text-accent-electric" />
                               </button>
                             )}
@@ -499,6 +615,11 @@ export default function PlanillaPage() {
                           </td>
                           <td className="px-3 py-3 text-center">
                             <span className={f.resumen.salidasAnticipadas > 0 ? 'text-rose-400 font-bold' : 'text-gray-600'}>{f.resumen.salidasAnticipadas}</span>
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            <span className={f.bolsa > 0 ? 'text-accent-electric font-bold' : 'text-gray-600'}>
+                              {f.bolsa > 0 ? `${f.bolsa.toFixed(1)}h` : '—'}
+                            </span>
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="font-bold text-white">{formatoSoles(f.resumen.descuentoProyectado)}</div>
@@ -528,19 +649,37 @@ export default function PlanillaPage() {
                         {/* Detalle expandible */}
                         {abierto && (
                           <tr key={f.trabajador.dni + '-det'}>
-                            <td colSpan={11} className="px-4 py-4 bg-primary-950/50">
-                              <div className="flex items-center justify-between mb-3">
+                            <td colSpan={12} className="px-4 py-4 bg-primary-950/50">
+                              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                                 <p className="text-xs text-gray-400">
-                                  Valor día: <strong className="text-white">{formatoSoles(valorDia(f.trabajador.sueldo, config))}</strong> ·
-                                  Valor minuto: <strong className="text-white">S/ {valorMinuto(f.trabajador.sueldo, config).toFixed(4)}</strong> ·
-                                  Disciplina trimestre: <strong className="text-white">{f.disciplina.faltasDisciplinarias} falta(s)</strong>
+                                  Valor día: <strong className="text-white">{formatoSoles(valorDia(f.sueldo, config))}</strong> ·
+                                  Valor minuto: <strong className="text-white">S/ {valorMinuto(f.sueldo, config).toFixed(4)}</strong> ·
+                                  Disciplina trimestre: <strong className="text-white">{f.disciplina.faltasDisciplinarias} falta(s)</strong> ·
+                                  Bolsa 5pm: <strong className="text-accent-electric">{f.bolsa.toFixed(2)}h</strong>
+                                  {f.trabajador.fecha_inicio && <> · Inicio: <strong className="text-white">{f.trabajador.fecha_inicio}</strong></>}
                                 </p>
-                                <button
-                                  onClick={() => imprimirTrabajador(f)}
-                                  className="inline-flex items-center gap-1.5 text-xs text-accent-electric hover:underline"
-                                >
-                                  <FaPrint className="text-[10px]" /> Imprimir / PDF
-                                </button>
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    onClick={() => { setModal5pm(f.trabajador); setFecha5pm(hoyISO()) }}
+                                    className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:underline"
+                                  >
+                                    <FaClock className="text-[10px]" /> Autorizar salida 5pm
+                                  </button>
+                                  <button
+                                    onClick={() => setModalMuestreo(f.trabajador)}
+                                    disabled={f.bolsa <= 0}
+                                    className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:underline disabled:opacity-40 disabled:no-underline"
+                                    title={f.bolsa <= 0 ? 'Sin horas en bolsa' : 'Registrar horas de muestreo ELSE'}
+                                  >
+                                    <FaHourglassHalf className="text-[10px]" /> Muestreo ELSE
+                                  </button>
+                                  <button
+                                    onClick={() => imprimirTrabajador(f)}
+                                    className="inline-flex items-center gap-1.5 text-xs text-accent-electric hover:underline"
+                                  >
+                                    <FaPrint className="text-[10px]" /> Imprimir / PDF
+                                  </button>
+                                </div>
                               </div>
                               {f.incMes.length === 0 ? (
                                 <p className="text-sm text-gray-500 text-center py-4">Sin incidencias este mes ✓</p>
@@ -578,7 +717,7 @@ export default function PlanillaPage() {
                                         <td className="py-2 pr-3 text-right font-mono text-white">
                                           {inc.estado === 'justificada'
                                             ? <span className="text-emerald-400">S/ 0.00</span>
-                                            : formatoSoles(descuentoIncidencia(inc, f.trabajador.sueldo, config))}
+                                            : formatoSoles(descuentoIncidencia(inc, f.sueldo, config))}
                                         </td>
                                         <td className="py-2 pr-3 text-gray-500 max-w-[180px] truncate">
                                           {inc.sustento_url ? (
@@ -607,7 +746,7 @@ export default function PlanillaPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-primary-700 bg-primary-950/70">
-                    <td colSpan={8} className="px-4 py-3 text-right text-xs text-gray-400 uppercase tracking-wider font-semibold">
+                    <td colSpan={9} className="px-4 py-3 text-right text-xs text-gray-400 uppercase tracking-wider font-semibold">
                       Total {esMesActual ? 'proyectado al cierre' : 'del mes'}
                     </td>
                     <td className="px-4 py-3 text-right font-bold text-accent-electric text-base">
@@ -708,6 +847,218 @@ export default function PlanillaPage() {
                     Guardar decisión
                   </button>
                 </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Modal autorizar salida 5pm ── */}
+        <AnimatePresence>
+          {modal5pm && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={(e) => { if (e.target === e.currentTarget) setModal5pm(null) }}
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-primary-900 border border-primary-700 rounded-2xl w-full max-w-sm shadow-2xl p-5 space-y-4"
+              >
+                <div>
+                  <h3 className="font-bold text-white text-sm">Autorizar salida 5:00 p.m.</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">{modal5pm.nombre}</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-primary-400 mb-1.5">Fecha</label>
+                  <input
+                    type="date" value={fecha5pm} onChange={(e) => setFecha5pm(e.target.value)}
+                    className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-primary-400 mb-1.5">Nota (verificación de avances)</label>
+                  <textarea
+                    value={nota5pm} onChange={(e) => setNota5pm(e.target.value)} rows={2}
+                    className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric resize-none"
+                    placeholder="Avances verificados por..."
+                  />
+                </div>
+                <p className="text-[11px] text-gray-500">
+                  La salida autorizada no genera descuento: la hora no laborada se acredita a la
+                  bolsa por compensar (muestreo trimestral ELSE). No genera sobretiempo ni pago extra.
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setModal5pm(null)} className="flex-1 py-2.5 text-sm text-primary-400 hover:text-white border border-primary-800 rounded-xl">
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={autorizar5pmHandler} disabled={guardandoBolsa}
+                    className="flex-1 py-2.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-semibold rounded-xl text-sm hover:bg-emerald-500/30 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {guardandoBolsa && <FaSpinner className="animate-spin" />}
+                    Autorizar
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Modal muestreo ELSE (descarga de bolsa) ── */}
+        <AnimatePresence>
+          {modalMuestreo && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={(e) => { if (e.target === e.currentTarget) setModalMuestreo(null) }}
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-primary-900 border border-primary-700 rounded-2xl w-full max-w-sm shadow-2xl p-5 space-y-4"
+              >
+                <div>
+                  <h3 className="font-bold text-white text-sm">Registrar muestreo ELSE</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {modalMuestreo.nombre} · saldo en bolsa: <strong className="text-accent-electric">{(bolsaSaldos[modalMuestreo.dni] || 0).toFixed(2)}h</strong>
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs text-primary-400 mb-1.5">Horas de muestreo trabajadas</label>
+                  <input
+                    type="number" min={0.5} step={0.5} value={horasMuestreo}
+                    onChange={(e) => setHorasMuestreo(e.target.value)}
+                    className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white text-center font-bold focus:outline-none focus:border-accent-electric"
+                    placeholder="0.0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-primary-400 mb-1.5">Nota</label>
+                  <input
+                    value={notaMuestreo} onChange={(e) => setNotaMuestreo(e.target.value)}
+                    className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric"
+                    placeholder="Muestreo trimestral ELSE"
+                  />
+                </div>
+                <p className="text-[11px] text-gray-500">
+                  La descarga se limita al saldo disponible: no genera sobretiempo ni pago extra.
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setModalMuestreo(null)} className="flex-1 py-2.5 text-sm text-primary-400 hover:text-white border border-primary-800 rounded-xl">
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={muestreoHandler} disabled={guardandoBolsa}
+                    className="flex-1 py-2.5 bg-amber-500/20 border border-amber-500/40 text-amber-400 font-semibold rounded-xl text-sm hover:bg-amber-500/30 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {guardandoBolsa && <FaSpinner className="animate-spin" />}
+                    Descargar bolsa
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Modal agregar trabajador ── */}
+        <AnimatePresence>
+          {modalNuevo && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={(e) => { if (e.target === e.currentTarget) setModalNuevo(false) }}
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-primary-900 border border-primary-700 rounded-2xl w-full max-w-md shadow-2xl p-5 space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                    <FaUserPlus className="text-emerald-400" /> Agregar trabajador
+                  </h3>
+                  <button onClick={() => setModalNuevo(false)} className="text-gray-400 hover:text-white p-1"><FaTimes /></button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-primary-400 mb-1">DNI *</label>
+                    <input
+                      value={nuevoDraft.dni} maxLength={8}
+                      onChange={(e) => setNuevoDraft((p) => ({ ...p, dni: e.target.value.replace(/\D/g, '') }))}
+                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white font-mono focus:outline-none focus:border-accent-electric"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-primary-400 mb-1">Fecha de inicio *</label>
+                    <input
+                      type="date" value={nuevoDraft.fecha_inicio}
+                      onChange={(e) => setNuevoDraft((p) => ({ ...p, fecha_inicio: e.target.value }))}
+                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs text-primary-400 mb-1">Apellidos y nombres *</label>
+                    <input
+                      value={nuevoDraft.nombre}
+                      onChange={(e) => setNuevoDraft((p) => ({ ...p, nombre: e.target.value }))}
+                      placeholder="Apellidos, Nombres"
+                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-primary-400 mb-1">Cargo *</label>
+                    <input
+                      value={nuevoDraft.cargo}
+                      onChange={(e) => setNuevoDraft((p) => ({ ...p, cargo: e.target.value }))}
+                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-primary-400 mb-1">Sede</label>
+                    <input
+                      value={nuevoDraft.sede}
+                      onChange={(e) => setNuevoDraft((p) => ({ ...p, sede: e.target.value }))}
+                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs text-primary-400 mb-1">Correo corporativo (opcional)</label>
+                    <input
+                      type="email" value={nuevoDraft.email}
+                      onChange={(e) => setNuevoDraft((p) => ({ ...p, email: e.target.value }))}
+                      placeholder="usuario@ingenieriatelcom.com"
+                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-primary-400 mb-1">Sueldo (S/)</label>
+                    <input
+                      type="number" value={nuevoDraft.sueldo} disabled={nuevoDraft.usa_rmv}
+                      onChange={(e) => setNuevoDraft((p) => ({ ...p, sueldo: e.target.value }))}
+                      placeholder={nuevoDraft.usa_rmv ? `RMV: ${config.rmv}` : '1500'}
+                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric disabled:opacity-50"
+                    />
+                  </div>
+                  <div className="flex items-end pb-2">
+                    <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                      <input
+                        type="checkbox" checked={nuevoDraft.usa_rmv}
+                        onChange={(e) => setNuevoDraft((p) => ({ ...p, usa_rmv: e.target.checked }))}
+                        className="accent-cyan-400"
+                      />
+                      Gana la RMV (ajuste automático)
+                    </label>
+                  </div>
+                </div>
+                <p className="text-[11px] text-gray-500">
+                  El trabajador aparecerá de inmediato en el kiosko de asistencia y en este panel.
+                  No se computa asistencia antes de su fecha de inicio.
+                </p>
+                <button
+                  onClick={crearTrabajadorHandler} disabled={guardandoNuevo}
+                  className="w-full py-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-semibold rounded-xl text-sm hover:bg-emerald-500/30 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {guardandoNuevo && <FaSpinner className="animate-spin" />}
+                  Crear trabajador
+                </button>
               </motion.div>
             </motion.div>
           )}

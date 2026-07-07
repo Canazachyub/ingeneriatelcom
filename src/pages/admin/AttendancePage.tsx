@@ -22,14 +22,19 @@ import {
   TRABAJADORES,
   EVENTOS,
   EVENTO_LABELS,
+  tipoEvento,
   RegistroAsistencia,
   Justificacion,
 } from '../../data/trabajadores'
 
 type Tab = 'registros' | 'informe' | 'justificaciones'
 
-// Cláusula 13ª del contrato: 15 min de tolerancia sobre cada hora de ingreso
-const TOLERANCIA_MIN = 15
+// Cláusula 13ª: 10 min de tolerancia SOLO en el ingreso de la mañana;
+// el ingreso de la tarde no tiene tolerancia
+const TOLERANCIA_POR_EVENTO: Record<string, number> = {
+  ingreso_manana: 10,
+  ingreso_tarde: 0,
+}
 
 // El sistema entró en operación el 02/07/2026. Los días previos
 // no cuentan como falta (periodo justificado por implementación).
@@ -68,11 +73,11 @@ const horaAMinutos = (hora: string): number => {
   return (h || 0) * 60 + (m || 0)
 }
 
-// Puntualidad solo aplica a ingresos; tolerancia de 10 min
+// Puntualidad solo aplica a ingresos; tolerancia según el evento
 const esTarde = (evento: string, hora: string): boolean => {
   const cfg = EVENTOS.find((e) => e.key === evento)
   if (!cfg || cfg.tipo !== 'ingreso' || !hora) return false
-  return horaAMinutos(hora) > cfg.horaMinutos + TOLERANCIA_MIN
+  return horaAMinutos(hora) > cfg.horaMinutos + (TOLERANCIA_POR_EVENTO[evento] ?? 0)
 }
 
 const descargarCSV = (nombre: string, filas: string[][]) => {
@@ -180,7 +185,9 @@ export default function AttendancePage() {
 
     const hoyISO = toLocalISO(new Date())
     const filas = TRABAJADORES
-      .filter((t) => !filtroDni || t.dni === filtroDni)
+      // Los de campo (registro_simple) quedan fuera del informe de faltas/tardanzas:
+      // solo bitácora. Sus registros sí aparecen en la pestaña "Registros".
+      .filter((t) => !t.registro_simple && (!filtroDni || t.dni === filtroDni))
       .map((t) => {
         const porFecha = idx[t.dni] || {}
         let diasAsistidos = 0
@@ -399,11 +406,12 @@ export default function AttendancePage() {
                           </td>
                           <td className="px-4 py-3">
                             <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                              cfg?.tipo === 'ingreso'
+                              tipoEvento(r.evento) === 'ingreso'
                                 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
                                 : 'bg-rose-500/15 text-rose-400 border border-rose-500/25'
                             }`}>
                               {EVENTO_LABELS[r.evento] || r.evento}
+                              {!cfg && <span className="ml-1 opacity-60">· campo</span>}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center text-gray-300 hidden sm:table-cell">{r.fecha}</td>

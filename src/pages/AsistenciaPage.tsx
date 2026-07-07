@@ -17,16 +17,21 @@ import {
   FaFileAlt,
   FaPaperclip,
   FaSyncAlt,
+  FaSignInAlt,
+  FaSignOutAlt,
+  FaWhatsapp,
 } from 'react-icons/fa'
 import { Link } from 'react-router-dom'
 import { api } from '../api/appScriptApi'
 import { useGeolocation } from '../hooks/useGeolocation'
 import {
+  TRABAJADORES,
   buscarTrabajador,
   TrabajadorFijo,
   EVENTOS,
-  EventoAsistencia,
+  EventoRegistro,
   EVENTO_LABELS,
+  tipoEvento,
   sugerirEvento,
 } from '../data/trabajadores'
 
@@ -46,7 +51,7 @@ export default function AsistenciaPage() {
   const [viewState, setViewState] = useState<ViewState>('input')
   const [isLoading, setIsLoading] = useState(false)
   const [trabajador, setTrabajador] = useState<TrabajadorFijo | null>(null)
-  const [eventoSel, setEventoSel] = useState<EventoAsistencia | null>(null)
+  const [eventoSel, setEventoSel] = useState<EventoRegistro | null>(null)
   const [mensaje, setMensaje] = useState('')
   const [horaRegistro, setHoraRegistro] = useState('')
   const [countdown, setCountdown] = useState(6)
@@ -67,8 +72,17 @@ export default function AsistenciaPage() {
 
   const { location, error: geoError, loading: geoLoading, getLocation } = useGeolocation()
 
+  // Lista de trabajadores desde el backend (hoja sueldos, sin montos).
+  // Los nuevos trabajadores creados en el panel aparecen aquí sin redeploy.
+  const [listaTrabajadores, setListaTrabajadores] = useState<TrabajadorFijo[]>(TRABAJADORES)
+
   useEffect(() => {
     getLocation()
+    api.getTrabajadores().then((res) => {
+      if (res.success && res.data && res.data.length > 0) {
+        setListaTrabajadores(res.data)
+      }
+    }).catch(() => { /* fallback a la lista local */ })
   }, [getLocation])
 
   // Countdown de reinicio en success/error
@@ -154,10 +168,11 @@ export default function AsistenciaPage() {
 
   const handleVerificarDni = () => {
     if (dni.length !== 8) return
-    const t = buscarTrabajador(dni)
+    const t = buscarTrabajador(dni, listaTrabajadores)
     if (t) {
       setTrabajador(t)
-      setEventoSel(sugerirEvento())
+      // Campo (sin correo): sin evento sugerido, el trabajador elige Ingreso/Salida.
+      setEventoSel(t.registro_simple ? null : sugerirEvento())
       setViewState('menu')
     } else {
       setMensaje('DNI no registrado. Contacta al Coordinador General.')
@@ -165,7 +180,7 @@ export default function AsistenciaPage() {
     }
   }
 
-  const handleSeleccionEvento = (evento: EventoAsistencia) => {
+  const handleSeleccionEvento = (evento: EventoRegistro) => {
     setEventoSel(evento)
     setFotoPreview(null)
     setViewState('camara')
@@ -277,7 +292,14 @@ export default function AsistenciaPage() {
     setArchivo(null)
   }, [detenerCamara])
 
-  const eventoConfig = EVENTOS.find((e) => e.key === eventoSel)
+  // Info de display del evento seleccionado (sirve para oficina y campo).
+  const eventoInfo = eventoSel
+    ? {
+        label: EVENTO_LABELS[eventoSel] || 'Registro',
+        horaRef: EVENTOS.find((e) => e.key === eventoSel)?.horaRef || '',
+        tipo: tipoEvento(eventoSel),
+      }
+    : null
 
   return (
     <div className="flex flex-col bg-[#060d1f]" style={{ minHeight: '100dvh' }}>
@@ -387,43 +409,63 @@ export default function AsistenciaPage() {
               </div>
 
               <p className="text-center text-xs text-primary-400 mb-3 tracking-widest uppercase">
-                ¿Qué deseas registrar?
+                {trabajador.registro_simple ? 'Registra tu asistencia' : '¿Qué deseas registrar?'}
               </p>
 
-              {/* 4 eventos */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                {EVENTOS.map((ev) => {
-                  const sugerido = ev.key === eventoSel
-                  const esManana = ev.key.includes('manana')
-                  const esIngreso = ev.tipo === 'ingreso'
-                  return (
-                    <button
-                      key={ev.key}
-                      onClick={() => handleSeleccionEvento(ev.key)}
-                      className={`relative py-5 px-3 rounded-2xl font-bold transition-all flex flex-col items-center gap-1.5 overflow-hidden border ${
-                        sugerido
-                          ? esIngreso
-                            ? 'bg-emerald-500/90 border-emerald-400 text-white shadow-lg shadow-emerald-500/25'
-                            : 'bg-rose-500/90 border-rose-400 text-white shadow-lg shadow-rose-500/25'
-                          : 'bg-white/5 border-white/10 text-primary-200 hover:bg-white/10'
-                      }`}
-                    >
-                      {esManana ? (
-                        <FaSun className={`text-xl ${sugerido ? 'text-yellow-200' : 'text-yellow-400/70'}`} />
-                      ) : (
-                        <FaMoon className={`text-xl ${sugerido ? 'text-blue-100' : 'text-blue-300/70'}`} />
-                      )}
-                      <span className="text-sm leading-tight text-center">{ev.label}</span>
-                      <span className={`text-xs font-mono font-normal ${sugerido ? 'text-white/80' : 'text-primary-500'}`}>
-                        {ev.horaRef}
-                      </span>
-                      {sugerido && (
-                        <span className="text-[10px] font-normal opacity-80">Sugerido</span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
+              {trabajador.registro_simple ? (
+                /* CAMPO: Ingreso / Salida por turnos (sin horario fijo) */
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <button
+                    onClick={() => handleSeleccionEvento('ingreso_campo')}
+                    className="py-8 rounded-2xl font-bold bg-emerald-500/90 border border-emerald-400 text-white shadow-lg shadow-emerald-500/25 flex flex-col items-center gap-2.5 hover:bg-emerald-500 transition-all"
+                  >
+                    <FaSignInAlt className="text-3xl" />
+                    <span className="text-base tracking-widest">INGRESO</span>
+                  </button>
+                  <button
+                    onClick={() => handleSeleccionEvento('salida_campo')}
+                    className="py-8 rounded-2xl font-bold bg-rose-500/90 border border-rose-400 text-white shadow-lg shadow-rose-500/25 flex flex-col items-center gap-2.5 hover:bg-rose-500 transition-all"
+                  >
+                    <FaSignOutAlt className="text-3xl" />
+                    <span className="text-base tracking-widest">SALIDA</span>
+                  </button>
+                </div>
+              ) : (
+                /* OFICINA: 4 eventos */
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  {EVENTOS.map((ev) => {
+                    const sugerido = ev.key === eventoSel
+                    const esManana = ev.key.includes('manana')
+                    const esIngreso = ev.tipo === 'ingreso'
+                    return (
+                      <button
+                        key={ev.key}
+                        onClick={() => handleSeleccionEvento(ev.key)}
+                        className={`relative py-5 px-3 rounded-2xl font-bold transition-all flex flex-col items-center gap-1.5 overflow-hidden border ${
+                          sugerido
+                            ? esIngreso
+                              ? 'bg-emerald-500/90 border-emerald-400 text-white shadow-lg shadow-emerald-500/25'
+                              : 'bg-rose-500/90 border-rose-400 text-white shadow-lg shadow-rose-500/25'
+                            : 'bg-white/5 border-white/10 text-primary-200 hover:bg-white/10'
+                        }`}
+                      >
+                        {esManana ? (
+                          <FaSun className={`text-xl ${sugerido ? 'text-yellow-200' : 'text-yellow-400/70'}`} />
+                        ) : (
+                          <FaMoon className={`text-xl ${sugerido ? 'text-blue-100' : 'text-blue-300/70'}`} />
+                        )}
+                        <span className="text-sm leading-tight text-center">{ev.label}</span>
+                        <span className={`text-xs font-mono font-normal ${sugerido ? 'text-white/80' : 'text-primary-500'}`}>
+                          {ev.horaRef}
+                        </span>
+                        {sugerido && (
+                          <span className="text-[10px] font-normal opacity-80">Sugerido</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
 
               {/* Botón justificaciones */}
               <button
@@ -444,7 +486,7 @@ export default function AsistenciaPage() {
           )}
 
           {/* ── Vista: Cámara ── */}
-          {viewState === 'camara' && trabajador && eventoConfig && (
+          {viewState === 'camara' && trabajador && eventoInfo && (
             <motion.div
               key="camara"
               initial={{ opacity: 0, y: 20 }}
@@ -455,11 +497,11 @@ export default function AsistenciaPage() {
             >
               <div className="text-center mb-3">
                 <span className={`inline-block px-4 py-1 rounded-full text-xs font-bold tracking-widest ${
-                  eventoConfig.tipo === 'ingreso'
+                  eventoInfo.tipo === 'ingreso'
                     ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                     : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
                 }`}>
-                  {eventoConfig.label.toUpperCase()} · {eventoConfig.horaRef}
+                  {eventoInfo.label.toUpperCase()}{eventoInfo.horaRef ? ` · ${eventoInfo.horaRef}` : ''}
                 </span>
                 <p className="text-xs text-primary-400 mt-2">
                   Toma una foto para confirmar tu registro
@@ -731,7 +773,7 @@ export default function AsistenciaPage() {
               </motion.div>
 
               <h2 className="text-xl font-bold text-white mb-2">Error</h2>
-              <p className="text-rose-400 text-sm mb-8 max-w-xs">{mensaje}</p>
+              <p className="text-rose-400 text-sm mb-6 max-w-xs">{mensaje}</p>
 
               <button
                 onClick={handleReset}
@@ -739,6 +781,19 @@ export default function AsistenciaPage() {
               >
                 <FaRedo /> Intentar de nuevo
               </button>
+
+              {/* Contacto directo: útil sobre todo si su DNI no está registrado */}
+              <a
+                href={`https://wa.me/51984300510?text=${encodeURIComponent(
+                  `Hola, tuve un problema con el registro de asistencia${dni ? ` (DNI ${dni})` : ''}: ${mensaje}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 mb-6 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-sm font-medium hover:bg-emerald-500/25 transition-colors"
+              >
+                <FaWhatsapp className="text-lg" />
+                ¿Hubo un error? Escríbenos: 984 300 510
+              </a>
 
               <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden mb-2">
                 <motion.div

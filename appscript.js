@@ -42,6 +42,7 @@ function doGet(e) {
       // ASISTENCIA V2 (foto + GPS + justificaciones)
       'registrarAsistenciaFoto',
       'subirJustificacion',
+      'getTrabajadores',
       // CAPACITACIONES Y EVALUACIONES (publicas)
       'getCapacitaciones',
       'getCapacitacionById',
@@ -211,12 +212,26 @@ function doGet(e) {
         return jsonResponse(getSueldos());
       case 'updateSueldo':
         return jsonResponse(updateSueldo(data));
+      case 'crearTrabajador':
+        return jsonResponse(crearTrabajador(data));
       case 'getIncidencias':
         return jsonResponse(getIncidencias(data));
       case 'revisarIncidencia':
         return jsonResponse(revisarIncidencia(data));
       case 'sincronizarIncidencias':
         return jsonResponse(sincronizarIncidencias(data));
+      case 'autorizarSalida5pm':
+        return jsonResponse(autorizarSalida5pm(data));
+      case 'getAutorizaciones5pm':
+        return jsonResponse(getAutorizaciones5pm(data));
+      case 'registrarMuestreo':
+        return jsonResponse(registrarMuestreo(data));
+      case 'getBolsaHoras':
+        return jsonResponse(getBolsaHoras(data));
+
+      // ========== TRABAJADORES (publico, sin sueldos) ==========
+      case 'getTrabajadores':
+        return jsonResponse(getTrabajadores());
 
       // ========== CAPACITACIONES (PUBLICO) ==========
       case 'getCapacitaciones':
@@ -3778,6 +3793,9 @@ function registrarEventoLog(data) {
 // ============================================================
 
 var EVENTOS_ASISTENCIA_V2 = ['ingreso_manana', 'salida_manana', 'ingreso_tarde', 'salida_tarde'];
+// Eventos de trabajadores de campo (sin correo): Ingreso/Salida por turnos,
+// se permiten varios al dia. Solo bitacora, fuera del modelo de descuentos.
+var EVENTOS_CAMPO = ['ingreso_campo', 'salida_campo'];
 
 var HEADERS_ASISTENCIAS_V2 = [
   'id', 'dni', 'nombre', 'cargo', 'evento', 'fecha', 'hora',
@@ -3819,8 +3837,9 @@ function registrarAsistenciaFoto(data) {
   var dni = String(data.dni || '');
   var evento = data.evento || '';
 
+  var esCampo = EVENTOS_CAMPO.indexOf(evento) !== -1;
   if (!/^\d{8}$/.test(dni)) return { success: false, error: 'DNI invalido' };
-  if (EVENTOS_ASISTENCIA_V2.indexOf(evento) === -1) return { success: false, error: 'Evento invalido' };
+  if (EVENTOS_ASISTENCIA_V2.indexOf(evento) === -1 && !esCampo) return { success: false, error: 'Evento invalido' };
   if (!data.fileContent) return { success: false, error: 'La foto es obligatoria' };
 
   var ss = SpreadsheetApp.openById(SHEET_ID);
@@ -3830,15 +3849,18 @@ function registrarAsistenciaFoto(data) {
   var fecha = Utilities.formatDate(ahora, 'America/Lima', 'yyyy-MM-dd');
   var hora = Utilities.formatDate(ahora, 'America/Lima', 'HH:mm:ss');
 
-  // Evitar doble registro del mismo evento en el mismo dia
-  var rows = sheet.getDataRange().getValues();
-  var headers = rows[0];
-  var dniCol = headers.indexOf('dni');
-  var eventoCol = headers.indexOf('evento');
-  var fechaCol = headers.indexOf('fecha');
-  for (var i = 1; i < rows.length; i++) {
-    if (String(rows[i][dniCol]) === dni && rows[i][eventoCol] === evento && String(rows[i][fechaCol]) === fecha) {
-      return { success: false, error: 'Ya registraste este evento hoy' };
+  // Evitar doble registro del mismo evento en el mismo dia (SOLO oficina).
+  // Los eventos de campo permiten varios turnos por dia.
+  if (!esCampo) {
+    var rows = sheet.getDataRange().getValues();
+    var headers = rows[0];
+    var dniCol = headers.indexOf('dni');
+    var eventoCol = headers.indexOf('evento');
+    var fechaCol = headers.indexOf('fecha');
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][dniCol]) === dni && rows[i][eventoCol] === evento && String(rows[i][fechaCol]) === fecha) {
+        return { success: false, error: 'Ya registraste este evento hoy' };
+      }
     }
   }
 
@@ -4003,12 +4025,15 @@ var CONFIG_PLANILLA_DEFAULT = {
   salida_manana: '13:00',
   ingreso_tarde: '14:00',
   salida_tarde: '18:00',
-  tolerancia_min: 15,
+  tolerancia_manana_min: 10,   // 10 min SOLO sobre el ingreso de 7:30
+  tolerancia_tarde_min: 0,     // el ingreso de la tarde NO tiene tolerancia
   tardanza_grave_min: 60,
   jornada_horas: 9.5,
   factor_descanso_semanal: 0.2,
   plazo_sustento_horas: 48,
   divisor_mes: 30,
+  rmv: 1130,                   // Remuneracion Minima Vital (los operarios se ajustan solos)
+  salida_autorizada: '17:00',  // hora minima de la salida 5pm autorizada
   fecha_operativo: '2026-07-02'
 };
 
@@ -4022,15 +4047,30 @@ var HEADERS_PLANILLA_LOG = [
   'nota', 'usuario', 'timestamp'
 ];
 
+var HEADERS_SUELDOS = ['dni', 'nombre', 'cargo', 'sueldo', 'fecha_inicio', 'usa_rmv', 'sede', 'email'];
+
+var HEADERS_AUTORIZACIONES = ['id', 'dni', 'fecha', 'autorizado_por', 'nota', 'timestamp'];
+
+var HEADERS_BOLSA = ['id', 'dni', 'fecha', 'tipo', 'horas', 'nota', 'usuario', 'timestamp'];
+
+// Lista definitiva de trabajadores (usa_rmv=TRUE gana la RMV con ajuste automatico).
+// Correos corporativos: dominio ingenieriatelcom.com (Google Workspace).
+// Los operarios (RMV) y los ingresos nuevos arrancan 2026-07-07 para no
+// generar faltas retroactivas; el admin ajusta la fecha real desde la hoja.
 var SUELDOS_INICIALES = [
-  ['46809070', 'Araujo Álvarez, Andrés Steven', 'Coordinador General', 3500],
-  ['73316735', 'Marroquín Concha, Diego Mauricio', 'Analista Legal de Reclamos', 3000],
-  ['74135306', 'Vargas Miranda, Juan Joseph', 'Analista Legal de Reclamos', 1800],
-  ['73354681', 'Cayllahua Zárate, Dalia Avely', 'Analista Junior de Reclamos', 2000],
-  ['74525595', 'León Umeres, Milagros Jhenifer', 'Asistente Administrativo', 1800],
-  ['77383250', 'Condori Cáceres, Jocabed Adriana', 'Tramitador / Digitador', 1500],
-  ['72889070', 'Zárate Castañeda, Mhyalhu Sthefanya', 'Tramitador / Digitador', 1500],
-  ['74147961', 'Hurtado Vega, Marilyn', 'Tramitador / Digitador', 1500]
+  ['46809070', 'Araujo Álvarez, Andre Steven', 'Coordinador General', 3500, '2026-07-01', 'FALSE', 'Principal', 'coordinador.general@ingenieriatelcom.com'],
+  ['73316735', 'Marroquín Concha, Diego Mauricio', 'Analista Legal de Reclamos', 3000, '2026-07-01', 'FALSE', 'Principal', 'analista.legal1@ingenieriatelcom.com'],
+  ['74135306', 'Vargas Miranda, Juan Joseph', 'Analista Legal de Reclamos', 1800, '2026-07-01', 'FALSE', 'Principal', 'analista.legal2@ingenieriatelcom.com'],
+  ['70401672', 'Montufar Diaz, Alvaro Rodrigo', 'Analista Junior de Reclamos', 1800, '2026-07-06', 'FALSE', 'Principal', 'analista.junior@ingenieriatelcom.com'],
+  ['74525595', 'León Umeres, Milagros Jhenifer', 'Asistente Administrativo', 1800, '2026-07-01', 'FALSE', 'Principal', 'asistente.admin@ingenieriatelcom.com'],
+  ['77383250', 'Condori Cáceres, Jocabed Adriana', 'Tramitador / Digitador', 1500, '2026-07-01', 'FALSE', 'Principal', 'tramitador2@ingenieriatelcom.com'],
+  ['72743443', 'Ramos Serrani, Anais Gasdaly', 'Tramitador / Digitador', 1500, '2026-07-07', 'FALSE', 'Principal', 'tramitador3@ingenieriatelcom.com'],
+  ['74147961', 'Hurtado Vega, Marilyn', 'Tramitador / Digitador', 1500, '2026-07-01', 'FALSE', 'Principal', 'tramitador1@ingenieriatelcom.com'],
+  ['45298858', 'Canaza Chique, Darwin', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', ''],
+  ['80644637', 'Canaza Chique, Jael Fausto', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', ''],
+  ['42239901', 'Canaza Chique, Willy', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', ''],
+  ['47815297', 'Marin Callañaupa, George Smith', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', ''],
+  ['74323866', 'Maceda Econema, Franco Paolo', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', '']
 ];
 
 // Ejecutar UNA VEZ desde el editor (no toca hojas existentes)
@@ -4048,9 +4088,9 @@ function setupPlanillaSheets() {
 
   if (!ss.getSheetByName('sueldos')) {
     var s = ss.insertSheet('sueldos');
-    s.appendRow(['dni', 'nombre', 'cargo', 'sueldo']);
+    s.appendRow(HEADERS_SUELDOS);
     SUELDOS_INICIALES.forEach(function(r) { s.appendRow(r); });
-    s.getRange(1, 1, 1, 4).setFontWeight('bold');
+    s.getRange(1, 1, 1, HEADERS_SUELDOS.length).setFontWeight('bold');
   }
 
   if (!ss.getSheetByName('incidencias')) {
@@ -4065,8 +4105,71 @@ function setupPlanillaSheets() {
     l.getRange(1, 1, 1, HEADERS_PLANILLA_LOG.length).setFontWeight('bold');
   }
 
+  if (!ss.getSheetByName('autorizaciones_5pm')) {
+    var a = ss.insertSheet('autorizaciones_5pm');
+    a.appendRow(HEADERS_AUTORIZACIONES);
+    a.getRange(1, 1, 1, HEADERS_AUTORIZACIONES.length).setFontWeight('bold');
+  }
+
+  if (!ss.getSheetByName('bolsa_horas')) {
+    var b = ss.insertSheet('bolsa_horas');
+    b.appendRow(HEADERS_BOLSA);
+    b.getRange(1, 1, 1, HEADERS_BOLSA.length).setFontWeight('bold');
+  }
+
   Logger.log('Hojas de planilla listas');
-  return 'Hojas config_planilla, sueldos, incidencias y planilla_log creadas';
+  return 'Hojas de planilla creadas/verificadas';
+}
+
+// MIGRACION V2 — ejecutar UNA VEZ si ya tenias la version anterior:
+// 1) agrega las claves nuevas a config_planilla (tolerancias, rmv, salida_autorizada)
+// 2) RECREA la hoja sueldos con la lista definitiva y columnas nuevas
+// 3) crea autorizaciones_5pm y bolsa_horas
+// NO toca incidencias ni planilla_log.
+function migrarPlanillaV2() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+
+  // 1) Config: agregar claves faltantes
+  var c = ss.getSheetByName('config_planilla');
+  if (c) {
+    var rows = c.getDataRange().getValues();
+    var existentes = {};
+    for (var i = 1; i < rows.length; i++) existentes[String(rows[i][0]).trim()] = true;
+    Object.keys(CONFIG_PLANILLA_DEFAULT).forEach(function(k) {
+      if (!existentes[k]) c.appendRow([k, CONFIG_PLANILLA_DEFAULT[k]]);
+    });
+  }
+
+  // 2) Recrear sueldos con la lista definitiva
+  var viejo = ss.getSheetByName('sueldos');
+  if (viejo) ss.deleteSheet(viejo);
+  var s = ss.insertSheet('sueldos');
+  s.appendRow(HEADERS_SUELDOS);
+  SUELDOS_INICIALES.forEach(function(r) { s.appendRow(r); });
+  s.getRange(1, 1, 1, HEADERS_SUELDOS.length).setFontWeight('bold');
+
+  // 3) Hojas nuevas
+  setupPlanillaSheets();
+
+  return 'Migracion V2 completada: config actualizada, sueldos recreada con 8 trabajadores, hojas 5pm/bolsa listas';
+}
+
+// ACTUALIZACION DE TRABAJADORES V3 — ejecutar UNA VEZ desde el editor.
+// RECREA la hoja 'sueldos' con la lista definitiva de 13 trabajadores +
+// columna 'email'. NO toca config_planilla, incidencias, planilla_log,
+// autorizaciones_5pm ni bolsa_horas. Si algun DNI ya registro asistencia
+// bajo otro DNI (p.ej. Condori), esos registros quedan bajo el DNI viejo.
+function actualizarTrabajadoresV3() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var viejo = ss.getSheetByName('sueldos');
+  if (viejo) ss.deleteSheet(viejo);
+  var s = ss.insertSheet('sueldos');
+  s.appendRow(HEADERS_SUELDOS);
+  SUELDOS_INICIALES.forEach(function(r) { s.appendRow(r); });
+  s.getRange(1, 1, 1, HEADERS_SUELDOS.length).setFontWeight('bold');
+  // Asegurar que las demas hojas de planilla existan (no las toca si ya estan)
+  setupPlanillaSheets();
+  return 'Lista actualizada: ' + SUELDOS_INICIALES.length + ' trabajadores con correos. config/incidencias/bolsa/autorizaciones intactas.';
 }
 
 // Lee la config combinando defaults + hoja (la hoja manda)
@@ -4117,6 +4220,7 @@ function updateConfigPlanilla(data) {
 }
 
 function getSueldos() {
+  var cfg = leerConfigPlanilla_();
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName('sueldos');
   if (!sheet) return { success: false, error: 'Ejecuta setupPlanillaSheets() primero' };
@@ -4127,10 +4231,30 @@ function getSueldos() {
     .map(function(r) {
       var o = rowToObject(headers, r);
       o.dni = String(o.dni);
-      o.sueldo = Number(o.sueldo) || 0;
+      o.usa_rmv = o.usa_rmv === true || o.usa_rmv === 'TRUE' || o.usa_rmv === 'true';
+      // RMV con ajuste automatico
+      o.sueldo = o.usa_rmv ? Number(cfg.rmv) : (Number(o.sueldo) || 0);
+      if (o.fecha_inicio instanceof Date) {
+        o.fecha_inicio = Utilities.formatDate(o.fecha_inicio, 'America/Lima', 'yyyy-MM-dd');
+      }
+      o.fecha_inicio = String(o.fecha_inicio || cfg.fecha_operativo);
+      o.email = String(o.email || '');
       return o;
     });
   return { success: true, data: result };
+}
+
+// Lista publica para el kiosko de asistencia: SIN sueldos ni correos.
+// registro_simple = trabajador de campo (sin correo): flujo Ingreso/Salida simple.
+function getTrabajadores() {
+  var res = getSueldos();
+  if (!res.success) return res;
+  return {
+    success: true,
+    data: res.data.map(function(t) {
+      return { dni: t.dni, nombre: t.nombre, cargo: t.cargo, sede: t.sede || '', registro_simple: !t.email };
+    })
+  };
 }
 
 function updateSueldo(data) {
@@ -4140,13 +4264,137 @@ function updateSueldo(data) {
   var rows = sheet.getDataRange().getValues();
   var headers = rows[0];
   var sueldoCol = headers.indexOf('sueldo');
+  var rmvCol = headers.indexOf('usa_rmv');
   for (var i = 1; i < rows.length; i++) {
     if (String(rows[i][0]) === String(data.dni)) {
+      if (rmvCol >= 0 && (rows[i][rmvCol] === true || rows[i][rmvCol] === 'TRUE')) {
+        return { success: false, error: 'Este trabajador gana la RMV: su sueldo se ajusta con el parametro rmv de la configuracion' };
+      }
       sheet.getRange(i + 1, sueldoCol + 1).setValue(Number(data.sueldo) || 0);
       return { success: true, message: 'Sueldo actualizado' };
     }
   }
   return { success: false, error: 'DNI no encontrado en hoja sueldos' };
+}
+
+// Alta de trabajador desde el panel (aparece de inmediato en el kiosko)
+function crearTrabajador(data) {
+  var dni = String(data.dni || '').trim();
+  if (!/^\d{8}$/.test(dni)) return { success: false, error: 'DNI invalido (8 digitos)' };
+  if (!data.nombre || !data.cargo) return { success: false, error: 'Nombre y cargo son obligatorios' };
+
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('sueldos');
+  if (!sheet) return { success: false, error: 'Ejecuta setupPlanillaSheets() primero' };
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === dni) return { success: false, error: 'Ya existe un trabajador con ese DNI' };
+  }
+
+  var cfg = leerConfigPlanilla_();
+  sheet.appendRow([
+    dni,
+    data.nombre,
+    data.cargo,
+    data.usa_rmv ? Number(cfg.rmv) : (Number(data.sueldo) || 0),
+    String(data.fecha_inicio || Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd')),
+    data.usa_rmv ? 'TRUE' : 'FALSE',
+    data.sede || 'Principal',
+    data.email || ''
+  ]);
+  return { success: true, message: 'Trabajador creado: ' + data.nombre };
+}
+
+// ── Autorizaciones de salida 5pm y bolsa de compensacion ────
+
+function autorizarSalida5pm(data) {
+  var dni = String(data.dni || '');
+  var fecha = String(data.fecha || Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd'));
+  if (!/^\d{8}$/.test(dni)) return { success: false, error: 'DNI invalido' };
+
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = getOrCreateAsistenciaSheet_(ss, 'autorizaciones_5pm', HEADERS_AUTORIZACIONES);
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    var f = rows[i][2] instanceof Date
+      ? Utilities.formatDate(rows[i][2], 'America/Lima', 'yyyy-MM-dd') : String(rows[i][2]);
+    if (String(rows[i][1]) === dni && f === fecha) {
+      return { success: false, error: 'Ya existe autorizacion para ese DNI y fecha' };
+    }
+  }
+  sheet.appendRow([
+    Utilities.getUuid(), dni, fecha,
+    data.autorizado_por || 'Coordinador General',
+    data.nota || '', new Date().toISOString()
+  ]);
+  return { success: true, message: 'Salida 5pm autorizada para ' + fecha };
+}
+
+function getAutorizaciones5pm(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('autorizaciones_5pm');
+  if (!sheet) return { success: true, data: [] };
+  var rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return { success: true, data: [] };
+  var headers = rows[0];
+  var result = rows.slice(1)
+    .filter(function(r) { return r[0] !== ''; })
+    .map(function(r) {
+      var o = rowToObject(headers, r);
+      o.dni = String(o.dni);
+      if (o.fecha instanceof Date) o.fecha = Utilities.formatDate(o.fecha, 'America/Lima', 'yyyy-MM-dd');
+      return o;
+    });
+  return { success: true, data: filtrarPorRango_(result, data) };
+}
+
+// Descarga de bolsa: horas de muestreo trimestral ELSE trabajadas.
+// No genera sobretiempo: la descarga se limita al saldo disponible.
+function registrarMuestreo(data) {
+  var dni = String(data.dni || '');
+  if (!/^\d{8}$/.test(dni)) return { success: false, error: 'DNI invalido' };
+  var horas = Number(data.horas) || 0;
+  if (horas <= 0) return { success: false, error: 'Horas invalidas' };
+
+  var saldoRes = getBolsaHoras({ dni: dni });
+  var saldo = (saldoRes.data && saldoRes.data.saldos && saldoRes.data.saldos[dni]) || 0;
+  if (saldo <= 0) return { success: false, error: 'Sin horas en bolsa por compensar' };
+  var aplicadas = Math.min(horas, saldo);
+
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = getOrCreateAsistenciaSheet_(ss, 'bolsa_horas', HEADERS_BOLSA);
+  sheet.appendRow([
+    Utilities.getUuid(), dni,
+    String(data.fecha || Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd')),
+    'muestreo', -aplicadas,
+    data.nota || 'Muestreo trimestral ELSE',
+    data.usuario || 'Admin', new Date().toISOString()
+  ]);
+  return { success: true, data: { horas_aplicadas: aplicadas, saldo_restante: Math.round((saldo - aplicadas) * 100) / 100 } };
+}
+
+function getBolsaHoras(data) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName('bolsa_horas');
+  if (!sheet) return { success: true, data: { saldos: {}, movimientos: [] } };
+  var rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return { success: true, data: { saldos: {}, movimientos: [] } };
+  var headers = rows[0];
+  var movimientos = rows.slice(1)
+    .filter(function(r) { return r[0] !== ''; })
+    .map(function(r) {
+      var o = rowToObject(headers, r);
+      o.dni = String(o.dni);
+      o.horas = Number(o.horas) || 0;
+      if (o.fecha instanceof Date) o.fecha = Utilities.formatDate(o.fecha, 'America/Lima', 'yyyy-MM-dd');
+      return o;
+    });
+  if (data && data.dni) movimientos = movimientos.filter(function(m) { return m.dni === String(data.dni); });
+  var saldos = {};
+  movimientos.forEach(function(m) {
+    saldos[m.dni] = Math.round(((saldos[m.dni] || 0) + m.horas) * 100) / 100;
+  });
+  return { success: true, data: { saldos: saldos, movimientos: movimientos } };
 }
 
 function getIncidencias(data) {
@@ -4266,14 +4514,34 @@ function sincronizarIncidencias(data) {
     existentes[String(incRows[i][1]) + '|' + f + '|' + incRows[i][4] + '|' + incRows[i][5]] = true;
   }
 
+  // Autorizaciones 5pm indexadas por dni|fecha
+  var autIdx = {};
+  (getAutorizaciones5pm({}).data || []).forEach(function(a) {
+    autIdx[a.dni + '|' + a.fecha] = true;
+  });
+
+  // Movimientos de bolsa ya acreditados (idempotencia): dni|fecha con tipo salida_5pm
+  var bolsaSheet = getOrCreateAsistenciaSheet_(ss, 'bolsa_horas', HEADERS_BOLSA);
+  var bolsaExistente = {};
+  var bolsaRows = bolsaSheet.getDataRange().getValues();
+  for (var b = 1; b < bolsaRows.length; b++) {
+    if (bolsaRows[b][3] !== 'salida_5pm') continue;
+    var fb = bolsaRows[b][2] instanceof Date
+      ? Utilities.formatDate(bolsaRows[b][2], 'America/Lima', 'yyyy-MM-dd')
+      : String(bolsaRows[b][2]);
+    bolsaExistente[String(bolsaRows[b][1]) + '|' + fb] = true;
+  }
+
+  // Tolerancia asimetrica: 10 min solo en la manana, 0 en la tarde
   var ingresos = [
-    { evento: 'ingreso_manana', oficial: cfg.ingreso_manana },
-    { evento: 'ingreso_tarde', oficial: cfg.ingreso_tarde }
+    { evento: 'ingreso_manana', oficial: cfg.ingreso_manana, tolerancia: Number(cfg.tolerancia_manana_min) || 0 },
+    { evento: 'ingreso_tarde', oficial: cfg.ingreso_tarde, tolerancia: Number(cfg.tolerancia_tarde_min) || 0 }
   ];
   var salidas = [
     { evento: 'salida_manana', oficial: cfg.salida_manana },
     { evento: 'salida_tarde', oficial: cfg.salida_tarde }
   ];
+  var minSalidaAutorizada = horaAMinutosPlanilla_(cfg.salida_autorizada);
 
   var creadas = 0;
   var nuevaFila = function(dni, nombre, fecha, tipo, evento, minutos, grave) {
@@ -4299,6 +4567,12 @@ function sincronizarIncidencias(data) {
     var diaTerminado = fecha < hoyISO;
 
     trabajadores.forEach(function(t) {
+      // Trabajadores de campo (sin correo) quedan FUERA del modelo de descuentos:
+      // solo dejan bitacora de presencia (Ingreso/Salida) + justificaciones.
+      if (!t.email) return;
+      // No computar asistencia antes de la fecha de inicio del trabajador
+      if (t.fecha_inicio && fecha < String(t.fecha_inicio)) return;
+
       var regs = (regIdx[t.dni] || {})[fecha] || {};
       var tieneAlguno = Object.keys(regs).length > 0;
 
@@ -4308,25 +4582,50 @@ function sincronizarIncidencias(data) {
         return;
       }
 
-      // TARDANZAS: desde el minuto 16, minutos TOTALES desde la hora oficial
+      // TARDANZAS: superada la tolerancia del evento, minutos TOTALES
+      // desde la hora oficial (llega 7:50 -> 20 min, no 10)
       ingresos.forEach(function(ing) {
         var hora = regs[ing.evento];
         if (!hora) return;
         var retraso = horaAMinutosPlanilla_(hora) - horaAMinutosPlanilla_(ing.oficial);
-        if (retraso > cfg.tolerancia_min) {
+        if (retraso > ing.tolerancia) {
           nuevaFila(t.dni, t.nombre, fecha, 'tardanza', ing.evento, retraso, retraso > cfg.tardanza_grave_min);
         }
       });
 
-      // SALIDA ANTICIPADA: siempre se marca como grave
-      salidas.forEach(function(sal) {
-        var hora = regs[sal.evento];
-        if (!hora) return;
-        var faltante = horaAMinutosPlanilla_(sal.oficial) - horaAMinutosPlanilla_(hora);
-        if (faltante > 0) {
-          nuevaFila(t.dni, t.nombre, fecha, 'salida_anticipada', sal.evento, faltante, true);
+      // SALIDA MANANA anticipada: siempre grave
+      var horaSm = regs['salida_manana'];
+      if (horaSm) {
+        var faltanteSm = horaAMinutosPlanilla_(cfg.salida_manana) - horaAMinutosPlanilla_(horaSm);
+        if (faltanteSm > 0) {
+          nuevaFila(t.dni, t.nombre, fecha, 'salida_anticipada', 'salida_manana', faltanteSm, true);
         }
-      });
+      }
+
+      // SALIDA TARDE: con autorizacion 5pm y hora >= salida_autorizada,
+      // NO es incidencia — la hora no laborada va a la bolsa de compensacion.
+      // Sin autorizacion: tardanza grave (retiro anticipado).
+      var horaSt = regs['salida_tarde'];
+      if (horaSt) {
+        var minSt = horaAMinutosPlanilla_(horaSt);
+        var faltanteSt = horaAMinutosPlanilla_(cfg.salida_tarde) - minSt;
+        if (faltanteSt > 0) {
+          var autorizado = autIdx[t.dni + '|' + fecha] === true;
+          if (autorizado && minSt >= minSalidaAutorizada) {
+            var keyBolsa = t.dni + '|' + fecha;
+            if (!bolsaExistente[keyBolsa]) {
+              bolsaExistente[keyBolsa] = true;
+              bolsaSheet.appendRow([
+                Utilities.getUuid(), t.dni, fecha, 'salida_5pm',
+                Math.round((faltanteSt / 60) * 100) / 100,
+                'Salida autorizada ' + horaSt, 'sistema', new Date().toISOString()
+              ]);
+            }
+          } else {
+            nuevaFila(t.dni, t.nombre, fecha, 'salida_anticipada', 'salida_tarde', faltanteSt, true);
+          }
+        }
+      }
 
       // OMISION: marco algo pero falta algun evento (dia terminado)
       if (diaTerminado) {

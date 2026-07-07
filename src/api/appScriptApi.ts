@@ -769,12 +769,57 @@ class AppScriptApi {
     return this.request('updateConfigPlanilla', 'POST', { valores })
   }
 
-  async getSueldos(): Promise<ApiResponse<{ dni: string; nombre: string; cargo: string; sueldo: number }[]>> {
+  async getSueldos(): Promise<ApiResponse<{ dni: string; nombre: string; cargo: string; sueldo: number; fecha_inicio?: string; usa_rmv?: boolean; sede?: string; email?: string }[]>> {
     return this.request('getSueldos', 'POST', {})
   }
 
   async updateSueldo(dni: string, sueldo: number): Promise<ApiResponse<null>> {
     return this.request('updateSueldo', 'POST', { dni, sueldo })
+  }
+
+  // Lista pública para el kiosko (sin sueldos ni correos)
+  async getTrabajadores(): Promise<ApiResponse<{ dni: string; nombre: string; cargo: string; sede?: string; registro_simple?: boolean }[]>> {
+    return this.request('getTrabajadores', 'GET', {})
+  }
+
+  async crearTrabajador(data: {
+    dni: string
+    nombre: string
+    cargo: string
+    sueldo?: number
+    fecha_inicio?: string
+    usa_rmv?: boolean
+    sede?: string
+    email?: string
+  }): Promise<ApiResponse<null>> {
+    return this.request('crearTrabajador', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async autorizarSalida5pm(data: {
+    dni: string
+    fecha?: string
+    autorizado_por?: string
+    nota?: string
+  }): Promise<ApiResponse<null>> {
+    return this.request('autorizarSalida5pm', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async getAutorizaciones5pm(filtros?: { dni?: string; desde?: string; hasta?: string }): Promise<ApiResponse<Record<string, unknown>[]>> {
+    return this.request('getAutorizaciones5pm', 'POST', (filtros || {}) as Record<string, unknown>)
+  }
+
+  async registrarMuestreo(data: {
+    dni: string
+    horas: number
+    fecha?: string
+    nota?: string
+    usuario?: string
+  }): Promise<ApiResponse<{ horas_aplicadas: number; saldo_restante: number }>> {
+    return this.request('registrarMuestreo', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async getBolsaHoras(dni?: string): Promise<ApiResponse<{ saldos: Record<string, number>; movimientos: Record<string, unknown>[] }>> {
+    return this.request('getBolsaHoras', 'POST', dni ? { dni } : {})
   }
 
   async getIncidencias(filtros?: {
