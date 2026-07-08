@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useInView } from 'react-intersection-observer'
-import { FaLightbulb, FaUsers, FaRocket } from 'react-icons/fa'
+import { FaLightbulb, FaUsers, FaRocket, FaMapMarkedAlt } from 'react-icons/fa'
 import SectionWrapper from '../common/SectionWrapper'
 import Card from '../common/Card'
 
@@ -59,16 +59,40 @@ export default function AboutSection() {
           </motion.p>
         </div>
 
-        {/* Description */}
+        {/* Description + Cobertura Nacional */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.5, delay: 0.3 }}
-          className="bg-gradient-to-r from-primary-800/30 to-primary-900/30 backdrop-blur-sm rounded-2xl p-8 border border-primary-700/50 mb-12"
+          className="grid lg:grid-cols-2 gap-8 items-center mb-12"
         >
-          <p className="text-primary-200 text-lg leading-relaxed">
-            Con 9 años de experiencia en el mercado, nos enorgullecemos de ser aliados estratégicos de las principales empresas del sector eléctrico, minero y gubernamental del Perú. Nuestro enfoque combina innovación tecnológica con sólida experiencia en ingeniería, ofreciendo software personalizado, consultoría técnica y ejecución de proyectos que impulsan el desarrollo del país.
-          </p>
+          {/* Texto */}
+          <div className="bg-gradient-to-r from-primary-800/30 to-primary-900/30 backdrop-blur-sm rounded-2xl p-8 border border-primary-700/50 h-full flex items-center">
+            <p className="text-primary-200 text-lg leading-relaxed">
+              Con 9 años de experiencia en el mercado, nos enorgullecemos de ser aliados estratégicos de las principales empresas del sector eléctrico, minero y gubernamental del Perú. Nuestro enfoque combina innovación tecnológica con sólida experiencia en ingeniería, ofreciendo software personalizado, consultoría técnica y ejecución de proyectos que impulsan el desarrollo del país.
+            </p>
+          </div>
+
+          {/* Mapa animado — cobertura nacional */}
+          <div className="relative rounded-2xl overflow-hidden border border-accent-electric/30 shadow-2xl shadow-accent-electric/10">
+            <video
+              className="w-full h-full object-cover block"
+              autoPlay
+              loop
+              muted
+              playsInline
+              poster="/assets/images/red-electrica-poster.jpg"
+              aria-label="Mapa del Perú con la red eléctrica y proyectos de Ingeniería Telcom"
+            >
+              <source src="/assets/images/red-electrica.webm" type="video/webm" />
+              <source src="/assets/images/red-electrica.mp4" type="video/mp4" />
+            </video>
+            <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-primary-950/80 to-transparent pointer-events-none" />
+            <span className="absolute bottom-3 left-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary-950/70 backdrop-blur-sm border border-primary-700/50 text-xs text-primary-100">
+              <FaMapMarkedAlt className="text-accent-electric" />
+              Presencia y proyectos en todo el Perú
+            </span>
+          </div>
         </motion.div>
 
         {/* Features Grid */}
