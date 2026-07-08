@@ -3966,16 +3966,28 @@ function getAsistenciasV2(data) {
   if (rows.length <= 1) return { success: true, data: [] };
 
   var headers = rows[0];
+  var tz = ss.getSpreadsheetTimeZone();
   var result = rows.slice(1)
     .filter(function(r) { return r[0] !== ''; })
     .map(function(r) {
       var obj = rowToObject(headers, r);
-      // Normalizar fecha/hora por si Sheets las convirtio a Date
-      if (obj.fecha instanceof Date) {
-        obj.fecha = Utilities.formatDate(obj.fecha, 'America/Lima', 'yyyy-MM-dd');
-      }
-      if (obj.hora instanceof Date) {
-        obj.hora = Utilities.formatDate(obj.hora, 'America/Lima', 'HH:mm:ss');
+      // La fecha/hora canonica se deriva del timestamp UTC (ISO), que es un
+      // instante exacto e inmune al desfase por hora local media (LMT) que
+      // Sheets aplica a los valores de tipo tiempo anclados a 1899-12-30.
+      var inst = (obj.timestamp instanceof Date) ? obj.timestamp
+               : (obj.timestamp ? new Date(obj.timestamp) : null);
+      if (inst && !isNaN(inst.getTime())) {
+        obj.fecha = Utilities.formatDate(inst, 'America/Lima', 'yyyy-MM-dd');
+        obj.hora = Utilities.formatDate(inst, 'America/Lima', 'HH:mm:ss');
+      } else {
+        // Filas legadas sin timestamp: formatear en la zona horaria de la
+        // propia hoja (round-trip), no en una zona distinta.
+        if (obj.fecha instanceof Date) {
+          obj.fecha = Utilities.formatDate(obj.fecha, tz, 'yyyy-MM-dd');
+        }
+        if (obj.hora instanceof Date) {
+          obj.hora = Utilities.formatDate(obj.hora, tz, 'HH:mm:ss');
+        }
       }
       return obj;
     });
