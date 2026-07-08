@@ -656,25 +656,57 @@ function getUsers() {
 // ============================================
 // GESTION DE EMPLEADOS
 // ============================================
-function getEmployees(filters) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('empleados');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  
-  let employees = data.slice(1)
-    .filter(row => row[0] !== '')
-    .map(row => rowToObject(headers, row));
-  
-  // Aplicar filtros si existen
-  if (filters) {
-    const f = typeof filters === 'string' ? JSON.parse(filters) : filters;
-    
-    if (f.estado) employees = employees.filter(e => e.estado === f.estado);
-    if (f.ciudad) employees = employees.filter(e => e.ciudad_actual === f.ciudad);
-    if (f.area) employees = employees.filter(e => e.area === f.area);
-    if (f.cargo) employees = employees.filter(e => e.cargo === f.cargo);
+// Roster real de trabajadores (hoja 'sueldos') — fuente unica de la verdad.
+// Reemplaza los datos demo de la hoja 'empleados' en Dashboard/Empleados.
+function leerRosterReal_() {
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('sueldos');
+  if (!sheet) return [];
+  var rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return [];
+  var h = rows[0];
+  var cDni = h.indexOf('dni'), cNom = h.indexOf('nombre'), cCargo = h.indexOf('cargo'),
+      cSede = h.indexOf('sede'), cEmail = h.indexOf('email');
+  var out = [];
+  for (var i = 1; i < rows.length; i++) {
+    var dni = rows[i][cDni];
+    if (!dni) continue;
+    var email = cEmail >= 0 ? String(rows[i][cEmail] || '') : '';
+    out.push({
+      dni: String(dni),
+      nombre: String(rows[i][cNom] || ''),
+      cargo: cCargo >= 0 ? String(rows[i][cCargo] || '') : '',
+      sede: cSede >= 0 ? String(rows[i][cSede] || '') : '',
+      email: email,
+      es_campo: !email
+    });
   }
-  
+  return out;
+}
+
+function getEmployees(filters) {
+  var employees = leerRosterReal_().map(function(t) {
+    return {
+      id: 'SUE-' + t.dni,
+      dni: t.dni,
+      nombre_completo: t.nombre,
+      email: t.email,
+      telefono: '',
+      cargo: t.cargo,
+      area: t.es_campo ? 'Campo' : 'Oficina',
+      ciudad_actual: t.sede || 'Principal',
+      estado: 'activo',
+      registro_simple: t.es_campo
+    };
+  });
+
+  if (filters) {
+    var f = typeof filters === 'string' ? JSON.parse(filters) : filters;
+    if (f.estado) employees = employees.filter(function(e){ return e.estado === f.estado; });
+    if (f.ciudad) employees = employees.filter(function(e){ return e.ciudad_actual === f.ciudad; });
+    if (f.area) employees = employees.filter(function(e){ return e.area === f.area; });
+    if (f.cargo) employees = employees.filter(function(e){ return e.cargo === f.cargo; });
+  }
+
   return { success: true, data: employees };
 }
 
@@ -1665,41 +1697,33 @@ function uploadFileFromBase64(base64Content, mimeType, fileName) {
 // REPORTES Y ESTADISTICAS
 // ============================================
 function getDashboardStats() {
-  const empSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('empleados');
   const projSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('proyectos');
   const appSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('postulaciones');
   const jobSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
 
+  // Empleados: roster real desde la hoja 'sueldos' (fuente unica)
+  const rosterReal = leerRosterReal_();
+
   // Obtener datos con headers
-  const empData = empSheet.getDataRange().getValues();
   const projData = projSheet.getDataRange().getValues();
   const appData = appSheet.getDataRange().getValues();
   const jobData = jobSheet.getDataRange().getValues();
 
-  const empHeaders = empData[0];
   const projHeaders = projData[0];
   const appHeaders = appData[0];
   const jobHeaders = jobData[0];
 
-  const employees = empData.slice(1);
   const projects = projData.slice(1);
   const applications = appData.slice(1);
   const jobs = jobData.slice(1);
 
   // Encontrar indices de columnas dinamicamente
-  const empEstadoCol = empHeaders.indexOf('estado');
-  const empCiudadCol = empHeaders.indexOf('ciudad_actual');
-  const empAreaCol = empHeaders.indexOf('area');
-
   const projEstadoCol = projHeaders.indexOf('estado');
   const appEstadoCol = appHeaders.indexOf('status') >= 0 ? appHeaders.indexOf('status') : appHeaders.indexOf('estado');
   const jobEstadoCol = jobHeaders.indexOf('estado');
 
-  // Conteos con indices dinamicos
-  const totalEmpleados = employees.filter(e => {
-    const estado = empEstadoCol >= 0 ? e[empEstadoCol] : e[10];
-    return estado === 'activo';
-  }).length;
+  // Conteos
+  const totalEmpleados = rosterReal.length;
 
   const totalProyectos = projects.filter(p => {
     const estado = projEstadoCol >= 0 ? p[projEstadoCol] : p[5];
@@ -1718,23 +1742,17 @@ function getDashboardStats() {
     return estado === 'activo';
   }).length;
 
-  // Empleados por ciudad
+  // Empleados por sede
   const empleadosPorCiudad = {};
-  employees.filter(e => {
-    const estado = empEstadoCol >= 0 ? e[empEstadoCol] : e[10];
-    return estado === 'activo';
-  }).forEach(e => {
-    const ciudad = empCiudadCol >= 0 ? (e[empCiudadCol] || 'Sin asignar') : (e[8] || 'Sin asignar');
+  rosterReal.forEach(t => {
+    const ciudad = t.sede || 'Principal';
     empleadosPorCiudad[ciudad] = (empleadosPorCiudad[ciudad] || 0) + 1;
   });
 
-  // Empleados por area
+  // Empleados por tipo (Oficina / Campo)
   const empleadosPorArea = {};
-  employees.filter(e => {
-    const estado = empEstadoCol >= 0 ? e[empEstadoCol] : e[10];
-    return estado === 'activo';
-  }).forEach(e => {
-    const area = empAreaCol >= 0 ? (e[empAreaCol] || 'Sin asignar') : (e[6] || 'Sin asignar');
+  rosterReal.forEach(t => {
+    const area = t.es_campo ? 'Campo' : 'Oficina';
     empleadosPorArea[area] = (empleadosPorArea[area] || 0) + 1;
   });
 
@@ -2671,48 +2689,55 @@ function calcularHorasTrabajadas(entrada, salida) {
 }
 
 function obtenerAsistenciasHoy() {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  const attendanceSheet = ss.getSheetByName('Asistencias'); // Mayuscula como tu hoja
+  var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
 
-  if (!attendanceSheet) {
-    return { success: true, data: { fecha: '', totalEmpleados: 0, presentes: 0, registros: [] } };
-  }
+  // Roster real (hoja 'sueldos') como fuente unica
+  var roster = leerRosterReal_();
+  var total = roster.length;
+  var nombrePorDni = {};
+  roster.forEach(function(t){ nombrePorDni[t.dni] = t.nombre; });
 
-  const hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
-  const data = attendanceSheet.getDataRange().getValues();
-  const headers = data[0];
+  // Registros de HOY desde asistencias_v2, ya normalizados (hora desde timestamp UTC)
+  var res = getAsistenciasV2({ desde: hoy, hasta: hoy });
+  var regs = (res && res.data) ? res.data : [];
 
-  const dateCol = headers.indexOf('date'); // Tu columna es 'date' no 'fecha'
-  const registros = [];
+  // Agrupar por DNI: primer ingreso y ultima salida del dia
+  var byDni = {};
+  regs.forEach(function(r){
+    var d = String(r.dni);
+    if (!byDni[d]) byDni[d] = { ingresos: [], salidas: [] };
+    var ev = String(r.evento || '');
+    var hora = String(r.hora || '');
+    if (ev.indexOf('ingreso') === 0) byDni[d].ingresos.push(hora);
+    else if (ev.indexOf('salida') === 0) byDni[d].salidas.push(hora);
+  });
 
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][dateCol] === hoy) {
-      const row = {};
-      headers.forEach((header, idx) => {
-        row[header] = data[i][idx];
-      });
-      registros.push(row);
-    }
-  }
-
-  // Contar empleados activos
-  const employeesSheet = ss.getSheetByName('empleados');
-  let totalEmpleados = 0;
-  if (employeesSheet) {
-    const empData = employeesSheet.getDataRange().getValues();
-    const empHeaders = empData[0];
-    const statusCol = empHeaders.indexOf('estado');
-    for (let i = 1; i < empData.length; i++) {
-      if (empData[i][statusCol] === 'activo') totalEmpleados++;
-    }
-  }
+  var registros = [];
+  var presentes = 0;
+  Object.keys(byDni).forEach(function(d){
+    var b = byDni[d];
+    b.ingresos.sort(); b.salidas.sort();
+    var ultIng = b.ingresos.length ? b.ingresos[b.ingresos.length - 1] : '';
+    var ultSal = b.salidas.length ? b.salidas[b.salidas.length - 1] : '';
+    registros.push({
+      dni: d,
+      nombre: nombrePorDni[d] || ('DNI ' + d),
+      entrada: b.ingresos.length ? b.ingresos[0].slice(0, 5) : '',
+      salida: ultSal ? ultSal.slice(0, 5) : '',
+      estado: (ultSal && ultSal >= ultIng) ? 'fuera' : 'dentro'
+    });
+    if (nombrePorDni[d] !== undefined) presentes++;
+  });
 
   return {
     success: true,
     data: {
       fecha: hoy,
-      totalEmpleados: totalEmpleados,
-      presentes: registros.length,
+      total: total,
+      totalEmpleados: total,
+      dentro: presentes,
+      presentes: presentes,
+      fuera: Math.max(0, total - presentes),
       registros: registros
     }
   };
