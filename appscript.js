@@ -4063,7 +4063,7 @@ var SUELDOS_INICIALES = [
   ['74135306', 'Vargas Miranda, Juan Joseph', 'Analista Legal de Reclamos', 1800, '2026-07-01', 'FALSE', 'Principal', 'analista.legal2@ingenieriatelcom.com'],
   ['70401672', 'Montufar Diaz, Alvaro Rodrigo', 'Analista Junior de Reclamos', 1800, '2026-07-06', 'FALSE', 'Principal', 'analista.junior@ingenieriatelcom.com'],
   ['74525595', 'León Umeres, Milagros Jhenifer', 'Asistente Administrativo', 1800, '2026-07-01', 'FALSE', 'Principal', 'asistente.admin@ingenieriatelcom.com'],
-  ['77383250', 'Condori Cáceres, Jocabed Adriana', 'Tramitador / Digitador', 1500, '2026-07-01', 'FALSE', 'Principal', 'tramitador2@ingenieriatelcom.com'],
+  ['72374021', 'Condori Cáceres, Jocabed Adriana', 'Tramitador / Digitador', 1500, '2026-07-01', 'FALSE', 'Principal', 'tramitador2@ingenieriatelcom.com'],
   ['72743443', 'Ramos Serrani, Anais Gasdaly', 'Tramitador / Digitador', 1500, '2026-07-07', 'FALSE', 'Principal', 'tramitador3@ingenieriatelcom.com'],
   ['74147961', 'Hurtado Vega, Marilyn', 'Tramitador / Digitador', 1500, '2026-07-01', 'FALSE', 'Principal', 'tramitador1@ingenieriatelcom.com'],
   ['45298858', 'Canaza Chique, Darwin', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', ''],

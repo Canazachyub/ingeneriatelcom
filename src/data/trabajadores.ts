@@ -19,7 +19,7 @@ export const TRABAJADORES: TrabajadorFijo[] = [
   { dni: '74135306', nombre: 'Vargas Miranda, Juan Joseph', cargo: 'Analista Legal de Reclamos' },
   { dni: '70401672', nombre: 'Montufar Diaz, Alvaro Rodrigo', cargo: 'Analista Junior de Reclamos' },
   { dni: '74525595', nombre: 'León Umeres, Milagros Jhenifer', cargo: 'Asistente Administrativo' },
-  { dni: '77383250', nombre: 'Condori Cáceres, Jocabed Adriana', cargo: 'Tramitador / Digitador' },
+  { dni: '72374021', nombre: 'Condori Cáceres, Jocabed Adriana', cargo: 'Tramitador / Digitador' },
   { dni: '72743443', nombre: 'Ramos Serrani, Anais Gasdaly', cargo: 'Tramitador / Digitador' },
   { dni: '74147961', nombre: 'Hurtado Vega, Marilyn', cargo: 'Tramitador / Digitador' },
   { dni: '45298858', nombre: 'Canaza Chique, Darwin', cargo: 'Operario', registro_simple: true },
