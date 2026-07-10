@@ -285,4 +285,25 @@ La fuente del backend ya NO es `appscript.js` a mano: es **`backend/*.gs`** (mó
 
 ---
 
+## 10. Fase 3 — Rediseño visual (10/07/2026, en curso)
+
+### 3A publicada (commits d483531 + 43c4117)
+
+- **Hero**: fotos stock de Unsplash reemplazadas por HERO1/HERO2 propias (WebP, mismo dominio).
+- **Galería helicoidal 3D "Nuestras Operaciones"** (nueva sección tras Servicios): 12 fotos de campo en **doble hélice (ADN)** — 2 hebras desfasadas 180°, altura fija por tarjeta (rotación continua sin saltos), arrastrable con inercia, auto-giro, blur de profundidad, anima solo en viewport, `prefers-reduced-motion` → cuadrícula estática. CSS 3D puro + rAF (sin three.js, cero peso extra).
+- **Servicios**: tarjetas con foto (S1-S4) + tilt 3D sobrio al mouse.
+- **Quiénes Somos**: banda del equipo (Q1 oficina, Q2 campo+oficina); mapa animado intacto.
+
+### 3B publicada
+
+- Bolsa de Trabajo: CTA convertido en banner con B2 (técnico aspiracional al amanecer).
+- Capacitaciones: header con C1 (entrenamiento de seguridad).
+- `tabular-nums` en KPIs del dashboard y tabla de sueldos.
+
+### Pendiente Fase 3 final
+
+- Skeletons de carga en tablas admin, revisión de contraste/foco/targets ≥44px (auditoría AA), empty states con guía.
+
+---
+
 © 2026 Ingeniería Telcom EIRL — Documento de auditoría interna (Fase 0).

@@ -30,7 +30,7 @@ export default function SueldosTable({
   return (
     <div className="bg-primary-900/60 border border-primary-800 rounded-2xl overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm tabular-nums">
           <thead>
             <tr className="border-b border-primary-800 bg-primary-950/60">
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Trabajador</th>

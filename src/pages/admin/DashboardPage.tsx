@@ -122,7 +122,7 @@ export default function DashboardPage() {
                     <div className={`w-12 h-12 bg-gradient-to-br ${card.color} rounded-xl flex items-center justify-center mb-4 shadow-lg`}>
                       <card.icon className="text-xl text-white" />
                     </div>
-                    <p className="text-4xl font-display font-bold text-white mb-1">
+                    <p className="text-4xl font-display font-bold text-white mb-1 tabular-nums">
                       {Number(stats[card.key as keyof DashboardStats]) || 0}
                     </p>
                     <p className="text-primary-400 text-sm">{card.label}</p>

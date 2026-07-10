@@ -222,20 +222,36 @@ export default function JobsSection() {
           </div>
         )}
 
-        {/* CTA */}
+        {/* CTA con foto aspiracional (B2) */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.5, delay: 0.7 }}
-          className="text-center"
+          className="relative rounded-2xl overflow-hidden border border-primary-700/50"
         >
-          <Link
-            to="/bolsa-trabajo"
-            className="btn-energy inline-flex items-center gap-2"
-          >
-            Ver Todas las Convocatorias
-            <FaArrowRight />
-          </Link>
+          <img
+            src="/assets/images/operaciones/B2.webp"
+            alt="Joven técnico frente a una torre de telecomunicaciones al amanecer"
+            loading="lazy"
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-primary-950/95 via-primary-950/75 to-primary-950/40" />
+          <div className="relative z-10 px-8 py-12 md:px-12 md:py-16 max-w-xl">
+            <h3 className="text-2xl md:text-3xl font-display font-bold text-white mb-3">
+              Tu carrera empieza en el terreno
+            </h3>
+            <p className="text-primary-200 mb-6">
+              Buscamos talento técnico y profesional para proyectos de energía y
+              telecomunicaciones en el sur del Perú.
+            </p>
+            <Link
+              to="/bolsa-trabajo"
+              className="btn-energy inline-flex items-center gap-2"
+            >
+              Ver Todas las Convocatorias
+              <FaArrowRight />
+            </Link>
+          </div>
         </motion.div>
       </div>
     </SectionWrapper>
