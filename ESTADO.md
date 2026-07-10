@@ -199,4 +199,49 @@ El frontend es **compatible con el backend actualmente desplegado** (el remapeo 
 
 ---
 
+## 7. Fase 1 — Backend modularizado (10/07/2026)
+
+### Nueva arquitectura
+
+La fuente del backend ya NO es `appscript.js` a mano: es **`backend/*.gs`** (módulos por dominio) y `appscript.js` se **genera** con `npm run build:backend` (concatena + verifica sintaxis y duplicados). El deploy sigue siendo un solo copy-paste del `appscript.js` generado.
+
+| Módulo | Contenido |
+|--------|-----------|
+| `backend/00_nucleo.gs` | Config, `getTokenSecret_`, `rowToObject` (ahora normaliza TODAS las fechas a ISO America/Lima — cierra M4), `withLock_` (LockService), `validarArchivoSubido_`, `checkRateLimit_`, `assertDestructiveAllowed_` |
+| `backend/01_router.gs` | **Router declarativo `ROUTES`** con niveles `publico`/`auth`/`admin`. `doGet`/`doPost` unificados en `handleRequest_`. 19 actions huérfanas/rotas eliminadas (M1, M7, M8) |
+| `backend/02_auth.gs` | Token HMAC, `esRolAdmin_` (roles con caché 5 min — cierra C3/A11), **hash de contraseñas SHA-256 con upgrade-on-login** (A7), credenciales contra roster real |
+| `backend/03_empleados.gs` | **Roster único en `sueldos`** (C7): `getEmployeeById`/`updateEmployee`/`transferEmployee`/`createEmployee` operan sobre `sueldos` con IDs `SUE-<dni>` (fallback legacy EMP0xx se conserva). `transferEmployee` acepta ambos contratos (M2) |
+| `backend/04_proyectos.gs` | Proyectos y asignaciones (sin cambios de comportamiento) |
+| `backend/05_bolsa.gs` | Convocatorias/postulaciones/contacto + rate limits y validación de CV (A8), whitelist PII (C4/A6) |
+| `backend/06_capacitaciones.gs` | Evaluaciones: lock en intento único, validación de fotos, fechas Lima (M3) |
+| `backend/07_asistencia.gs` | `verificarEmpleado` valida contra **roster real** (el kiosko V1 ya no rechaza a los 13 reales), validación de uploads + locks |
+| `backend/08_planilla.gs` | `withLock_` en todas las escrituras (A5) |
+| `backend/09_reportes.gs` | `getDashboardStats` (+ proyectosCompletados/porEstado) |
+| `backend/10_admin_tools.gs` | Las 17 funciones destructivas **bloqueadas tras `ALLOW_DESTRUCTIVE_OPS`** (A9) |
+| `backend/11_salud.gs` | **`ejecutarTestSalud()`**: 0-FAIL requerido antes de cada deploy (verifica secreto, hojas, roster, cuenta admin, funciones del router, Drive) |
+
+### Niveles de acceso del router
+
+- `publico` — kiosko, bolsa de trabajo, evaluaciones (18 actions)
+- `auth` — token HMAC válido (dashboard, empleados, proyectos, contactos, capacitaciones admin)
+- `admin` — token + rol en {admin, administrador, manager, supervisor, rrhh} o permiso `all`: **toda la planilla/sueldos**, credenciales, deletes
+- `obtenerAsistenciasHoy` dejó de ser pública (filtraba roster + horarios sin token)
+
+### ⚠️ Checklist de deploy Fase 1 (backend, manual)
+
+1. Todo lo del checklist de Fase 0.5 (§6) si aún no se hizo: `TOKEN_SECRET` en Script Properties.
+2. **Verificar que la cuenta admin en la hoja `usuarios` tenga rol `admin`** (o manager/supervisor/rrhh): las rutas de planilla ahora lo exigen. `ejecutarTestSalud()` lo verifica (FAIL si no hay ninguna activa).
+3. NO definir `ALLOW_DESTRUCTIVE_OPS` (o dejarla ≠ 'true').
+4. `npm run build:backend` → pegar `appscript.js` generado → ejecutar **`ejecutarTestSalud`** en el editor → **0 FAIL** → Nueva versión.
+5. Las contraseñas en texto plano se migran a hash automáticamente en el primer login de cada usuario.
+6. **Rotar la contraseña de `supervisor1telcom@gmail.com`**: la anterior (`DARWINTELCOM2026`) estaba hardcodeada y queda en el historial público de GitHub. Ejecutar `createDefaultAdmin()` en el editor: ahora genera una temporal aleatoria, la guarda hasheada y la envía por email.
+
+### Pendiente de Fase 1 (consciente, documentado)
+
+- **C6 (archivos Drive `ANYONE_WITH_LINK`)**: requiere proxy autenticado o visor con base64 — cambia contrato con el frontend; se hará junto con Fase 2 para tocar cliente y backend a la vez.
+- `hireApplicant` (A4) quedó FUERA del router (el frontend no la llama); si se reactiva, debe escribir en `sueldos`.
+- Hoja `empleados` queda de solo lectura de facto (nada del router escribe en ella, salvo el fallback legacy EMP0xx de updateEmployee/transferEmployee).
+
+---
+
 © 2026 Ingeniería Telcom EIRL — Documento de auditoría interna (Fase 0).
