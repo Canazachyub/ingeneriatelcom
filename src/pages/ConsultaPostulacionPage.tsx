@@ -125,7 +125,7 @@ export default function ConsultaPostulacionPage() {
                   inputMode="numeric"
                   pattern="[0-9]*"
                 />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-primary-500 text-sm">
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-primary-300 text-sm">
                   {dni.length}/8
                 </span>
               </div>

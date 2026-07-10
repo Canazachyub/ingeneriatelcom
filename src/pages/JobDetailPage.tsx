@@ -833,7 +833,7 @@ export default function JobDetailPage() {
                       }`}>
                         {step > s ? '✓' : s}
                       </div>
-                      <span className={`text-xs ${step >= s ? 'text-accent-electric' : 'text-primary-500'}`}>
+                      <span className={`text-xs ${step >= s ? 'text-accent-electric' : 'text-primary-300'}`}>
                         {label}
                       </span>
                     </div>
@@ -952,7 +952,7 @@ export default function JobDetailPage() {
                             <div className="flex flex-col items-center py-6">
                               <FaCheckCircle className="text-4xl text-accent-electric mb-3" />
                               <span className="text-sm text-accent-electric font-medium px-4 text-center">{cvFile.name}</span>
-                              <span className="text-xs text-primary-500 mt-2">Clic o arrastra para cambiar</span>
+                              <span className="text-xs text-primary-300 mt-2">Clic o arrastra para cambiar</span>
                             </div>
                           ) : (
                             <div className="flex flex-col items-center py-8">

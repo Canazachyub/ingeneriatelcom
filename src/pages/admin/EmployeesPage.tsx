@@ -14,10 +14,13 @@ import {
   FaSortUp,
   FaSortDown,
   FaExclamationTriangle,
+  FaUsers,
 } from 'react-icons/fa'
 import { api, Employee } from '../../api/appScriptApi'
 import { useEmployees, queryKeys } from '../../hooks/queries'
 import AdminLayout from '../../components/admin/AdminLayout'
+import TableSkeleton from '../../components/common/TableSkeleton'
+import EmptyState from '../../components/common/EmptyState'
 
 const cities = ['Tacna', 'Puno', 'Arequipa', 'Lima', 'Cusco', 'Juliaca']
 const departments = ['Software', 'Ingenieria Electrica', 'TIC', 'Mineria', 'Administracion']
@@ -423,9 +426,27 @@ export default function EmployeesPage() {
 
         {/* Table */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <FaSpinner className="animate-spin text-3xl text-accent-electric" />
-          </div>
+          <TableSkeleton rows={6} cols={5} />
+        ) : filteredEmployees.length === 0 ? (
+          employees.length === 0 ? (
+            <EmptyState
+              icon={<FaUsers />}
+              title="Aun no hay empleados registrados"
+              hint="Usa 'Nuevo Empleado' para agregar el primero"
+              action={
+                <button onClick={() => handleOpenModal()} className="btn-primary flex items-center gap-2">
+                  <FaPlus />
+                  Nuevo Empleado
+                </button>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={<FaSearch />}
+              title="No hay empleados que coincidan"
+              hint="Intenta limpiar los filtros o modificar el termino de busqueda"
+            />
+          )
         ) : (
           <div className="bg-primary-900/50 backdrop-blur-sm rounded-xl border border-primary-800 overflow-hidden">
             <div className="overflow-x-auto">
@@ -518,12 +539,6 @@ export default function EmployeesPage() {
                 </tbody>
               </table>
             </div>
-
-            {filteredEmployees.length === 0 && (
-              <div className="text-center py-12 text-primary-400">
-                No se encontraron empleados
-              </div>
-            )}
 
             {/* Footer count */}
             {filteredEmployees.length > 0 && (

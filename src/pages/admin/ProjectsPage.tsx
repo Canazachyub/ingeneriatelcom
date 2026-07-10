@@ -12,10 +12,13 @@ import {
   FaUserPlus,
   FaTrash,
   FaExclamationTriangle,
+  FaProjectDiagram,
 } from 'react-icons/fa'
 import { api, Project, EmployeeAssignment } from '../../api/appScriptApi'
 import { useProjects, useEmployees, queryKeys } from '../../hooks/queries'
 import AdminLayout from '../../components/admin/AdminLayout'
+import TableSkeleton from '../../components/common/TableSkeleton'
+import EmptyState from '../../components/common/EmptyState'
 
 const cities = ['Tacna', 'Puno', 'Arequipa', 'Lima', 'Cusco', 'Juliaca']
 const statuses = [
@@ -268,9 +271,27 @@ export default function ProjectsPage() {
 
         {/* Projects Grid */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <FaSpinner className="animate-spin text-3xl text-accent-electric" />
-          </div>
+          <TableSkeleton rows={6} cols={4} />
+        ) : filteredProjects.length === 0 ? (
+          projects.length === 0 ? (
+            <EmptyState
+              icon={<FaProjectDiagram />}
+              title="Aun no hay proyectos"
+              hint="Usa 'Nuevo Proyecto' para crear el primero"
+              action={
+                <button onClick={() => handleOpenModal()} className="btn-primary flex items-center gap-2">
+                  <FaPlus />
+                  Nuevo Proyecto
+                </button>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={<FaSearch />}
+              title="No se encontraron proyectos"
+              hint="Intenta limpiar los filtros o modificar el termino de busqueda"
+            />
+          )
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {filteredProjects.map((project) => (
@@ -330,12 +351,6 @@ export default function ProjectsPage() {
                 </div>
               </motion.div>
             ))}
-          </div>
-        )}
-
-        {filteredProjects.length === 0 && !isLoading && (
-          <div className="text-center py-12 text-primary-400">
-            No se encontraron proyectos
           </div>
         )}
 

@@ -333,7 +333,8 @@ export default function AsistenciaPage() {
         <div className="flex items-center gap-3">
           <Link
             to="/"
-            className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-primary-400 hover:text-white hover:bg-white/10 transition-all"
+            aria-label="Volver al inicio"
+            className="min-w-[44px] min-h-[44px] rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-primary-400 hover:text-white hover:bg-white/10 transition-all"
           >
             <FaArrowLeft className="text-xs" />
           </Link>
@@ -395,7 +396,10 @@ export default function AsistenciaPage() {
                 <p className="text-center text-xs text-rose-400 mb-4">
                   <FaExclamationTriangle className="inline mr-1" />
                   No se pudo cargar la lista de trabajadores.
-                  <button onClick={cargarTrabajadores} className="ml-2 text-cyan-400 underline">
+                  <button
+                    onClick={cargarTrabajadores}
+                    className="ml-2 inline-flex items-center min-h-[44px] px-2 text-cyan-400 underline align-middle"
+                  >
                     Reintentar
                   </button>
                 </p>
@@ -512,7 +516,7 @@ export default function AsistenciaPage() {
 
               <button
                 onClick={handleReset}
-                className="text-center text-sm text-primary-500 hover:text-primary-300 transition-colors py-2"
+                className="w-full min-h-[44px] text-center text-sm text-primary-500 hover:text-primary-300 transition-colors py-2"
               >
                 Cancelar
               </button>
@@ -578,7 +582,10 @@ export default function AsistenciaPage() {
                   <FaExclamationTriangle className="mt-0.5 shrink-0" />
                   <div>
                     {camaraError}
-                    <button onClick={iniciarCamara} className="block mt-1 text-cyan-400 underline text-xs">
+                    <button
+                      onClick={iniciarCamara}
+                      className="inline-flex items-center min-h-[44px] mt-1 px-2 -ml-2 text-cyan-400 underline text-xs"
+                    >
                       Reintentar
                     </button>
                   </div>
@@ -595,7 +602,12 @@ export default function AsistenciaPage() {
                 <p className="text-center text-xs text-rose-400/80 mb-3">
                   <FaExclamationTriangle className="inline mr-1" />
                   GPS requerido — habilita la ubicación
-                  <button onClick={getLocation} className="ml-2 text-cyan-400 underline">Reintentar</button>
+                  <button
+                    onClick={getLocation}
+                    className="ml-2 inline-flex items-center min-h-[44px] px-2 text-cyan-400 underline align-middle"
+                  >
+                    Reintentar
+                  </button>
                 </p>
               )}
 
@@ -637,7 +649,7 @@ export default function AsistenciaPage() {
               <button
                 onClick={() => { detenerCamara(); setFotoPreview(null); setMensaje(''); setViewState('menu') }}
                 disabled={isLoading}
-                className="text-center text-sm text-primary-500 hover:text-primary-300 transition-colors py-2"
+                className="w-full min-h-[44px] text-center text-sm text-primary-500 hover:text-primary-300 transition-colors py-2"
               >
                 Volver
               </button>
@@ -722,7 +734,7 @@ export default function AsistenciaPage() {
                 <button
                   onClick={() => { setMensaje(''); setViewState('menu') }}
                   disabled={isLoading}
-                  className="w-full text-center text-sm text-primary-500 hover:text-primary-300 transition-colors py-2"
+                  className="w-full min-h-[44px] text-center text-sm text-primary-500 hover:text-primary-300 transition-colors py-2"
                 >
                   Volver
                 </button>
@@ -811,7 +823,7 @@ export default function AsistenciaPage() {
 
               <button
                 onClick={handleReset}
-                className="px-8 py-3 bg-rose-500 text-white font-semibold rounded-2xl hover:bg-rose-600 transition-colors inline-flex items-center gap-2 mb-4"
+                className="px-8 py-3 min-h-[44px] bg-rose-500 text-white font-semibold rounded-2xl hover:bg-rose-600 transition-colors inline-flex items-center gap-2 mb-4"
               >
                 <FaRedo /> Intentar de nuevo
               </button>
@@ -823,7 +835,7 @@ export default function AsistenciaPage() {
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-5 py-2.5 mb-6 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-sm font-medium hover:bg-emerald-500/25 transition-colors"
+                className="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 mb-6 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-sm font-medium hover:bg-emerald-500/25 transition-colors"
               >
                 <FaWhatsapp className="text-lg" />
                 ¿Hubo un error? Escríbenos: 984 300 510

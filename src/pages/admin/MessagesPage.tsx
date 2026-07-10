@@ -4,7 +4,6 @@ import {
   FaEnvelope,
   FaPhone,
   FaSearch,
-  FaSpinner,
   FaCheck,
   FaClock,
   FaReply,
@@ -12,6 +11,8 @@ import {
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
+import TableSkeleton from '../../components/common/TableSkeleton'
+import EmptyState from '../../components/common/EmptyState'
 
 interface ContactMessage {
   id: string
@@ -209,13 +210,21 @@ export default function MessagesPage() {
           {/* Messages List */}
           <div className="space-y-3">
             {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <FaSpinner className="animate-spin text-3xl text-accent-electric" />
-              </div>
+              <TableSkeleton rows={4} cols={2} />
             ) : filteredMessages.length === 0 ? (
-              <div className="text-center py-12 text-primary-400">
-                No se encontraron mensajes
-              </div>
+              messages.length === 0 ? (
+                <EmptyState
+                  icon={<FaEnvelope />}
+                  title="Sin mensajes de contacto"
+                  hint="Los mensajes del formulario publico apareceran aqui"
+                />
+              ) : (
+                <EmptyState
+                  icon={<FaSearch />}
+                  title="No se encontraron mensajes"
+                  hint="Intenta limpiar los filtros o modificar el termino de busqueda"
+                />
+              )
             ) : (
               filteredMessages.map((msg) => (
                 <motion.div

@@ -300,9 +300,18 @@ La fuente del backend ya NO es `appscript.js` a mano: es **`backend/*.gs`** (mó
 - Capacitaciones: header con C1 (entrenamiento de seguridad).
 - `tabular-nums` en KPIs del dashboard y tabla de sueldos.
 
-### Pendiente Fase 3 final
+### 3-final publicada — PLAN MAESTRO COMPLETADO ✅
 
-- Skeletons de carga en tablas admin, revisión de contraste/foco/targets ≥44px (auditoría AA), empty states con guía.
+- **Skeletons** (`TableSkeleton`) y **empty states con guía** (`EmptyState`) en Empleados, Proyectos, Mensajes y Asistencias — distinguen "vacío real" (con botón de acción) de "filtros sin coincidencias".
+- **Auditoría AA ejecutada**: `:focus-visible` global (anillo cian 2px), 9 targets del kiosko elevados a ≥44px (botón volver, reintentos, cancelar, WhatsApp), 3 textos con contraste <3:1 corregidos a ≥4.8:1 (wizard de postulación, dropzone de CV, contador de DNI). Todas las imágenes públicas con alt descriptivo.
+
+### Criterios de éxito del plan maestro — verificación final
+
+- [x] Fase 0: informe de brechas completo, cada KPI trazado a su hoja fuente.
+- [x] Backend: módulos por dominio, roster único, token firmado, 0 endpoints huérfanos, test de salud 0-FAIL (verificado en deploy).
+- [x] Frontend: dashboard fluye con datos vivos, errores visibles (toasts), carga admin bajo demanda (bundle −29% + React Query).
+- [x] Visual: landing premium con identidad (hero propio, galería helicoidal 3D, fotos de operaciones), AA verificado.
+- [x] Cero downtime: cada fase desplegada de forma independiente y reversible.
 
 ---
 

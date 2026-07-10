@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  FaSpinner,
   FaCalendarAlt,
   FaClock,
   FaMapMarkerAlt,
@@ -17,6 +16,8 @@ import {
 import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
 import FileViewerModal from '../../components/admin/FileViewerModal'
+import TableSkeleton from '../../components/common/TableSkeleton'
+import EmptyState from '../../components/common/EmptyState'
 import { useToast } from '../../context/ToastContext'
 import {
   TrabajadorFijo,
@@ -354,19 +355,16 @@ export default function AttendancePage() {
         </div>
 
         {/* Loading */}
-        {isLoading && (
-          <div className="flex items-center justify-center py-20">
-            <FaSpinner className="animate-spin text-3xl text-accent-electric" />
-          </div>
-        )}
+        {isLoading && <TableSkeleton rows={7} cols={7} />}
 
         {/* ── TAB: REGISTROS ── */}
         {!isLoading && tab === 'registros' && (
           registrosOrdenados.length === 0 ? (
-            <div className="text-center py-20">
-              <FaClock className="text-4xl text-primary-600 mx-auto mb-3" />
-              <p className="text-gray-400 font-medium">Sin registros en el rango seleccionado</p>
-            </div>
+            <EmptyState
+              icon={<FaClock />}
+              title="Sin marcas en este rango"
+              hint="Cambia el rango de fechas o los filtros para ver otros registros"
+            />
           ) : (
             <div className="bg-primary-900/60 border border-primary-800 rounded-2xl overflow-hidden">
               <div className="overflow-x-auto">
@@ -577,10 +575,11 @@ export default function AttendancePage() {
         {/* ── TAB: JUSTIFICACIONES ── */}
         {!isLoading && tab === 'justificaciones' && (
           justificaciones.length === 0 ? (
-            <div className="text-center py-20">
-              <FaFileAlt className="text-4xl text-primary-600 mx-auto mb-3" />
-              <p className="text-gray-400 font-medium">Sin justificaciones en el rango seleccionado</p>
-            </div>
+            <EmptyState
+              icon={<FaFileAlt />}
+              title="Sin justificaciones en este rango"
+              hint="Cambia el rango de fechas o los filtros para ver otras justificaciones"
+            />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[...justificaciones]
