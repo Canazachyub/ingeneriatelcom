@@ -1,0 +1,202 @@
+# ESTADO — Auditoría Fase 0 · Sitio Corporativo TELCOM EIRL
+
+> Informe de brechas del flujo de datos, seguridad y arquitectura.
+> Generado por auditoría multiagente sobre el código real (`appscript.js` 4,774 líneas · `src/`) — julio 2026.
+> **Estado: Fase 0 completada y aprobada · Fase 0.5 (quick wins) IMPLEMENTADA — ver §6 para el deploy del backend.**
+
+---
+
+## 0. Resumen ejecutivo
+
+**Por qué "el Dashboard no fluye" (causa raíz confirmada):** no es un problema de datos ni de fuente. El backend (`getDashboardStats`) responde `success:true` con datos reales del roster, pero **los nombres de campo no coinciden** con lo que la interfaz del frontend espera. El backend devuelve `totalEmpleados`, `totalProyectos`, `postulacionesPendientes`, `empleadosPorCiudad`; el frontend lee `totalEmployees`, `activeProjects`, `pendingApplications`, `employeesByCity`. **Ningún nombre calza → las 4 tarjetas KPI y los 2 gráficos muestran siempre 0/vacío**, indistinguible de "no hay datos". El único widget que funciona (Asistencia Hoy) es el único cuyo método API sí remapea los campos. Es un arreglo de bajo esfuerzo y altísimo impacto visible.
+
+**Lo más grave del sistema (seguridad):** el "secreto" que firma todos los tokens de admin es la constante `ADMIN_PASSWORD = 'telcom2017!Seguro'` escrita en texto plano en `appscript.js:12`, y ese archivo está en un **repositorio público de GitHub**. El token es `base64(userId|timestamp|ADMIN_PASSWORD)` — no hay firma criptográfica. Cualquiera que lea el repo puede fabricar un token válido para cualquier usuario y, como la autorización es binaria (sin roles en el backend), desbloquear las 88 acciones: sueldos, DNIs, CVs, fotos con GPS, respuestas de exámenes. **Todo el backend está, en la práctica, sin autenticación real.**
+
+**Salud general:** de 85 actions, 55 están vivas, 2 rotas (`updateUser`, `deactivateUser` → `ReferenceError`), ~22 huérfanas, 2 pares duplicados, y 19 funciones destructivas siguen ejecutables desde el editor GAS.
+
+---
+
+## 1. Diagrama de flujo — real vs esperado
+
+### 1.1 Roster de personal (la "doble fuente de verdad")
+
+```
+ESPERADO:  sueldos (roster único) ──► todo lo de personal
+
+REAL:
+                        ┌─────────────────────────────────────────────┐
+   hoja `sueldos`  ────►│ getEmployees (lista, id sintético SUE-<dni>) │
+   (13 reales)          │ getDashboardStats (conteo)                  │
+                        │ obtenerAsistenciasHoy · getSueldos          │
+                        │ getTrabajadores · updateSueldo · crearTrab. │
+                        └─────────────────────────────────────────────┘
+                                          ✗  NO se cruzan (id ≠ id)
+                        ┌─────────────────────────────────────────────┐
+   hoja `empleados`────►│ getEmployeeById (busca EMP0xx)              │
+   (legacy, vacía?)     │ updateEmployee · transferEmployee          │
+                        │ deactivateEmployee · verificarEmpleado     │
+                        │ getEmployeeReport · hireApplicant (escribe) │
+                        └─────────────────────────────────────────────┘
+```
+
+**Rotura práctica:** `getEmployees` sintetiza el id como `SUE-<dni>`, pero `getEmployeeById`/`updateEmployee`/`transferEmployee`/`deactivateEmployee` buscan un id formato `EMP0xx` en la hoja `empleados`. Un empleado que ves en el listado **no se puede abrir, editar, transferir ni dar de baja**. Un candidato contratado (`hireApplicant`) entra solo a `empleados`, nunca a `sueldos` → no aparece en el roster real ni en el kiosko.
+
+### 1.2 Asistencia V1 vs V2
+
+```
+V1 (legacy):  verificarEmpleado ─► lee `empleados` ─► marcarAsistencia ─► `Asistencias`
+              getAttendances ─► `Asistencias`   (usada aún por ReportsPage)
+
+V2 (viva):    AsistenciaPage ─► registrarAsistenciaFoto ─► `asistencias_v2` + foto Drive
+              AttendancePage ─► getAsistenciasV2 / getJustificaciones
+              DashboardPage  ─► obtenerAsistenciasHoy ─► sueldos + asistencias_v2  ✓
+```
+
+**Hallazgo:** el kiosko V1 (`marcarAsistencia`→`verificarEmpleado`) valida el DNI contra `empleados`. Si esa hoja está vacía, **rechaza a los 13 trabajadores reales** aunque estén en `sueldos`. `AttendancePage` además NO llama a la API: lee `src/data/trabajadores.ts`, una lista **hardcodeada de 13 registros en el frontend** → un alta desde Planilla es invisible en Asistencias hasta editar código y redeployar.
+
+### 1.3 Dashboard KPIs (síntoma reportado)
+
+```
+DashboardPage ─► getDashboardStats() ─► action getDashboard ─► sueldos/proyectos/postulaciones ✓ (datos reales)
+       │
+       └─ interface DashboardStats espera:  totalEmployees, activeProjects, pendingApplications,
+                                             completedProjects, employeesByCity, projectsByStatus
+          backend responde:                 totalEmpleados, totalProyectos, postulacionesPendientes,
+                                             convocatoriasActivas, empleadosPorCiudad, empleadosPorArea
+                                             ✗ NINGÚN nombre coincide → todo 0/vacío
+```
+
+---
+
+## 2. Tabla de brechas priorizadas
+
+### CRÍTICO
+
+| # | Brecha | Ubicación | Impacto |
+|---|--------|-----------|---------|
+| C1 | **Mismatch de campos Dashboard** — backend devuelve `totalEmpleados`… frontend lee `totalEmployees`… | appscript.js:1759-1770 vs appScriptApi.ts:138-145 | Todos los KPIs y gráficos del dashboard en 0. **Es la causa del síntoma reportado.** |
+| C2 | **Secreto de token en repo público** — `ADMIN_PASSWORD` en texto plano; token base64 sin firma | appscript.js:12, 492-516 | Token 100% falsificable por cualquiera que lea GitHub |
+| C3 | **Autorización binaria sin roles** — cualquier token válido abre las 88 actions | appscript.js:55-59 | Un empleado raso (o un atacante) accede a sueldos, usuarios, respuestas de examen |
+| C4 | **`historialPostulaciones` filtra CV** — vuelca fila completa incl. `cv_url` sin token, por DNI ajeno | appscript.js:2428-2457 | Acceso público a CVs (PII) de cualquier postulante |
+| C5 | **`getPreguntas` expone `respuesta_correcta`** — protegida solo por token falsificable | appscript.js:3389-3405 | Permite hacer trampa en las evaluaciones |
+| C6 | **Fotos Drive `ANYONE_WITH_LINK`** — asistencia+GPS, proctoring, justificaciones médicas | appscript.js:3775, 3902, 3948 | Rostros, ubicación y documentos médicos con enlace público |
+| C7 | **IDs de roster incompatibles** — `SUE-<dni>` (lista) vs `EMP0xx` (edición) | appscript.js:689 vs 713-888 | Empleado listado no se puede abrir/editar/transferir/desactivar |
+
+### ALTO
+
+| # | Brecha | Ubicación | Impacto |
+|---|--------|-----------|---------|
+| A1 | **`getDashboardStats` no calcula `completedProjects`** — el KPI no tiene fuente aunque se arregle el nombre | appscript.js:1699-1771 | Requiere lógica nueva, no solo remapeo |
+| A2 | **`AttendancePage` usa roster hardcodeado** (`src/data/trabajadores.ts`) en vez de la API | AttendancePage.tsx:21-28 | Altas/bajas de personal invisibles en Asistencias sin redeploy |
+| A3 | **Manejo de errores silencioso** — `request()` colapsa todo a "Network error"; páginas responden con listas vacías | appScriptApi.ts:207-210 | Usuario no distingue "sin datos" de "API falló". `ToastContext` existe pero no se usa para errores |
+| A4 | **`hireApplicant` escribe solo en `empleados`** | appscript.js:1502, 1528 | Contratado no entra al roster real ni al kiosko |
+| A5 | **Cero `LockService` en escrituras** | appscript.js (global) | Race conditions: filas/IDs duplicados con uso concurrente |
+| A6 | **`consultarPostulacion` expone nombre/email/teléfono** por DNI sin verificar identidad | appscript.js:2287-2394 | Enumeración de PII de postulantes |
+| A7 | **Contraseñas de `usuarios` en texto plano** (comparación y almacenamiento sin hash) | appscript.js:465 | Filtración de la hoja = credenciales en claro |
+| A8 | **Escrituras públicas sin límite** de tamaño/mimetype/rate-limit | appscript.js:1353, 1584, 3861-3968 | Spam de filas y agotamiento de cuota Drive/Sheets (DoS) |
+| A9 | **`recrearHoja` + 9 `cargar*Prueba` + `limpiarDatosPrueba`** ejecutables desde el editor | appscript.js:2872, 2893-3247 | Ya destruyó los PDFs una vez. Borrado accidental de producción |
+| A10 | **`getEmployeeReport` lee `empleados`** (legacy) mientras el dashboard lee `sueldos` | appscript.js:1773 | Dos vistas admin con cifras distintas |
+| A11 | **Sin niveles de rol en backend** — la distinción admin/empleado es solo cosmética en la UI | appscript.js:452 vs router | Escalada horizontal y vertical de privilegios |
+
+### MEDIO
+
+| # | Brecha | Ubicación | Impacto |
+|---|--------|-----------|---------|
+| M1 | **2 actions ROTAS** — `updateUser`, `deactivateUser` ruteadas sin función | appscript.js:153, 157 | `ReferenceError` si se invocan |
+| M2 | **Bug de contrato en `transferEmployee`** — frontend envía `employeeId`/`newCity`, backend espera `empleadoId`/`nuevaCiudad` | appScriptApi vs appscript.js:829 | La transferencia siempre falla |
+| M3 | **Timezone no uniforme** — `getEvaluaciones`, `getApplications`, `consultarPostulacion` devuelven fechas crudas sin normalizar a America/Lima | appscript.js:3676, 1435, 2287 | Riesgo residual de desfase de fecha |
+| M4 | **`rowToObject` no normaliza fechas** — el conversor central es frágil ante funciones nuevas | appscript.js:2000 | Cualquier lectura nueva hereda el bug de timezone |
+| M5 | **Sin estado global ni caché** (no React Query/SWR/Context de datos) | frontend (global) | Cada navegación re-fetchea; sin invalidación cruzada |
+| M6 | **Sin code-splitting admin** — 12 páginas (incl. PlanillaPage 1,027 líneas) en el bundle inicial | App.tsx:22-34 | Bundle inflado también para visitantes públicos |
+| M7 | **~22 actions huérfanas** — módulo `usuarios` completo sin UI; 10 métodos API muertos | varios | Superficie muerta que confunde el mantenimiento |
+| M8 | **2 pares duplicados** — `getApplications`/`getApplicationsAdmin`, `getDashboard`/`getDashboardStats` | appscript.js:137, 174 | Alias sin consumidor; ruido |
+| M9 | **`PlanillaPage` usa toast local** en vez de `ToastContext` | PlanillaPage.tsx:112-115 | UX inconsistente, doble mantenimiento |
+| M10 | **`AuthContext` valida token solo al montar** — sin revalidación ni logout ante rechazo | AuthContext.tsx:18-32 | Sesión "zombie" en cliente |
+| M11 | **IDs reales de Sheet/Drive hardcodeados** como fallback en bundle público | env.ts:3-4, .env.example | Reconocimiento facilitado; no debería ir al repo |
+| M12 | **`sueldos` sin columna `id`** — no puede tener historial ni asignaciones | appscript.js | Trabajador solo-en-sueldos queda fuera de proyectos/historial |
+| M13 | **`setupAllSheets()` no crea `sueldos`** | appscript.js:2040 | Entorno nuevo queda sin roster real |
+
+---
+
+## 3. Censo de actions (85 total)
+
+- **VIVAS:** 55
+- **ROTAS:** 2 — `updateUser`, `deactivateUser`
+- **DUPLICADAS:** 2 pares — canónicas `getApplicationsAdmin`, `getDashboard`
+- **HUÉRFANAS:** ~22 (todo el submódulo `usuarios`: `getUsers`/`createUser`/`resetPassword`; + `getEmployee`, `getProject`, `historialPostulaciones`, `getCapacitacionById`, `upload`, `getAutorizaciones5pm`, etc.)
+- **LEGACY (Asistencia V1):** `verificarEmpleado`, `marcarAsistencia` (huérfanas) · `obtenerAsistenciasHoy`, `getAttendances` (aún vivas)
+- **PELIGROSAS (fuera del router, ejecutables en editor GAS):** 19 funciones — `recrearHoja`, `setupAllSheets`, 9× `cargar*Prueba`, `limpiarDatosPrueba`, `migrarPlanillaV2`, `actualizarTrabajadoresV3`, `createDefaultAdmin`
+
+---
+
+## 4. Plan por fases (propuesto, reversible, sin downtime)
+
+### Fase 0.5 — Quick wins (bajo riesgo, alto impacto visible) — 1 despliegue
+1. **Arreglar el Dashboard (C1):** remapear campos en `getDashboardStats()` del cliente API (como ya se hace en `getAttendanceToday`). El dashboard vuelve a mostrar datos reales. *Frontend only, reversible.*
+2. **Rotar `ADMIN_PASSWORD` (C2) y moverla a Script Properties.** Mitiga de inmediato C2, C3, C5, C6 de "explotable por internet" a "requiere acceso legítimo". Fuerza re-login.
+3. **Whitelist de campos en `historialPostulaciones`/`consultarPostulacion` (C4, A6):** dejar de volcar la fila completa; nunca devolver `cv_url`.
+4. **Superficie de errores al usuario (A3):** conectar el `catch` de `request()` al `ToastContext`.
+
+### Fase 1 — Backend por módulos (según prompt maestro)
+- Modularizar `appscript.js` con router declarativo `ROUTES` y niveles `publico`/`admin` (patrón Plataforma de Reclamos).
+- **Token HMAC firmado con TTL** (`computeHmacSha256Signature` + secreto en Script Properties), migración aceptando ambos formatos N días.
+- **Roster único en `sueldos`**: unificar IDs (C7, A4), `empleados` a solo-lectura o migrada; `verificarEmpleado`/`hireApplicant` apuntan a `sueldos`.
+- `LockService` en escrituras (A5); normalizador de timezone único (M3, M4); respuestas `{ok, data|error}` uniformes.
+- Aislar funciones destructivas tras flag `ALLOW_DESTRUCTIVE_OPS` (A9); eliminar rotas/duplicadas/huérfanas (M1, M7, M8).
+- Validación de tamaño/mimetype/rate-limit en escrituras públicas (A8); hash de contraseñas (A7).
+- Proxy autenticado para archivos de Drive en vez de `ANYONE_WITH_LINK` (C6).
+- `ejecutarTestSalud()` en 0-FAIL antes de redeploy.
+
+### Fase 2 — Frontend (arquitectura)
+- `AttendancePage` deja de usar `trabajadores.ts` → consume la API (A2).
+- Estado global (roster/config/auth) en Context o Zustand; React Query/SWR para caché (M5).
+- Partir páginas grandes (PlanillaPage, JobsManagementPage); code-splitting admin lazy (M6).
+- Toasts unificados (M9); revalidación de sesión (M10); skeletons y errores visibles.
+
+### Fase 3 — Rediseño visual + auditoría AA
+- Según prompt maestro (tokens únicos, jerarquía tipográfica, dashboard con KPIs conectados, kiosko ≥44px, contraste AA).
+
+---
+
+## 5. Criterio de cierre de Fase 0
+
+- [x] Cada KPI del dashboard trazado a su hoja fuente real y explicada su falla.
+- [x] Diagrama de flujo real vs esperado (roster, asistencia, dashboard).
+- [x] 85 actions clasificadas (viva/rota/duplicada/huérfana/legacy/peligrosa).
+- [x] Auditoría de seguridad con severidad y referencias de línea.
+- [ ] **Aprobación del plan por el dueño** ← pendiente.
+
+---
+
+## 6. Fase 0.5 — Quick wins IMPLEMENTADOS (10/07/2026)
+
+### Qué se cambió
+
+| Brecha | Cambio | Archivo |
+|--------|--------|---------|
+| C1 | `getDashboardStats()` del cliente remapea los campos del backend (español) a `DashboardStats`, normaliza estados de proyecto (`activo`→`in_progress`, etc.) y se eliminaron los "datos de ejemplo" falsos del Dashboard | `src/api/appScriptApi.ts`, `src/pages/admin/DashboardPage.tsx` |
+| A1 | El backend calcula `proyectosCompletados` y `proyectosPorEstado` (antes el KPI no tenía fuente) | `appscript.js` (getDashboardStats) |
+| C2 | **Token firmado HMAC-SHA256** — `base64(userId\|ts).base64(firma)` — y el secreto sale del código a Script Properties (`TOKEN_SECRET`). Se adelantó el HMAC de Fase 1 porque el formato anterior incluía el secreto DENTRO del token (extraíble desde localStorage de cualquier admin) | `appscript.js` (generateToken, parseToken_, validateToken, verifyTokenAction) |
+| C4 | `historialPostulaciones` ya no vuelca la fila completa: whitelist `id, jobId, jobTitle, status, createdAt` — nunca más `cv_url`/email/teléfono | `appscript.js` |
+| A6 | `consultarPostulacion` enmascara email (`ca***@gmail.com`) y teléfono (`***123`) | `appscript.js` (maskEmail_, maskPhone_) |
+| A3 | Errores de transporte (red caída, respuesta HTML de GAS, HTTP ≠ 2xx) se detectan, se muestran como toast y ya no se colapsan a "Network error" silencioso | `src/api/appScriptApi.ts`, `src/App.tsx` (ApiErrorBridge) |
+
+El frontend es **compatible con el backend actualmente desplegado** (el remapeo acepta ambos juegos de nombres y el token es opaco para el cliente): se puede desplegar por GH Actions sin esperar al backend.
+
+### ⚠️ Checklist de deploy del backend (manual, en el editor de Apps Script)
+
+1. **Crear el secreto:** Configuración del proyecto → Propiedades del script → agregar `TOKEN_SECRET` con un valor largo aleatorio (≥ 32 caracteres, generado nuevo — **NO** reutilizar `telcom2017!Seguro`, ya está quemado en el historial público de GitHub).
+2. Pegar el `appscript.js` actualizado del repo.
+3. Implementar → Administrar implementaciones → **Nueva versión** (misma URL).
+4. **Efecto inmediato:** todos los tokens anteriores quedan inválidos → los admins deben volver a iniciar sesión (esperado y deseado).
+5. Verificar en la hoja `usuarios` que ninguna cuenta use `telcom2017!Seguro` como contraseña; si alguna la usa, cambiarla.
+6. Probar: login en `/admin/login`, Dashboard con KPIs reales, `/mi-postulacion` (datos enmascarados).
+
+### Pendiente (siguientes fases)
+
+- C3/A11 (roles en backend), C6 (fotos Drive públicas), C7/A4 (roster único), A5 (LockService), A7 (hash de contraseñas), A8, A9 (flag destructivas) → **Fase 1**.
+- A2 (AttendancePage hardcodeada), M5, M6, M9, M10 → **Fase 2**.
+
+---
+
+© 2026 Ingeniería Telcom EIRL — Documento de auditoría interna (Fase 0).

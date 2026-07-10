@@ -77,36 +77,10 @@ export default function DashboardPage() {
       setStats(statsResult.data)
     } else {
       setError(statsResult.error || 'Error al cargar estadisticas')
-      // Datos de ejemplo
-      setStats({
-        totalEmployees: 15,
-        activeProjects: 5,
-        pendingApplications: 8,
-        completedProjects: 19,
-        employeesByCity: {
-          'Tacna': 8,
-          'Puno': 4,
-          'Arequipa': 3,
-        },
-        projectsByStatus: {
-          'planning': 2,
-          'in_progress': 5,
-          'completed': 19,
-          'on_hold': 1,
-        },
-      })
     }
 
     if (attendanceResult.success && attendanceResult.data) {
       setAttendance(attendanceResult.data as AttendanceToday)
-    } else {
-      // Datos de ejemplo
-      setAttendance({
-        fecha: new Date().toISOString().split('T')[0],
-        totalEmpleados: 15,
-        presentes: 12,
-        registros: []
-      })
     }
   }
 
@@ -152,7 +126,7 @@ export default function DashboardPage() {
             className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl flex items-center gap-3"
           >
             <FaExclamationTriangle className="text-yellow-400" />
-            <span className="text-yellow-400 text-sm">{error} - Mostrando datos de ejemplo</span>
+            <span className="text-yellow-400 text-sm">{error}</span>
           </motion.div>
         )}
 

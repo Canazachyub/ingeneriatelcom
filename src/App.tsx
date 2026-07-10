@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
+import { api } from './api/appScriptApi'
 import Layout from './components/layout/Layout'
 import HomePage from './pages/HomePage'
 import JobsPage from './pages/JobsPage'
@@ -34,7 +35,30 @@ import EvaluacionesAdminPage from './pages/admin/EvaluacionesPage'
 import PlanillaPage from './pages/admin/PlanillaPage'
 
 import { useAuth } from './context/AuthContext'
-import { ToastProvider } from './context/ToastContext'
+import { ToastProvider, useToast } from './context/ToastContext'
+
+/**
+ * Conecta los errores de transporte del cliente API al sistema de toasts,
+ * para que un fallo de red o una respuesta HTML de Apps Script nunca quede
+ * silencioso (antes se tragaban como listas vacías).
+ */
+function ApiErrorBridge() {
+  const toast = useToast()
+  const lastRef = useRef<{ message: string; at: number }>({ message: '', at: 0 })
+
+  useEffect(() => {
+    api.onTransportError((message) => {
+      // Deduplicar el mismo mensaje en ráfaga (p. ej. dashboard hace 2 llamadas en paralelo)
+      const now = Date.now()
+      if (lastRef.current.message === message && now - lastRef.current.at < 3000) return
+      lastRef.current = { message, at: now }
+      toast.error(message)
+    })
+    return () => api.onTransportError(null)
+  }, [toast])
+
+  return null
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth()
@@ -57,6 +81,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <ToastProvider>
+    <ApiErrorBridge />
     <Routes>
       {/* Public Routes */}
       <Route

@@ -9,7 +9,18 @@
 const SHEET_ID = '15ajUr5KqGgs99bsCcp9LnxRaD9mbIWjZArLetk7v4hA';
 const DRIVE_FOLDER_ID = '1B2CPcrNxUJtJcu7x8rXs_7_m9m2p9zAV';
 const NOTIFICATION_EMAIL = 'energysupervision13@gmail.com';
-const ADMIN_PASSWORD = 'telcom2017!Seguro'; // IMPORTANTE: cambiar antes de produccion
+
+// SEGURIDAD: el secreto que firma los tokens vive en Script Properties, NUNCA en el codigo
+// (este archivo esta en un repo publico de GitHub). Configurar en el editor de Apps Script:
+// Configuracion del proyecto > Propiedades del script > TOKEN_SECRET = <valor largo aleatorio>
+// Rotar el valor invalida todos los tokens emitidos (fuerza re-login de admins).
+function getTokenSecret_() {
+  const secret = PropertiesService.getScriptProperties().getProperty('TOKEN_SECRET');
+  if (!secret) {
+    throw new Error('TOKEN_SECRET no configurado en Propiedades del Script');
+  }
+  return secret;
+}
 
 // ============================================
 // ENDPOINTS PRINCIPALES
@@ -303,14 +314,12 @@ function doPost(e) {
 
 // Verify token and return user data
 function verifyTokenAction(token) {
-  if (!validateToken(token)) {
+  const userId = parseToken_(token);
+  if (!userId) {
     return { success: false, error: 'Token invalido o expirado' };
   }
 
   try {
-    const decoded = Utilities.newBlob(Utilities.base64Decode(token)).getDataAsString();
-    const parts = decoded.split('|');
-    const userId = parts[0];
 
     const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('usuarios');
     const users = sheet.getDataRange().getValues();
@@ -489,30 +498,41 @@ function login(data) {
   return { success: false, error: 'Credenciales invalidas' };
 }
 
+// Token firmado HMAC-SHA256: base64(userId|timestamp) + '.' + base64(firma).
+// El secreto NUNCA viaja dentro del token (el formato anterior base64 lo incluia:
+// cualquier admin podia extraerlo de su propio token en localStorage).
 function generateToken(userId) {
-  const timestamp = new Date().getTime();
-  const data = userId + '|' + timestamp + '|' + ADMIN_PASSWORD;
-  return Utilities.base64Encode(data);
+  const payload = userId + '|' + new Date().getTime();
+  const signature = Utilities.computeHmacSha256Signature(payload, getTokenSecret_());
+  return Utilities.base64EncodeWebSafe(payload) + '.' + Utilities.base64EncodeWebSafe(signature);
+}
+
+// Devuelve el userId si el token es valido (firma correcta y < 24h); null si no.
+function parseToken_(token) {
+  if (!token) return null;
+  try {
+    const parts = String(token).split('.');
+    if (parts.length !== 2) return null;
+
+    const payload = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString();
+    const expected = Utilities.base64EncodeWebSafe(
+      Utilities.computeHmacSha256Signature(payload, getTokenSecret_())
+    );
+    if (expected !== parts[1]) return null;
+
+    const pieces = payload.split('|');
+    const timestamp = parseInt(pieces[1], 10);
+    if (!timestamp || new Date().getTime() - timestamp > 24 * 60 * 60 * 1000) {
+      return null; // expirado (24 horas)
+    }
+    return pieces[0];
+  } catch (e) {
+    return null;
+  }
 }
 
 function validateToken(token) {
-  if (!token) return false;
-  
-  try {
-    const decoded = Utilities.newBlob(Utilities.base64Decode(token)).getDataAsString();
-    const parts = decoded.split('|');
-    const timestamp = parseInt(parts[1]);
-    const now = new Date().getTime();
-    
-    // Token valido por 24 horas
-    if (now - timestamp > 24 * 60 * 60 * 1000) {
-      return false;
-    }
-    
-    return parts[2] === ADMIN_PASSWORD;
-  } catch (e) {
-    return false;
-  }
+  return parseToken_(token) !== null;
 }
 
 function createUser(data) {
@@ -1742,6 +1762,16 @@ function getDashboardStats() {
     return estado === 'activo';
   }).length;
 
+  // Proyectos completados y distribucion por estado
+  const proyectosPorEstado = {};
+  projects.forEach(p => {
+    const estado = String((projEstadoCol >= 0 ? p[projEstadoCol] : p[5]) || 'sin_estado').toLowerCase().trim();
+    proyectosPorEstado[estado] = (proyectosPorEstado[estado] || 0) + 1;
+  });
+  const proyectosCompletados = (proyectosPorEstado['completado'] || 0) +
+    (proyectosPorEstado['completed'] || 0) +
+    (proyectosPorEstado['finalizado'] || 0);
+
   // Empleados por sede
   const empleadosPorCiudad = {};
   rosterReal.forEach(t => {
@@ -1764,6 +1794,8 @@ function getDashboardStats() {
       totalPostulaciones,
       postulacionesPendientes,
       convocatoriasActivas,
+      proyectosCompletados,
+      proyectosPorEstado,
       empleadosPorCiudad,
       empleadosPorArea
     }
@@ -2370,14 +2402,16 @@ function consultarPostulacion(dni) {
   // Generar cronograma basado en estado
   const cronograma = generarCronograma(postulacion.status, postulacion.createdAt);
 
+  // PII enmascarada: este endpoint es publico y consultable con cualquier DNI,
+  // asi que email/telefono nunca se devuelven completos.
   return {
     success: true,
     data: {
       postulante: {
         nombre: postulacion.fullName,
         dni: postulacion.dni,
-        email: postulacion.email,
-        telefono: postulacion.phone
+        email: maskEmail_(postulacion.email),
+        telefono: maskPhone_(postulacion.phone)
       },
       postulacion: {
         id: postulacion.id,
@@ -2425,6 +2459,22 @@ function generarCronograma(estado, fechaPostulacion) {
   });
 }
 
+// Enmascara PII para respuestas de endpoints publicos (consultables por cualquier DNI)
+function maskEmail_(email) {
+  const s = String(email || '').trim();
+  if (!s) return '';
+  const at = s.indexOf('@');
+  if (at <= 0) return '***';
+  return s.slice(0, Math.min(2, at)) + '***' + s.slice(at);
+}
+
+function maskPhone_(phone) {
+  const s = String(phone || '').trim();
+  if (!s) return '';
+  if (s.length <= 3) return '***';
+  return '***' + s.slice(-3);
+}
+
 function historialPostulaciones(dni) {
   if (!dni || dni.length !== 8) {
     return { success: false, error: 'DNI debe tener 8 digitos' };
@@ -2443,13 +2493,30 @@ function historialPostulaciones(dni) {
   const dniCol = headers.indexOf('dni');
   const postulaciones = [];
 
+  // WHITELIST de campos: endpoint publico — antes volcaba la fila completa,
+  // incluyendo cv_url, email y telefono de cualquier postulante (fuga de PII).
+  const col = (names) => {
+    for (const n of names) {
+      const idx = headers.indexOf(n);
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
+  const idCol = col(['id']);
+  const jobIdCol = col(['jobId', 'convocatoria_id']);
+  const jobTitleCol = col(['jobTitle']);
+  const statusCol = col(['status', 'estado']);
+  const createdAtCol = col(['createdAt', 'fecha_postulacion']);
+
   for (let i = 1; i < data.length; i++) {
-    if (data[i][dniCol] === dni) {
-      const row = {};
-      headers.forEach((header, idx) => {
-        row[header] = data[i][idx];
+    if (String(data[i][dniCol]) === String(dni)) {
+      postulaciones.push({
+        id: idCol >= 0 ? data[i][idCol] : '',
+        jobId: jobIdCol >= 0 ? data[i][jobIdCol] : '',
+        jobTitle: jobTitleCol >= 0 ? data[i][jobTitleCol] : '',
+        status: (statusCol >= 0 ? data[i][statusCol] : '') || 'pendiente',
+        createdAt: createdAtCol >= 0 ? data[i][createdAtCol] : ''
       });
-      postulaciones.push(row);
     }
   }
 

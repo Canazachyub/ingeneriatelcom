@@ -144,9 +144,24 @@ export interface DashboardStats {
   projectsByStatus: Record<string, number>
 }
 
+/**
+ * Listener de errores de transporte (red caida, respuesta HTML de GAS, HTTP no-2xx).
+ * Lo suscribe el ToastProvider para que ningun fallo de API quede silencioso.
+ */
+export type ApiErrorListener = (message: string, action: string) => void
+
 class AppScriptApi {
   private baseUrl = config.appsScriptUrl
   private token: string | null = null
+  private errorListener: ApiErrorListener | null = null
+
+  onTransportError(listener: ApiErrorListener | null) {
+    this.errorListener = listener
+  }
+
+  private notifyError(message: string, action: string) {
+    this.errorListener?.(message, action)
+  }
 
   setToken(token: string | null) {
     this.token = token
@@ -203,10 +218,24 @@ class AppScriptApi {
         })
       }
 
-      return response.json()
+      // Apps Script devuelve HTML (no JSON) cuando el script lanza una excepcion
+      // o el deployment esta mal configurado — detectarlo y reportarlo como error real.
+      const text = await response.text()
+      try {
+        return JSON.parse(text) as ApiResponse<T>
+      } catch {
+        const message = response.ok
+          ? `El servidor respondió un formato inesperado (acción: ${action})`
+          : `Error del servidor (HTTP ${response.status}) en la acción ${action}`
+        console.error('API non-JSON response:', action, response.status, text.slice(0, 300))
+        this.notifyError(message, action)
+        return { success: false, error: message }
+      }
     } catch (error) {
-      console.error('API request failed:', error)
-      return { success: false, error: 'Network error' }
+      console.error('API request failed:', action, error)
+      const message = 'Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.'
+      this.notifyError(message, action)
+      return { success: false, error: message }
     }
   }
 
@@ -228,8 +257,59 @@ class AppScriptApi {
   }
 
   // Dashboard
+  // El backend responde con nombres en español (totalEmpleados, empleadosPorCiudad...);
+  // aqui se remapea a la interface DashboardStats — mismo patron que getAttendanceToday.
   async getDashboardStats(): Promise<ApiResponse<DashboardStats>> {
-    return this.request<DashboardStats>('getDashboard', 'POST')
+    const result = await this.request<Record<string, unknown>>('getDashboard', 'POST')
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error || 'Error al cargar estadísticas' }
+    }
+
+    const raw = result.data as Record<string, unknown>
+    const num = (...values: unknown[]) => {
+      for (const v of values) {
+        const n = Number(v)
+        if (v !== undefined && v !== null && !Number.isNaN(n)) return n
+      }
+      return 0
+    }
+    const rec = (...values: unknown[]) => {
+      for (const v of values) {
+        if (v && typeof v === 'object') return v as Record<string, number>
+      }
+      return {}
+    }
+
+    // Normalizar estados de proyecto (hoja usa español) a las claves que grafica el dashboard
+    const statusKeyMap: Record<string, string> = {
+      activo: 'in_progress',
+      en_progreso: 'in_progress',
+      in_progress: 'in_progress',
+      planificacion: 'planning',
+      planning: 'planning',
+      completado: 'completed',
+      finalizado: 'completed',
+      completed: 'completed',
+      pausado: 'on_hold',
+      en_espera: 'on_hold',
+      on_hold: 'on_hold',
+    }
+    const rawByStatus = rec(raw.projectsByStatus, raw.proyectosPorEstado)
+    const projectsByStatus: Record<string, number> = {}
+    for (const [status, count] of Object.entries(rawByStatus)) {
+      const key = statusKeyMap[status.toLowerCase().trim()] || status
+      projectsByStatus[key] = (projectsByStatus[key] || 0) + Number(count || 0)
+    }
+
+    const stats: DashboardStats = {
+      totalEmployees: num(raw.totalEmployees, raw.totalEmpleados),
+      activeProjects: num(raw.activeProjects, raw.totalProyectos),
+      pendingApplications: num(raw.pendingApplications, raw.postulacionesPendientes),
+      completedProjects: num(raw.completedProjects, raw.proyectosCompletados, projectsByStatus.completed),
+      employeesByCity: rec(raw.employeesByCity, raw.empleadosPorCiudad),
+      projectsByStatus,
+    }
+    return { success: true, data: stats }
   }
 
   // Employees
