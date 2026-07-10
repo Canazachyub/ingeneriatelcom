@@ -24,8 +24,8 @@ const FOTOS = [
   { src: '/assets/images/operaciones/H12.webp', alt: 'Mantenimiento eléctrico nocturno con luces de trabajo' },
 ]
 
-const RADIO = 470            // radio del cilindro (px)
-const ALTURA_TOTAL = 820     // recorrido vertical de una vuelta completa de la hélice (px)
+const RADIO = 540            // radio del cilindro (px)
+const ALTURA_TOTAL = 1060    // recorrido vertical de una vuelta completa de la hélice (px)
 const ALTO_VENTANA = 620     // alto visible del contenedor (px)
 const FADE_INICIO = 225      // |y| donde empieza a desvanecerse hacia el borde
 const FADE_FIN = 330         // |y| donde la tarjeta ya es invisible (antes del wrap)
