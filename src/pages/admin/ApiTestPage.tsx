@@ -93,16 +93,19 @@ export default function ApiTestPage() {
       })
     }
 
-    // Test 3: Login
+    // Test 3: el backend debe RECHAZAR credenciales invalidas.
+    // (No se prueba un login real: ya hay sesion activa y las contrasenas
+    // validas no van hardcodeadas en el codigo.)
     const startTime3 = Date.now()
     updateTest('Login de admin', { status: 'running' })
     try {
-      const loginResult = await api.login('admin@telcom.com', 'telcom2017')
+      const loginResult = await api.login('test-invalido@telcom.com', 'password-incorrecta')
+      const rechazado = !loginResult.success
       updateTest('Login de admin', {
-        status: loginResult.success ? 'success' : 'error',
-        message: loginResult.success
-          ? `Usuario: ${loginResult.data?.user?.name || 'Admin'}`
-          : loginResult.error,
+        status: rechazado ? 'success' : 'error',
+        message: rechazado
+          ? 'Credenciales invalidas rechazadas correctamente'
+          : 'PELIGRO: el backend acepto credenciales invalidas',
         data: loginResult,
         duration: Date.now() - startTime3,
       })

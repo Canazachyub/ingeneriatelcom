@@ -144,6 +144,62 @@ export interface DashboardStats {
   projectsByStatus: Record<string, number>
 }
 
+// ─── Normalizadores: el backend responde con campos en español (nombre_completo,
+// cargo, ciudad_actual, estado...) y las páginas admin consumen las interfaces en
+// inglés (Employee/Project). Se remapea aquí — único punto — conservando también
+// las claves originales para las páginas que aún leen el shape crudo.
+
+const EMPLOYEE_STATUS_MAP: Record<string, Employee['status']> = {
+  activo: 'active', active: 'active',
+  inactivo: 'inactive', inactive: 'inactive',
+  licencia: 'on_leave', on_leave: 'on_leave',
+}
+
+function normalizeEmployee(raw: Record<string, unknown>): Employee {
+  const r = raw as Record<string, any>
+  return {
+    ...r,
+    id: r.id ?? (r.dni ? `SUE-${r.dni}` : ''),
+    name: r.name ?? r.nombre_completo ?? r.nombre ?? '',
+    email: r.email ?? '',
+    phone: r.phone ?? r.telefono ?? '',
+    dni: String(r.dni ?? ''),
+    position: r.position ?? r.cargo ?? '',
+    department: r.department ?? r.area ?? '',
+    city: r.city ?? r.ciudad_actual ?? r.sede ?? '',
+    status: EMPLOYEE_STATUS_MAP[String(r.status ?? r.estado ?? '').toLowerCase().trim()] ?? 'active',
+    startDate: r.startDate ?? r.fecha_ingreso ?? r.fecha_inicio ?? '',
+    salary: r.salary ?? r.sueldo ?? r.salario,
+    createdAt: r.createdAt ?? '',
+    updatedAt: r.updatedAt ?? '',
+  }
+}
+
+const PROJECT_STATUS_MAP: Record<string, Project['status']> = {
+  planificacion: 'planning', planning: 'planning',
+  activo: 'in_progress', en_progreso: 'in_progress', in_progress: 'in_progress',
+  completado: 'completed', finalizado: 'completed', cerrado: 'completed', completed: 'completed',
+  pausado: 'on_hold', en_espera: 'on_hold', on_hold: 'on_hold',
+}
+
+function normalizeProject(raw: Record<string, unknown>): Project {
+  const r = raw as Record<string, any>
+  return {
+    ...r,
+    id: r.id ?? '',
+    name: r.name ?? r.nombre ?? '',
+    description: r.description ?? r.descripcion ?? '',
+    client: r.client ?? r.cliente ?? '',
+    city: r.city ?? r.ciudad ?? '',
+    status: PROJECT_STATUS_MAP[String(r.status ?? r.estado ?? '').toLowerCase().trim()] ?? 'planning',
+    startDate: r.startDate ?? r.fecha_inicio ?? '',
+    endDate: r.endDate ?? r.fecha_fin ?? r.fecha_fin_estimada ?? '',
+    budget: r.budget ?? r.presupuesto,
+    createdAt: r.createdAt ?? '',
+    updatedAt: r.updatedAt ?? '',
+  }
+}
+
 /**
  * Listener de errores de transporte (red caida, respuesta HTML de GAS, HTTP no-2xx).
  * Lo suscribe el ToastProvider para que ningun fallo de API quede silencioso.
@@ -314,11 +370,19 @@ class AppScriptApi {
 
   // Employees
   async getEmployees(): Promise<ApiResponse<Employee[]>> {
-    return this.request<Employee[]>('getEmployees', 'POST')
+    const result = await this.request<Record<string, unknown>[]>('getEmployees', 'POST')
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error }
+    }
+    return { success: true, data: result.data.map(normalizeEmployee) }
   }
 
   async getEmployee(id: string): Promise<ApiResponse<Employee>> {
-    return this.request<Employee>('getEmployee', 'POST', { id })
+    const result = await this.request<Record<string, unknown>>('getEmployee', 'POST', { id })
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error }
+    }
+    return { success: true, data: normalizeEmployee(result.data) }
   }
 
   async createEmployee(employee: Partial<Employee>): Promise<ApiResponse<Employee>> {
@@ -339,19 +403,42 @@ class AppScriptApi {
 
   // Projects
   async getProjects(): Promise<ApiResponse<Project[]>> {
-    return this.request<Project[]>('getProjects', 'POST')
+    const result = await this.request<Record<string, unknown>[]>('getProjects', 'POST')
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error }
+    }
+    return { success: true, data: result.data.map(normalizeProject) }
   }
 
   async getProject(id: string): Promise<ApiResponse<Project>> {
-    return this.request<Project>('getProject', 'POST', { id })
+    const result = await this.request<Record<string, unknown>>('getProject', 'POST', { id })
+    if (!result.success || !result.data) {
+      return { success: false, error: result.error }
+    }
+    return { success: true, data: normalizeProject(result.data) }
+  }
+
+  // El backend de proyectos espera claves en español (nombre, cliente, ciudad...):
+  // se traduce aquí para que las páginas sigan trabajando con la interface Project.
+  private projectToBackend(project: Partial<Project>): Record<string, unknown> {
+    return {
+      codigo: (project as Record<string, unknown>)['codigo'] ?? '',
+      nombre: project.name,
+      descripcion: project.description,
+      cliente: project.client,
+      ciudad: project.city,
+      fecha_inicio: project.startDate,
+      fecha_fin_estimada: project.endDate,
+      presupuesto: project.budget,
+    }
   }
 
   async createProject(project: Partial<Project>): Promise<ApiResponse<Project>> {
-    return this.request<Project>('createProject', 'POST', project as Record<string, unknown>)
+    return this.request<Project>('createProject', 'POST', this.projectToBackend(project))
   }
 
   async updateProject(id: string, project: Partial<Project>): Promise<ApiResponse<Project>> {
-    return this.request<Project>('updateProject', 'POST', { id, ...project } as Record<string, unknown>)
+    return this.request<Project>('updateProject', 'POST', { id, ...this.projectToBackend(project) })
   }
 
   // Employee Assignments
