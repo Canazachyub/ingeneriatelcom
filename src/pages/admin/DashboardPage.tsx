@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useToast } from '../../context/ToastContext'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -22,19 +22,9 @@ import {
   FaGraduationCap,
   FaClipboardList,
 } from 'react-icons/fa'
-import { api, DashboardStats } from '../../api/appScriptApi'
+import { DashboardStats } from '../../api/appScriptApi'
+import { useDashboardStats, useAttendanceToday } from '../../hooks/queries'
 import AdminLayout from '../../components/admin/AdminLayout'
-
-interface AttendanceToday {
-  fecha: string
-  totalEmpleados: number
-  presentes: number
-  registros: Array<{
-    employeeName: string
-    checkIn: string
-    checkOut: string
-  }>
-}
 
 const statCards = [
   { key: 'totalEmployees', label: 'Empleados Activos', icon: FaUsers, color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-500/10' },
@@ -44,11 +34,13 @@ const statCards = [
 ]
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [attendance, setAttendance] = useState<AttendanceToday | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState('')
   const toast = useToast()
+
+  const { data: stats, isLoading: isLoadingStats, error: statsError } = useDashboardStats()
+  const { data: attendance, isLoading: isLoadingAttendance } = useAttendanceToday()
+
+  const isLoading = isLoadingStats || isLoadingAttendance
+  const error = statsError ? (statsError as Error).message || 'Error al cargar estadisticas' : ''
 
   useEffect(() => {
     if (!sessionStorage.getItem('admin_welcomed')) {
@@ -56,33 +48,6 @@ export default function DashboardPage() {
       sessionStorage.setItem('admin_welcomed', 'true')
     }
   }, [])
-
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
-    setIsLoading(true)
-    setError('')
-
-    // Cargar estadisticas y asistencia en paralelo
-    const [statsResult, attendanceResult] = await Promise.all([
-      api.getDashboardStats(),
-      api.getAttendanceToday()
-    ])
-
-    setIsLoading(false)
-
-    if (statsResult.success && statsResult.data) {
-      setStats(statsResult.data)
-    } else {
-      setError(statsResult.error || 'Error al cargar estadisticas')
-    }
-
-    if (attendanceResult.success && attendanceResult.data) {
-      setAttendance(attendanceResult.data as AttendanceToday)
-    }
-  }
 
   const getGreeting = () => {
     const hour = new Date().getHours()

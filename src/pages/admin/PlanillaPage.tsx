@@ -1,9 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
-  FaSpinner, FaSync, FaDownload, FaTimes, FaChevronDown, FaChevronRight,
-  FaExclamationTriangle, FaCheckCircle, FaTimesCircle, FaClock, FaCog,
-  FaPrint, FaFileInvoiceDollar, FaPen, FaUserPlus, FaHourglassHalf,
+  FaSpinner, FaSync, FaDownload, FaExclamationTriangle, FaCog,
+  FaFileInvoiceDollar, FaUserPlus,
 } from 'react-icons/fa'
 import AdminLayout from '../../components/admin/AdminLayout'
 import { api } from '../../api/appScriptApi'
@@ -14,52 +12,14 @@ import {
   resumenMensual, calcularDisciplina, descuentoIncidencia, formatoSoles,
   valorDia, valorMinuto, sueldoEfectivo,
 } from '../../utils/planilla'
-
-const TIPO_LABELS: Record<string, string> = {
-  tardanza: 'Tardanza',
-  salida_anticipada: 'Salida anticipada',
-  omision: 'Omisión de marcado',
-  falta: 'Falta',
-}
-
-const ESTADO_BADGE: Record<string, string> = {
-  pendiente: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
-  justificada: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
-  injustificada: 'bg-rose-500/15 text-rose-400 border border-rose-500/30',
-}
-
-const ESTADO_LABELS: Record<string, string> = {
-  pendiente: 'Pendiente de sustento',
-  justificada: 'Justificada',
-  injustificada: 'Injustificada',
-}
-
-const mesActualISO = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
-
-const finDeMes = (mes: string) => {
-  const [y, m] = mes.split('-').map(Number)
-  const d = new Date(y, m, 0)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-const inicioTrimestre = (mes: string) => {
-  const [y, m] = mes.split('-').map(Number)
-  const qm = Math.floor((m - 1) / 3) * 3 + 1
-  return `${y}-${String(qm).padStart(2, '0')}-01`
-}
-
-const hoyISO = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-const nombreMes = (mes: string) => {
-  const [y, m] = mes.split('-').map(Number)
-  return new Date(y, m - 1, 1).toLocaleDateString('es-PE', { month: 'long', year: 'numeric' })
-}
+import {
+  TIPO_LABELS, ESTADO_LABELS, mesActualISO, finDeMes, inicioTrimestre, hoyISO, nombreMes, Fila,
+} from './planilla/planilla.types'
+import ConfigPlanillaForm from './planilla/ConfigPlanillaForm'
+import SueldosTable from './planilla/SueldosTable'
+import IncidenciasPanel from './planilla/IncidenciasPanel'
+import BolsaHorasPanel from './planilla/BolsaHorasPanel'
+import NuevoTrabajadorModal, { NuevoTrabajadorDraft } from './planilla/NuevoTrabajadorModal'
 
 export default function PlanillaPage() {
   const { user } = useAuth()
@@ -98,7 +58,7 @@ export default function PlanillaPage() {
 
   // Alta de trabajador
   const [modalNuevo, setModalNuevo] = useState(false)
-  const [nuevoDraft, setNuevoDraft] = useState({
+  const [nuevoDraft, setNuevoDraft] = useState<NuevoTrabajadorDraft>({
     dni: '', nombre: '', cargo: '', sueldo: '', fecha_inicio: hoyISO(), usa_rmv: false, sede: 'Principal', email: '',
   })
   const [guardandoNuevo, setGuardandoNuevo] = useState(false)
@@ -146,7 +106,7 @@ export default function PlanillaPage() {
   // ── Cálculos ─────────────────────────────────────────────
   const esMesActual = mes === mesActualISO()
 
-  const filas = useMemo(() => {
+  const filas: Fila[] = useMemo(() => {
     return sueldos.map((t) => {
       const sueldo = sueldoEfectivo(t, config)
       const incTrimestre = incidencias.filter((i) => String(i.dni) === t.dni)
@@ -321,7 +281,7 @@ export default function PlanillaPage() {
     URL.revokeObjectURL(a.href)
   }
 
-  const imprimirTrabajador = (fila: (typeof filas)[0]) => {
+  const imprimirTrabajador = (fila: Fila) => {
     const { trabajador: t, resumen: r, incMes, disciplina } = fila
     const sueldoT = fila.sueldo
     const filasDetalle = incMes.map((i) => `
@@ -446,58 +406,14 @@ export default function PlanillaPage() {
         </div>
 
         {/* Config editable */}
-        <AnimatePresence>
-          {showConfig && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden"
-            >
-              <div className="bg-primary-900/60 border border-primary-800 rounded-2xl p-5">
-                <h3 className="text-sm font-semibold text-white mb-4">
-                  Configuración de horario y descuentos (cláusula 13ª / Anexo 3)
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  {([
-                    ['ingreso_manana', 'Ingreso mañana'],
-                    ['salida_manana', 'Salida mañana'],
-                    ['ingreso_tarde', 'Ingreso tarde'],
-                    ['salida_tarde', 'Salida tarde'],
-                    ['tolerancia_manana_min', 'Tolerancia mañana (min)'],
-                    ['tolerancia_tarde_min', 'Tolerancia tarde (min)'],
-                    ['tardanza_grave_min', 'Grave desde (min)'],
-                    ['jornada_horas', 'Jornada (horas)'],
-                    ['factor_descanso_semanal', 'Factor dominical'],
-                    ['plazo_sustento_horas', 'Plazo sustento (h)'],
-                    ['divisor_mes', 'Divisor mensual'],
-                    ['rmv', 'RMV (S/)'],
-                    ['salida_autorizada', 'Salida autorizada'],
-                  ] as [string, string][]).map(([k, label]) => (
-                    <div key={k}>
-                      <label className="block text-xs text-primary-400 mb-1">{label}</label>
-                      <input
-                        value={configDraft[k] ?? ''}
-                        onChange={(e) => setConfigDraft((prev) => ({ ...prev, [k]: e.target.value }))}
-                        className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-lg text-sm text-white focus:outline-none focus:border-accent-electric"
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-end gap-2 mt-4">
-                  <button onClick={() => setShowConfig(false)} className="px-4 py-2 text-sm text-primary-400 hover:text-white">
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={guardarConfig}
-                    disabled={savingConfig}
-                    className="px-4 py-2 bg-accent-electric/20 border border-accent-electric/40 text-accent-electric rounded-lg text-sm font-medium hover:bg-accent-electric/30 disabled:opacity-50"
-                  >
-                    {savingConfig ? 'Guardando...' : 'Guardar configuración'}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <ConfigPlanillaForm
+          show={showConfig}
+          configDraft={configDraft}
+          setConfigDraft={setConfigDraft}
+          savingConfig={savingConfig}
+          onCancel={() => setShowConfig(false)}
+          onGuardar={guardarConfig}
+        />
 
         {/* Loading */}
         {loading && (
@@ -516,537 +432,69 @@ export default function PlanillaPage() {
 
         {/* Tabla resumen */}
         {!loading && sueldos.length > 0 && (
-          <div className="bg-primary-900/60 border border-primary-800 rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-primary-800 bg-primary-950/60">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Trabajador</th>
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Sueldo</th>
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Tard.</th>
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Min.</th>
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">F. inj.</th>
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">F. jus.</th>
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Omis.</th>
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">S. ant.</th>
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Bolsa 5pm</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                      Descuento ref. (aprox.)
-                    </th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Alerta</th>
-                    <th className="px-2" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-primary-800/60">
-                  {filas.map((f) => {
-                    const abierto = expanded === f.trabajador.dni
-                    return (
-                      <>
-                        <tr
-                          key={f.trabajador.dni}
-                          onClick={() => setExpanded(abierto ? null : f.trabajador.dni)}
-                          className="hover:bg-primary-800/30 transition-colors cursor-pointer"
-                        >
-                          <td className="px-4 py-3">
-                            <div className="font-medium text-white leading-tight">{f.trabajador.nombre}</div>
-                            <div className="text-gray-500 text-xs">{f.trabajador.cargo}</div>
-                            {f.trabajador.email && (
-                              <div className="text-primary-500 text-[11px] truncate max-w-[220px]">{f.trabajador.email}</div>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                            {f.trabajador.usa_rmv ? (
-                              <span
-                                className="text-gray-300 inline-flex items-center gap-1.5"
-                                title="Gana la RMV: se ajusta automáticamente con el parámetro rmv de la configuración"
-                              >
-                                {formatoSoles(f.sueldo)}
-                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-accent-electric/15 text-accent-electric font-bold">RMV</span>
-                              </span>
-                            ) : editandoSueldo === f.trabajador.dni ? (
-                              <div className="flex items-center gap-1 justify-center">
-                                <input
-                                  value={sueldoDraft}
-                                  onChange={(e) => setSueldoDraft(e.target.value)}
-                                  onKeyDown={(e) => e.key === 'Enter' && guardarSueldo(f.trabajador.dni)}
-                                  className="w-20 px-2 py-1 bg-primary-950 border border-accent-electric rounded text-white text-xs text-center"
-                                  autoFocus
-                                />
-                                <button onClick={() => guardarSueldo(f.trabajador.dni)} className="text-emerald-400 text-xs"><FaCheckCircle /></button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => { setEditandoSueldo(f.trabajador.dni); setSueldoDraft(String(f.sueldo)) }}
-                                className="text-gray-300 hover:text-white inline-flex items-center gap-1.5 group"
-                              >
-                                {formatoSoles(f.sueldo)}
-                                <FaPen className="text-[9px] text-gray-600 group-hover:text-accent-electric" />
-                              </button>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 text-center">
-                            <span className={f.resumen.tardanzas > 0 ? 'text-amber-400 font-bold' : 'text-gray-600'}>{f.resumen.tardanzas}</span>
-                          </td>
-                          <td className="px-3 py-3 text-center text-gray-300">{f.resumen.minutosAcumulados}</td>
-                          <td className="px-3 py-3 text-center">
-                            <span className={f.resumen.faltasInjustificadas > 0 ? 'text-rose-400 font-bold' : 'text-gray-600'}>{f.resumen.faltasInjustificadas}</span>
-                          </td>
-                          <td className="px-3 py-3 text-center">
-                            <span className={f.resumen.faltasJustificadas > 0 ? 'text-emerald-400 font-bold' : 'text-gray-600'}>{f.resumen.faltasJustificadas}</span>
-                          </td>
-                          <td className="px-3 py-3 text-center">
-                            <span className={f.resumen.omisiones > 0 ? 'text-orange-400 font-bold' : 'text-gray-600'}>{f.resumen.omisiones}</span>
-                          </td>
-                          <td className="px-3 py-3 text-center">
-                            <span className={f.resumen.salidasAnticipadas > 0 ? 'text-rose-400 font-bold' : 'text-gray-600'}>{f.resumen.salidasAnticipadas}</span>
-                          </td>
-                          <td className="px-3 py-3 text-center">
-                            <span className={f.bolsa > 0 ? 'text-accent-electric font-bold' : 'text-gray-600'}>
-                              {f.bolsa > 0 ? `${f.bolsa.toFixed(1)}h` : '—'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="font-bold text-white">{formatoSoles(f.resumen.descuentoProyectado)}</div>
-                            {f.resumen.pendientes > 0 && (
-                              <div className="text-[10px] text-amber-400">
-                                incluye {f.resumen.pendientes} pendiente{f.resumen.pendientes !== 1 ? 's' : ''} de sustento
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            {f.disciplina.etiqueta && (
-                              <span className="inline-block text-xs px-2.5 py-1 rounded-full font-medium bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">
-                                {f.disciplina.etiqueta}
-                              </span>
-                            )}
-                            {f.disciplina.alertas.map((a) => (
-                              <span key={a} className="inline-block text-[10px] px-2 py-0.5 mt-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/25 whitespace-nowrap">
-                                {a}
-                              </span>
-                            ))}
-                          </td>
-                          <td className="px-2 text-gray-500">
-                            {abierto ? <FaChevronDown className="text-xs" /> : <FaChevronRight className="text-xs" />}
-                          </td>
-                        </tr>
-
-                        {/* Detalle expandible */}
-                        {abierto && (
-                          <tr key={f.trabajador.dni + '-det'}>
-                            <td colSpan={12} className="px-4 py-4 bg-primary-950/50">
-                              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                                <p className="text-xs text-gray-400">
-                                  Valor día: <strong className="text-white">{formatoSoles(valorDia(f.sueldo, config))}</strong> ·
-                                  Valor minuto: <strong className="text-white">S/ {valorMinuto(f.sueldo, config).toFixed(4)}</strong> ·
-                                  Disciplina trimestre: <strong className="text-white">{f.disciplina.faltasDisciplinarias} falta(s)</strong> ·
-                                  Bolsa 5pm: <strong className="text-accent-electric">{f.bolsa.toFixed(2)}h</strong>
-                                  {f.trabajador.fecha_inicio && <> · Inicio: <strong className="text-white">{f.trabajador.fecha_inicio}</strong></>}
-                                </p>
-                                <div className="flex items-center gap-3">
-                                  <button
-                                    onClick={() => { setModal5pm(f.trabajador); setFecha5pm(hoyISO()) }}
-                                    className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:underline"
-                                  >
-                                    <FaClock className="text-[10px]" /> Autorizar salida 5pm
-                                  </button>
-                                  <button
-                                    onClick={() => setModalMuestreo(f.trabajador)}
-                                    disabled={f.bolsa <= 0}
-                                    className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:underline disabled:opacity-40 disabled:no-underline"
-                                    title={f.bolsa <= 0 ? 'Sin horas en bolsa' : 'Registrar horas de muestreo ELSE'}
-                                  >
-                                    <FaHourglassHalf className="text-[10px]" /> Muestreo ELSE
-                                  </button>
-                                  <button
-                                    onClick={() => imprimirTrabajador(f)}
-                                    className="inline-flex items-center gap-1.5 text-xs text-accent-electric hover:underline"
-                                  >
-                                    <FaPrint className="text-[10px]" /> Imprimir / PDF
-                                  </button>
-                                </div>
-                              </div>
-                              {f.incMes.length === 0 ? (
-                                <p className="text-sm text-gray-500 text-center py-4">Sin incidencias este mes ✓</p>
-                              ) : (
-                                <table className="w-full text-xs">
-                                  <thead>
-                                    <tr className="text-gray-500 border-b border-primary-800">
-                                      <th className="text-left py-2 pr-3">Fecha</th>
-                                      <th className="text-left py-2 pr-3">Tipo</th>
-                                      <th className="text-left py-2 pr-3">Evento</th>
-                                      <th className="text-center py-2 pr-3">Min.</th>
-                                      <th className="text-left py-2 pr-3">Estado</th>
-                                      <th className="text-right py-2 pr-3">Descuento parcial</th>
-                                      <th className="text-left py-2 pr-3">Nota / sustento</th>
-                                      <th className="py-2" />
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-primary-800/40">
-                                    {[...f.incMes].sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))).map((inc) => (
-                                      <tr key={inc.id}>
-                                        <td className="py-2 pr-3 text-gray-300">{inc.fecha}</td>
-                                        <td className="py-2 pr-3">
-                                          <span className="text-white">{TIPO_LABELS[inc.tipo] || inc.tipo}</span>
-                                          {inc.grave === true && (
-                                            <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 font-bold">GRAVE</span>
-                                          )}
-                                        </td>
-                                        <td className="py-2 pr-3 text-gray-500">{inc.evento || '—'}</td>
-                                        <td className="py-2 pr-3 text-center text-gray-300">{inc.minutos ?? '—'}</td>
-                                        <td className="py-2 pr-3">
-                                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${ESTADO_BADGE[inc.estado]}`}>
-                                            {ESTADO_LABELS[inc.estado]}
-                                          </span>
-                                        </td>
-                                        <td className="py-2 pr-3 text-right font-mono text-white">
-                                          {inc.estado === 'justificada'
-                                            ? <span className="text-emerald-400">S/ 0.00</span>
-                                            : formatoSoles(descuentoIncidencia(inc, f.sueldo, config))}
-                                        </td>
-                                        <td className="py-2 pr-3 text-gray-500 max-w-[180px] truncate">
-                                          {inc.sustento_url ? (
-                                            <a href={inc.sustento_url} target="_blank" rel="noopener noreferrer" className="text-accent-electric hover:underline">Ver sustento</a>
-                                          ) : (inc.nota || '—')}
-                                        </td>
-                                        <td className="py-2 text-right">
-                                          <button
-                                            onClick={() => abrirRevision(inc)}
-                                            className="text-xs px-3 py-1 rounded-lg bg-primary-800 text-primary-200 hover:bg-accent-electric/20 hover:text-accent-electric transition-colors"
-                                          >
-                                            Revisar
-                                          </button>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              )}
-                            </td>
-                          </tr>
-                        )}
-                      </>
-                    )
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-primary-700 bg-primary-950/70">
-                    <td colSpan={9} className="px-4 py-3 text-right text-xs text-gray-400 uppercase tracking-wider font-semibold">
-                      Total {esMesActual ? 'proyectado al cierre' : 'del mes'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-bold text-accent-electric text-base">
-                      {formatoSoles(totalProyectado)}
-                    </td>
-                    <td colSpan={2} />
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-            <div className="px-4 py-3 border-t border-primary-800 text-[11px] text-gray-500 leading-relaxed">
-              DESCUENTO REFERENCIAL (aprox.) — el sistema no descuenta automáticamente; solo calcula y muestra.
-              El descuento nunca excede el tiempo no laborado. Fórmula: valor_día = sueldo/{config.divisor_mes} ·
-              valor_hora = valor_día/{config.jornada_horas} · valor_minuto = valor_hora/60. Falta injustificada =
-              valor_día × {(1 + config.factor_descanso_semanal).toFixed(1)} (D. Leg. 713). Los cambios de estado quedan en el log de auditoría.
-            </div>
-          </div>
+          <SueldosTable
+            filas={filas}
+            config={config}
+            esMesActual={esMesActual}
+            totalProyectado={totalProyectado}
+            expanded={expanded}
+            setExpanded={setExpanded}
+            editandoSueldo={editandoSueldo}
+            setEditandoSueldo={setEditandoSueldo}
+            sueldoDraft={sueldoDraft}
+            setSueldoDraft={setSueldoDraft}
+            guardarSueldo={guardarSueldo}
+            abrirRevision={abrirRevision}
+            onAbrir5pm={(trabajador) => { setModal5pm(trabajador); setFecha5pm(hoyISO()) }}
+            onAbrirMuestreo={(trabajador) => setModalMuestreo(trabajador)}
+            imprimirTrabajador={imprimirTrabajador}
+          />
         )}
 
         {/* ── Modal revisión ── */}
-        <AnimatePresence>
-          {revisando && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={(e) => { if (e.target === e.currentTarget) setRevisando(null) }}
-              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-primary-900 border border-primary-700 rounded-2xl w-full max-w-md shadow-2xl"
-              >
-                <div className="flex items-center justify-between px-5 py-4 border-b border-primary-800">
-                  <div>
-                    <h3 className="font-bold text-white text-sm">Revisar incidencia</h3>
-                    <p className="text-xs text-gray-500">
-                      {revisando.nombre} · {revisando.fecha} · {TIPO_LABELS[revisando.tipo]}
-                      {revisando.minutos ? ` · ${revisando.minutos} min` : ''}
-                    </p>
-                  </div>
-                  <button onClick={() => setRevisando(null)} className="p-2 text-gray-400 hover:text-white rounded-lg">
-                    <FaTimes />
-                  </button>
-                </div>
-                <div className="p-5 space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => setRevEstado('justificada')}
-                      className={`py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 border transition-all ${
-                        revEstado === 'justificada'
-                          ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
-                          : 'bg-primary-950 border-primary-800 text-gray-500 hover:text-gray-300'
-                      }`}
-                    >
-                      <FaCheckCircle /> Justificada
-                    </button>
-                    <button
-                      onClick={() => setRevEstado('injustificada')}
-                      className={`py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 border transition-all ${
-                        revEstado === 'injustificada'
-                          ? 'bg-rose-500/20 border-rose-500/50 text-rose-400'
-                          : 'bg-primary-950 border-primary-800 text-gray-500 hover:text-gray-300'
-                      }`}
-                    >
-                      <FaTimesCircle /> Injustificada
-                    </button>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-primary-400 mb-1.5">
-                      Nota {revEstado === 'justificada' ? '(descanso médico, licencia, permiso escrito...) *' : '(opcional)'}
-                    </label>
-                    <textarea
-                      value={revNota}
-                      onChange={(e) => setRevNota(e.target.value)}
-                      rows={3}
-                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric resize-none"
-                      placeholder="Motivo o sustento de la decisión..."
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-primary-400 mb-1.5">URL del sustento (Drive, opcional)</label>
-                    <input
-                      value={revSustento}
-                      onChange={(e) => setRevSustento(e.target.value)}
-                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric"
-                      placeholder="https://drive.google.com/..."
-                    />
-                  </div>
-                  <p className="text-[11px] text-gray-500 flex items-start gap-1.5">
-                    <FaClock className="mt-0.5 shrink-0" />
-                    El cambio quedará registrado en el log de auditoría con tu usuario y fecha.
-                  </p>
-                  <button
-                    onClick={guardarRevision}
-                    disabled={guardandoRev}
-                    className="w-full py-3 bg-accent-electric/20 border border-accent-electric/40 text-accent-electric font-semibold rounded-xl text-sm hover:bg-accent-electric/30 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {guardandoRev && <FaSpinner className="animate-spin" />}
-                    Guardar decisión
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <IncidenciasPanel
+          revisando={revisando}
+          revEstado={revEstado}
+          setRevEstado={setRevEstado}
+          revNota={revNota}
+          setRevNota={setRevNota}
+          revSustento={revSustento}
+          setRevSustento={setRevSustento}
+          guardandoRev={guardandoRev}
+          onCerrar={() => setRevisando(null)}
+          onGuardar={guardarRevision}
+        />
 
-        {/* ── Modal autorizar salida 5pm ── */}
-        <AnimatePresence>
-          {modal5pm && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={(e) => { if (e.target === e.currentTarget) setModal5pm(null) }}
-              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-primary-900 border border-primary-700 rounded-2xl w-full max-w-sm shadow-2xl p-5 space-y-4"
-              >
-                <div>
-                  <h3 className="font-bold text-white text-sm">Autorizar salida 5:00 p.m.</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">{modal5pm.nombre}</p>
-                </div>
-                <div>
-                  <label className="block text-xs text-primary-400 mb-1.5">Fecha</label>
-                  <input
-                    type="date" value={fecha5pm} onChange={(e) => setFecha5pm(e.target.value)}
-                    className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-primary-400 mb-1.5">Nota (verificación de avances)</label>
-                  <textarea
-                    value={nota5pm} onChange={(e) => setNota5pm(e.target.value)} rows={2}
-                    className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric resize-none"
-                    placeholder="Avances verificados por..."
-                  />
-                </div>
-                <p className="text-[11px] text-gray-500">
-                  La salida autorizada no genera descuento: la hora no laborada se acredita a la
-                  bolsa por compensar (muestreo trimestral ELSE). No genera sobretiempo ni pago extra.
-                </p>
-                <div className="flex gap-2">
-                  <button onClick={() => setModal5pm(null)} className="flex-1 py-2.5 text-sm text-primary-400 hover:text-white border border-primary-800 rounded-xl">
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={autorizar5pmHandler} disabled={guardandoBolsa}
-                    className="flex-1 py-2.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-semibold rounded-xl text-sm hover:bg-emerald-500/30 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {guardandoBolsa && <FaSpinner className="animate-spin" />}
-                    Autorizar
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ── Modal muestreo ELSE (descarga de bolsa) ── */}
-        <AnimatePresence>
-          {modalMuestreo && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={(e) => { if (e.target === e.currentTarget) setModalMuestreo(null) }}
-              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-primary-900 border border-primary-700 rounded-2xl w-full max-w-sm shadow-2xl p-5 space-y-4"
-              >
-                <div>
-                  <h3 className="font-bold text-white text-sm">Registrar muestreo ELSE</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {modalMuestreo.nombre} · saldo en bolsa: <strong className="text-accent-electric">{(bolsaSaldos[modalMuestreo.dni] || 0).toFixed(2)}h</strong>
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-xs text-primary-400 mb-1.5">Horas de muestreo trabajadas</label>
-                  <input
-                    type="number" min={0.5} step={0.5} value={horasMuestreo}
-                    onChange={(e) => setHorasMuestreo(e.target.value)}
-                    className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white text-center font-bold focus:outline-none focus:border-accent-electric"
-                    placeholder="0.0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-primary-400 mb-1.5">Nota</label>
-                  <input
-                    value={notaMuestreo} onChange={(e) => setNotaMuestreo(e.target.value)}
-                    className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric"
-                    placeholder="Muestreo trimestral ELSE"
-                  />
-                </div>
-                <p className="text-[11px] text-gray-500">
-                  La descarga se limita al saldo disponible: no genera sobretiempo ni pago extra.
-                </p>
-                <div className="flex gap-2">
-                  <button onClick={() => setModalMuestreo(null)} className="flex-1 py-2.5 text-sm text-primary-400 hover:text-white border border-primary-800 rounded-xl">
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={muestreoHandler} disabled={guardandoBolsa}
-                    className="flex-1 py-2.5 bg-amber-500/20 border border-amber-500/40 text-amber-400 font-semibold rounded-xl text-sm hover:bg-amber-500/30 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {guardandoBolsa && <FaSpinner className="animate-spin" />}
-                    Descargar bolsa
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* ── Modales bolsa de horas (5pm + muestreo) ── */}
+        <BolsaHorasPanel
+          modal5pm={modal5pm}
+          fecha5pm={fecha5pm}
+          setFecha5pm={setFecha5pm}
+          nota5pm={nota5pm}
+          setNota5pm={setNota5pm}
+          onCerrar5pm={() => setModal5pm(null)}
+          onAutorizar5pm={autorizar5pmHandler}
+          modalMuestreo={modalMuestreo}
+          bolsaSaldos={bolsaSaldos}
+          horasMuestreo={horasMuestreo}
+          setHorasMuestreo={setHorasMuestreo}
+          notaMuestreo={notaMuestreo}
+          setNotaMuestreo={setNotaMuestreo}
+          onCerrarMuestreo={() => setModalMuestreo(null)}
+          onMuestreo={muestreoHandler}
+          guardandoBolsa={guardandoBolsa}
+        />
 
         {/* ── Modal agregar trabajador ── */}
-        <AnimatePresence>
-          {modalNuevo && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={(e) => { if (e.target === e.currentTarget) setModalNuevo(false) }}
-              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-primary-900 border border-primary-700 rounded-2xl w-full max-w-md shadow-2xl p-5 space-y-4"
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                    <FaUserPlus className="text-emerald-400" /> Agregar trabajador
-                  </h3>
-                  <button onClick={() => setModalNuevo(false)} className="text-gray-400 hover:text-white p-1"><FaTimes /></button>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-primary-400 mb-1">DNI *</label>
-                    <input
-                      value={nuevoDraft.dni} maxLength={8}
-                      onChange={(e) => setNuevoDraft((p) => ({ ...p, dni: e.target.value.replace(/\D/g, '') }))}
-                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white font-mono focus:outline-none focus:border-accent-electric"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-primary-400 mb-1">Fecha de inicio *</label>
-                    <input
-                      type="date" value={nuevoDraft.fecha_inicio}
-                      onChange={(e) => setNuevoDraft((p) => ({ ...p, fecha_inicio: e.target.value }))}
-                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs text-primary-400 mb-1">Apellidos y nombres *</label>
-                    <input
-                      value={nuevoDraft.nombre}
-                      onChange={(e) => setNuevoDraft((p) => ({ ...p, nombre: e.target.value }))}
-                      placeholder="Apellidos, Nombres"
-                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-primary-400 mb-1">Cargo *</label>
-                    <input
-                      value={nuevoDraft.cargo}
-                      onChange={(e) => setNuevoDraft((p) => ({ ...p, cargo: e.target.value }))}
-                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-primary-400 mb-1">Sede</label>
-                    <input
-                      value={nuevoDraft.sede}
-                      onChange={(e) => setNuevoDraft((p) => ({ ...p, sede: e.target.value }))}
-                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs text-primary-400 mb-1">Correo corporativo (opcional)</label>
-                    <input
-                      type="email" value={nuevoDraft.email}
-                      onChange={(e) => setNuevoDraft((p) => ({ ...p, email: e.target.value }))}
-                      placeholder="usuario@ingenieriatelcom.com"
-                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-primary-400 mb-1">Sueldo (S/)</label>
-                    <input
-                      type="number" value={nuevoDraft.sueldo} disabled={nuevoDraft.usa_rmv}
-                      onChange={(e) => setNuevoDraft((p) => ({ ...p, sueldo: e.target.value }))}
-                      placeholder={nuevoDraft.usa_rmv ? `RMV: ${config.rmv}` : '1500'}
-                      className="w-full px-3 py-2 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric disabled:opacity-50"
-                    />
-                  </div>
-                  <div className="flex items-end pb-2">
-                    <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
-                      <input
-                        type="checkbox" checked={nuevoDraft.usa_rmv}
-                        onChange={(e) => setNuevoDraft((p) => ({ ...p, usa_rmv: e.target.checked }))}
-                        className="accent-cyan-400"
-                      />
-                      Gana la RMV (ajuste automático)
-                    </label>
-                  </div>
-                </div>
-                <p className="text-[11px] text-gray-500">
-                  El trabajador aparecerá de inmediato en el kiosko de asistencia y en este panel.
-                  No se computa asistencia antes de su fecha de inicio.
-                </p>
-                <button
-                  onClick={crearTrabajadorHandler} disabled={guardandoNuevo}
-                  className="w-full py-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-semibold rounded-xl text-sm hover:bg-emerald-500/30 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {guardandoNuevo && <FaSpinner className="animate-spin" />}
-                  Crear trabajador
-                </button>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <NuevoTrabajadorModal
+          show={modalNuevo}
+          nuevoDraft={nuevoDraft}
+          setNuevoDraft={setNuevoDraft}
+          guardandoNuevo={guardandoNuevo}
+          config={config}
+          onCerrar={() => setModalNuevo(false)}
+          onCrear={crearTrabajadorHandler}
+        />
       </div>
     </AdminLayout>
   )

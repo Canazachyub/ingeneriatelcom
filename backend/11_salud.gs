@@ -27,7 +27,7 @@ var FUNCIONES_REQUERIDAS = [
   'createCredentialsForEmployee',
   'getProjects', 'getProjectById', 'createProject', 'updateProject',
   'getAssignments', 'assignEmployeeToProject', 'removeAssignment',
-  'uploadFile', 'getDashboardStats',
+  'uploadFile', 'getArchivo', 'getDashboardStats',
   'verificarEmpleado', 'marcarAsistencia', 'getAttendances', 'obtenerAsistenciasHoy',
   'getTrabajadores', 'registrarAsistenciaFoto', 'subirJustificacion', 'getAsistenciasV2', 'getJustificaciones',
   'getConfigPlanillaAction', 'updateConfigPlanilla', 'getSueldos', 'updateSueldo', 'crearTrabajador',

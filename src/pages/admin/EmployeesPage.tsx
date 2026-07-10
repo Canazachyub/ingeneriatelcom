@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FaPlus,
@@ -12,8 +13,10 @@ import {
   FaSort,
   FaSortUp,
   FaSortDown,
+  FaExclamationTriangle,
 } from 'react-icons/fa'
 import { api, Employee } from '../../api/appScriptApi'
+import { useEmployees, queryKeys } from '../../hooks/queries'
 import AdminLayout from '../../components/admin/AdminLayout'
 
 const cities = ['Tacna', 'Puno', 'Arequipa', 'Lima', 'Cusco', 'Juliaca']
@@ -97,8 +100,9 @@ function StatusBadge({ status }: { status: string }) {
 type SortDir = 'asc' | 'desc' | null
 
 export default function EmployeesPage() {
-  const [employees, setEmployees] = useState<RawEmployee[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const queryClient = useQueryClient()
+  const { data: employeesData, isLoading, error: employeesError } = useEmployees()
+  const employees = (employeesData || []) as RawEmployee[]
   const [searchTerm, setSearchTerm] = useState('')
   const [filterCity, setFilterCity] = useState('')
   const [filterArea, setFilterArea] = useState('')
@@ -137,84 +141,6 @@ export default function EmployeesPage() {
   const [transferData, setTransferData] = useState({ newCity: '', newDepartment: '' })
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
-
-  useEffect(() => {
-    loadEmployees()
-  }, [])
-
-  const loadEmployees = async () => {
-    setIsLoading(true)
-    const result = await api.getEmployees()
-    setIsLoading(false)
-
-    if (result.success && result.data) {
-      setEmployees(result.data as RawEmployee[])
-    } else {
-      // Mock data for demo
-      setEmployees([
-        {
-          id: '1',
-          name: 'Juan Perez',
-          email: 'juan.perez@telcom.com',
-          phone: '+51 946 728 001',
-          dni: '12345678',
-          position: 'Desarrollador Senior',
-          department: 'Software',
-          city: 'Tacna',
-          status: 'active',
-          startDate: '2020-03-15',
-          salary: 4500,
-          createdAt: '2020-03-15',
-          updatedAt: '2024-01-10',
-        },
-        {
-          id: '2',
-          name: 'Maria Garcia',
-          email: 'maria.garcia@telcom.com',
-          phone: '+51 946 728 002',
-          dni: '23456789',
-          position: 'Ingeniero Electrico',
-          department: 'Ingenieria Electrica',
-          city: 'Puno',
-          status: 'active',
-          startDate: '2019-06-01',
-          salary: 5000,
-          createdAt: '2019-06-01',
-          updatedAt: '2024-01-10',
-        },
-        {
-          id: '3',
-          name: 'Carlos Lopez',
-          email: 'carlos.lopez@telcom.com',
-          phone: '+51 946 728 003',
-          dni: '34567890',
-          position: 'Tecnico TIC',
-          department: 'TIC',
-          city: 'Arequipa',
-          status: 'inactive',
-          startDate: '2021-09-10',
-          salary: 3500,
-          createdAt: '2021-09-10',
-          updatedAt: '2024-01-10',
-        },
-        {
-          id: '4',
-          name: 'Ana Torres',
-          email: 'ana.torres@telcom.com',
-          phone: '+51 946 728 004',
-          dni: '45678901',
-          position: 'Supervisora',
-          department: 'Administracion',
-          city: 'Lima',
-          status: 'on_leave',
-          startDate: '2018-11-20',
-          salary: 6000,
-          createdAt: '2018-11-20',
-          updatedAt: '2024-01-10',
-        },
-      ])
-    }
-  }
 
   // ─── Derived area list from actual data ──────────────────────────────────────
   const areaOptions = useMemo(() => {
@@ -329,7 +255,7 @@ export default function EmployeesPage() {
     if (result.success) {
       setMessage({ type: 'success', text: editingEmployee ? 'Empleado actualizado' : 'Empleado creado' })
       setShowModal(false)
-      loadEmployees()
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees })
     } else {
       setMessage({ type: 'error', text: result.error || 'Error al guardar' })
     }
@@ -350,7 +276,7 @@ export default function EmployeesPage() {
     if (result.success) {
       setMessage({ type: 'success', text: 'Empleado transferido exitosamente' })
       setShowTransferModal(false)
-      loadEmployees()
+      queryClient.invalidateQueries({ queryKey: queryKeys.employees })
     } else {
       setMessage({ type: 'error', text: result.error || 'Error al transferir' })
     }
@@ -406,6 +332,20 @@ export default function EmployeesPage() {
             }`}
           >
             {message.text}
+          </motion.div>
+        )}
+
+        {/* Employees load error */}
+        {employeesError && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl flex items-center gap-3"
+          >
+            <FaExclamationTriangle className="text-yellow-400" />
+            <span className="text-yellow-400 text-sm">
+              {(employeesError as Error).message || 'Error al cargar empleados'}
+            </span>
           </motion.div>
         )}
 

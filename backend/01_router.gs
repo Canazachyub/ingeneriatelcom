@@ -67,6 +67,7 @@ var ROUTES = {
 
   // === ARCHIVOS ===
   upload: { nivel: 'auth', handler: function (ctx) { return uploadFile(ctx.data); } },
+  getArchivo: { nivel: 'auth', handler: function (ctx) { return getArchivo(ctx.data); } },
 
   // === DASHBOARD ===
   getDashboard: { nivel: 'auth', handler: function () { return getDashboardStats(); } },

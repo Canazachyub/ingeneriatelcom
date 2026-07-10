@@ -443,7 +443,7 @@ function registrarAsistenciaFoto(data) {
       var fileName = evento + '_' + ahora.getTime() + '.jpg';
       var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
       var file = dniFolder.createFile(blob);
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      // C6: archivo privado — el visor admin lo sirve via getArchivo (nivel auth)
       fotoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
     } catch (e) {
       return { success: false, error: 'Error al guardar la foto: ' + e.message };
@@ -501,7 +501,7 @@ function subirJustificacion(data) {
         var fileName = data.fileName || ('just_' + ahora.getTime() + '.jpg');
         var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
         var file = dniFolder.createFile(blob);
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        // C6: archivo privado — el visor admin lo sirve via getArchivo (nivel auth)
         archivoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
       } catch (e) {
         return { success: false, error: 'Error al guardar el archivo: ' + e.message };

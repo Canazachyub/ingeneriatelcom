@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FaPlus,
@@ -10,8 +11,10 @@ import {
   FaCheck,
   FaUserPlus,
   FaTrash,
+  FaExclamationTriangle,
 } from 'react-icons/fa'
-import { api, Project, Employee, EmployeeAssignment } from '../../api/appScriptApi'
+import { api, Project, EmployeeAssignment } from '../../api/appScriptApi'
+import { useProjects, useEmployees, queryKeys } from '../../hooks/queries'
 import AdminLayout from '../../components/admin/AdminLayout'
 
 const cities = ['Tacna', 'Puno', 'Arequipa', 'Lima', 'Cusco', 'Juliaca']
@@ -23,10 +26,13 @@ const statuses = [
 ]
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [employees, setEmployees] = useState<Employee[]>([])
+  const queryClient = useQueryClient()
+  const { data: projectsData, isLoading: isLoadingProjects, error: projectsError } = useProjects()
+  const { data: employeesData, isLoading: isLoadingEmployees } = useEmployees()
+  const projects = projectsData || []
+  const employees = employeesData || []
+  const isLoading = isLoadingProjects || isLoadingEmployees
   const [assignments, setAssignments] = useState<EmployeeAssignment[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [showModal, setShowModal] = useState(false)
@@ -59,83 +65,12 @@ export default function ProjectsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
-    setIsLoading(true)
-    const [projectsResult, employeesResult] = await Promise.all([
-      api.getProjects(),
-      api.getEmployees(),
-    ])
-    setIsLoading(false)
-
-    if (projectsResult.success && projectsResult.data) {
-      setProjects(projectsResult.data)
-    } else {
-      // Mock data
-      setProjects([
-        {
-          id: '1',
-          name: 'Sistema de Gestion Electrosur',
-          description: 'Desarrollo de sistema de gestion de proyectos para Electrosur',
-          client: 'Electrosur',
-          city: 'Tacna',
-          status: 'in_progress',
-          startDate: '2024-01-15',
-          endDate: '2024-06-30',
-          budget: 85000,
-          createdAt: '2024-01-10',
-          updatedAt: '2024-01-10',
-        },
-        {
-          id: '2',
-          name: 'Red de Comunicaciones UNA Puno',
-          description: 'Implementacion de red de comunicaciones para la universidad',
-          client: 'Universidad Nacional del Altiplano',
-          city: 'Puno',
-          status: 'planning',
-          startDate: '2024-03-01',
-          budget: 120000,
-          createdAt: '2024-01-10',
-          updatedAt: '2024-01-10',
-        },
-        {
-          id: '3',
-          name: 'Supervision Electro Puno',
-          description: 'Supervision de obras electricas en la region Puno',
-          client: 'Electro Puno',
-          city: 'Puno',
-          status: 'completed',
-          startDate: '2023-06-01',
-          endDate: '2023-12-15',
-          budget: 65000,
-          createdAt: '2023-06-01',
-          updatedAt: '2023-12-15',
-        },
-      ])
-    }
-
-    if (employeesResult.success && employeesResult.data) {
-      setEmployees(employeesResult.data)
-    } else {
-      setEmployees([
-        { id: '1', name: 'Juan Perez', email: '', phone: '', dni: '', position: 'Desarrollador Senior', department: 'Software', city: 'Tacna', status: 'active', startDate: '', createdAt: '', updatedAt: '' },
-        { id: '2', name: 'Maria Garcia', email: '', phone: '', dni: '', position: 'Ingeniero Electrico', department: 'Ingenieria', city: 'Puno', status: 'active', startDate: '', createdAt: '', updatedAt: '' },
-      ])
-    }
-  }
-
   const loadAssignments = async (projectId: string) => {
     const result = await api.getAssignments(projectId)
     if (result.success && result.data) {
       setAssignments(result.data)
     } else {
-      // Mock
-      setAssignments([
-        { id: '1', employeeId: '1', employeeName: 'Juan Perez', projectId, projectName: '', role: 'Desarrollador', startDate: '2024-01-15', status: 'active' },
-      ])
+      setAssignments([])
     }
   }
 
@@ -206,7 +141,7 @@ export default function ProjectsPage() {
     if (result.success) {
       setMessage({ type: 'success', text: editingProject ? 'Proyecto actualizado' : 'Proyecto creado' })
       setShowModal(false)
-      loadData()
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects })
     } else {
       setMessage({ type: 'error', text: result.error || 'Error al guardar' })
     }
@@ -288,6 +223,20 @@ export default function ProjectsPage() {
             }`}
           >
             {message.text}
+          </motion.div>
+        )}
+
+        {/* Projects load error */}
+        {projectsError && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl flex items-center gap-3"
+          >
+            <FaExclamationTriangle className="text-yellow-400" />
+            <span className="text-yellow-400 text-sm">
+              {(projectsError as Error).message || 'Error al cargar proyectos'}
+            </span>
           </motion.div>
         )}
 

@@ -1,12 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   FaSpinner,
   FaCalendarAlt,
   FaClock,
   FaMapMarkerAlt,
   FaDownload,
-  FaTimes,
   FaCamera,
   FaFileAlt,
   FaExternalLinkAlt,
@@ -18,6 +16,7 @@ import {
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
+import FileViewerModal from '../../components/admin/FileViewerModal'
 import { useToast } from '../../context/ToastContext'
 import {
   TrabajadorFijo,
@@ -53,17 +52,6 @@ const inicioSemana = (d: Date) => {
   const x = new Date(d)
   x.setDate(x.getDate() - ((x.getDay() + 6) % 7))
   return x
-}
-
-const driveId = (url?: string): string => {
-  if (!url) return ''
-  const m = url.match(/\/d\/([^/]+)/)
-  return m ? m[1] : ''
-}
-
-const driveThumb = (url?: string): string => {
-  const id = driveId(url)
-  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w400` : ''
 }
 
 const mapsLink = (lat?: string | number, lng?: string | number) =>
@@ -108,8 +96,9 @@ export default function AttendancePage() {
   const [hasta, setHasta] = useState(toLocalISO(hoy))
   const [filtroEvento, setFiltroEvento] = useState('')
 
-  // Modal foto
+  // Modal foto / justificación (visor seguro: archivos privados en Drive)
   const [fotoModal, setFotoModal] = useState<RegistroAsistencia | null>(null)
+  const [justModal, setJustModal] = useState<Justificacion | null>(null)
 
   // Roster de trabajadores (hoja 'sueldos' vía endpoint público, sin montos).
   // Fuente única de verdad: altas/bajas del panel de Planilla se reflejan sin redeploy.
@@ -403,19 +392,11 @@ export default function AttendancePage() {
                           <td className="px-4 py-3">
                             <button
                               onClick={() => setFotoModal(r)}
-                              className="w-14 h-11 rounded-lg overflow-hidden bg-primary-800 border border-primary-700 hover:ring-2 hover:ring-accent-electric transition-all relative group"
+                              disabled={!r.foto_url}
+                              title={r.foto_url ? 'Ver foto de asistencia' : 'Sin foto'}
+                              className="w-14 h-11 rounded-lg overflow-hidden bg-primary-800 border border-primary-700 hover:ring-2 hover:ring-accent-electric transition-all flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                             >
-                              {r.foto_url ? (
-                                <img
-                                  src={driveThumb(r.foto_url)}
-                                  alt="Foto asistencia"
-                                  className="w-full h-full object-cover"
-                                  loading="lazy"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                                />
-                              ) : (
-                                <FaCamera className="text-primary-600 mx-auto" />
-                              )}
+                              <FaCamera className="text-primary-400" />
                             </button>
                           </td>
                           <td className="px-4 py-3">
@@ -624,15 +605,13 @@ export default function AttendancePage() {
                         {j.fecha}
                       </span>
                       {j.archivo_url ? (
-                        <a
-                          href={j.archivo_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          onClick={() => setJustModal(j)}
                           className="inline-flex items-center gap-1 text-accent-electric hover:underline"
                         >
                           <FaExternalLinkAlt className="text-[10px]" />
                           Ver evidencia
-                        </a>
+                        </button>
                       ) : (
                         <span className="text-gray-600">Sin evidencia adjunta</span>
                       )}
@@ -643,80 +622,37 @@ export default function AttendancePage() {
           )
         )}
 
-        {/* ── Modal foto ── */}
-        <AnimatePresence>
-          {fotoModal && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setFotoModal(null)}
-              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        {/* ── Modal foto (visor seguro: el archivo ya no es ANYONE_WITH_LINK — C6) ── */}
+        {fotoModal && fotoModal.foto_url && (
+          <FileViewerModal
+            fileUrl={fotoModal.foto_url}
+            title={`${fotoModal.nombre} · ${EVENTO_LABELS[fotoModal.evento] || fotoModal.evento} · ${fotoModal.fecha} ${String(fotoModal.hora).slice(0, 5)}`}
+            onClose={() => setFotoModal(null)}
+          />
+        )}
+        {fotoModal && mapsLink(fotoModal.gps_lat, fotoModal.gps_lng) && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] bg-primary-900 border border-primary-700 rounded-xl px-4 py-2 shadow-2xl">
+            <a
+              href={mapsLink(fotoModal.gps_lat, fotoModal.gps_lng)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-accent-electric hover:underline"
             >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-primary-900 border border-primary-700 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl"
-              >
-                <div className="flex items-center justify-between px-5 py-3 border-b border-primary-800">
-                  <div>
-                    <p className="font-semibold text-white text-sm">{fotoModal.nombre}</p>
-                    <p className="text-xs text-gray-500">
-                      {EVENTO_LABELS[fotoModal.evento] || fotoModal.evento} · {fotoModal.fecha} {String(fotoModal.hora).slice(0, 5)}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setFotoModal(null)}
-                    className="p-2 text-gray-400 hover:text-white hover:bg-primary-800 rounded-lg transition-colors"
-                  >
-                    <FaTimes />
-                  </button>
-                </div>
-                <div className="bg-black aspect-[4/3] flex items-center justify-center">
-                  {fotoModal.foto_url ? (
-                    <img
-                      src={driveThumb(fotoModal.foto_url).replace('sz=w400', 'sz=w800')}
-                      alt="Foto de asistencia"
-                      className="w-full h-full object-contain"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                    />
-                  ) : (
-                    <FaCamera className="text-4xl text-primary-700" />
-                  )}
-                </div>
-                <div className="px-5 py-3 flex items-center justify-between text-xs">
-                  {mapsLink(fotoModal.gps_lat, fotoModal.gps_lng) ? (
-                    <a
-                      href={mapsLink(fotoModal.gps_lat, fotoModal.gps_lng)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-accent-electric hover:underline"
-                    >
-                      <FaMapMarkerAlt />
-                      {Number(fotoModal.gps_lat).toFixed(5)}, {Number(fotoModal.gps_lng).toFixed(5)}
-                      {fotoModal.gps_accuracy ? ` · ±${Math.round(Number(fotoModal.gps_accuracy))}m` : ''}
-                    </a>
-                  ) : (
-                    <span className="text-gray-600">Sin datos GPS</span>
-                  )}
-                  {fotoModal.foto_url && (
-                    <a
-                      href={fotoModal.foto_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-gray-400 hover:text-white transition-colors"
-                    >
-                      <FaExternalLinkAlt className="text-[10px]" />
-                      Abrir en Drive
-                    </a>
-                  )}
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <FaMapMarkerAlt />
+              {Number(fotoModal.gps_lat).toFixed(5)}, {Number(fotoModal.gps_lng).toFixed(5)}
+              {fotoModal.gps_accuracy ? ` · ±${Math.round(Number(fotoModal.gps_accuracy))}m` : ''}
+            </a>
+          </div>
+        )}
+
+        {/* ── Modal justificación (visor seguro) ── */}
+        {justModal && justModal.archivo_url && (
+          <FileViewerModal
+            fileUrl={justModal.archivo_url}
+            title={`${justModal.nombre} · ${justModal.motivo} · ${justModal.fecha}`}
+            onClose={() => setJustModal(null)}
+          />
+        )}
       </div>
     </AdminLayout>
   )

@@ -515,7 +515,7 @@ function guardarFotoWebcam(data) {
 
     var blob = Utilities.newBlob(Utilities.base64Decode(fileContent), mimeType, fileName);
     var file = dniFolder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    // C6: archivo privado — el visor admin lo sirve via getArchivo (nivel auth)
     var fotoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
 
     if (evaluacion_id) {

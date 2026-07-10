@@ -262,12 +262,26 @@ La fuente del backend ya NO es `appscript.js` a mano: es **`backend/*.gs`** (mó
 | M9 | `PlanillaPage` migrada al `ToastContext` global (~17 llamadas); toast local eliminado. |
 | — | 24 imágenes de operaciones generadas por IA, optimizadas **48 MB → 2 MB** WebP (`public/assets/images/operaciones/`, pipeline `npm run optimize:images`, originales gitignoreados). |
 
-### Pendiente → Fase 2B
+## 9. Fase 2B — Caché, PlanillaPage y visor seguro de archivos (10/07/2026)
 
-- **M5**: React Query/caché de lecturas (cada navegación aún re-fetchea contra GAS).
-- **PlanillaPage** (1,027 líneas): partir en sub-vistas.
-- **C6**: archivos Drive `ANYONE_WITH_LINK` → visor autenticado (toca backend + frontend).
-- Skeletons de carga en tablas admin.
+### Implementado
+
+| Brecha | Cambio |
+|--------|--------|
+| M5 | **React Query** en las lecturas del admin: `src/hooks/queries.ts` (useDashboardStats, useAttendanceToday con staleTime 60s, useEmployees, useProjects, useAssignments) + invalidación tras mutaciones. Dashboard/Empleados/Proyectos ya no re-fetchean en cada navegación (caché 5 min). Mocks de fallback eliminados de EmployeesPage/ProjectsPage. |
+| — | **PlanillaPage partida**: 1,027 → 471 líneas; sub-vistas en `src/pages/admin/planilla/` (SueldosTable, IncidenciasPanel, ConfigPlanillaForm, BolsaHorasPanel, NuevoTrabajadorModal, planilla.types). |
+| **C6** | **Archivos de Drive privados + visor autenticado**: `backend/12_archivos.gs` con action `getArchivo` (nivel auth, sirve el binario en base64, máx 10 MB); las fotos de asistencia/proctoring y justificaciones NUEVAS ya no se comparten como `ANYONE_WITH_LINK`; `FileViewerModal` en AttendancePage (fotos + justificaciones) y EvaluacionesPage (proctoring). Los PDFs de convocatorias siguen públicos a propósito; CVs pendiente de decisión. |
+
+### ⚠️ Checklist de deploy Fase 2B (backend, manual)
+
+1. `npm run build:backend` → pegar `appscript.js` en el editor GAS → `ejecutarTestSalud` → **0 FAIL** → Nueva versión.
+2. **Ejecutar UNA VEZ desde el editor: `revocarComparticionPublica()`** — recorre Asistencias/, Justificaciones/ y Evaluaciones_Proctoring/ en Drive y pone TODOS los archivos ya subidos en privado (loguea el conteo). Hasta ejecutarla, las fotos antiguas siguen públicas.
+3. Verificar en `/admin/asistencias`: clic en la foto de una marca → debe abrir el visor con la imagen (ya no el enlace directo a Drive).
+
+### Pendiente (menor)
+
+- Skeletons de carga en tablas admin (se hará con la Fase 3 visual).
+- CVs de postulantes: siguen `ANYONE_WITH_LINK` (los revisa el admin desde ApplicationsPage con enlace directo). Decidir si migran al visor.
 
 ---
 

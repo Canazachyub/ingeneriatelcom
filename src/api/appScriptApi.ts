@@ -886,6 +886,16 @@ class AppScriptApi {
   }
 
   // ============================================
+  // ARCHIVOS — visor seguro (fotos asistencia/proctoring, justificaciones)
+  // ============================================
+
+  // Descarga un archivo privado de Drive (por fileId o URL) para mostrarlo
+  // en el visor admin. Requiere token (nivel 'auth' en el router).
+  async getArchivo(fileIdOrUrl: string): Promise<ApiResponse<{ base64: string; mimeType: string; fileName: string }>> {
+    return this.request('getArchivo', 'POST', { fileId: fileIdOrUrl })
+  }
+
+  // ============================================
   // PLANILLA: TARDANZAS, FALTAS Y DESCUENTOS (admin)
   // ============================================
 

@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FaEye, FaCheckCircle, FaExclamationCircle, FaClock,
-  FaTimes, FaImage, FaExternalLinkAlt, FaFilter, FaArrowLeft, FaListUl
+  FaTimes, FaImage, FaFilter, FaArrowLeft, FaListUl
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import { Evaluacion, Capacitacion, Pregunta } from '../../types/capacitacion.types'
+import FileViewerModal from '../../components/admin/FileViewerModal'
 
 const ESTADO_LABELS: Record<string, string> = {
   pendiente_revision: 'Pendiente',
@@ -39,6 +40,8 @@ export default function EvaluacionesPage() {
   const [toast, setToast] = useState('')
   const [preguntasDetalle, setPreguntasDetalle] = useState<Pregunta[]>([])
   const [loadingPreguntas, setLoadingPreguntas] = useState(false)
+  // Visor seguro de fotos de proctoring (los archivos de Drive ya no son publicos — C6)
+  const [fotoVisor, setFotoVisor] = useState<{ url: string; indice: number } | null>(null)
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -317,28 +320,21 @@ export default function EvaluacionesPage() {
                       <FaImage className="text-blue-400" />
                       Fotos de proctoring ({parseFotos(seleccionada.fotos_url).length})
                     </h4>
+                    {/* Las fotos ya no son publicas en Drive: se abren con el visor autenticado */}
                     <div className="grid grid-cols-3 gap-2">
                       {parseFotos(seleccionada.fotos_url).map((url, i) => (
-                        <a
+                        <button
                           key={i}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="relative group rounded-xl overflow-hidden bg-gray-100 aspect-video block hover:ring-2 hover:ring-blue-400 transition-all"
+                          type="button"
+                          onClick={() => setFotoVisor({ url, indice: i + 1 })}
+                          className="relative group rounded-xl overflow-hidden bg-gray-100 aspect-video flex flex-col items-center justify-center gap-1 hover:ring-2 hover:ring-blue-400 transition-all"
                         >
-                          <img
-                            src={url.replace('/view', '/preview')}
-                            alt={`Foto ${i + 1}`}
-                            className="w-full h-full object-cover"
-                            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                          />
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                            <FaExternalLinkAlt className="text-white opacity-0 group-hover:opacity-100 text-xs transition-opacity" />
-                          </div>
+                          <FaImage className="text-2xl text-gray-400 group-hover:text-blue-400 transition-colors" />
+                          <span className="text-xs text-gray-500">Ver foto {i + 1}</span>
                           <span className="absolute bottom-1 left-1 text-white text-xs bg-black/50 px-1.5 rounded">
                             {i + 1}
                           </span>
-                        </a>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -525,6 +521,15 @@ export default function EvaluacionesPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Visor autenticado de fotos de proctoring (C6) */}
+      {fotoVisor && seleccionada && (
+        <FileViewerModal
+          fileUrl={fotoVisor.url}
+          title={`Proctoring ${fotoVisor.indice} · ${seleccionada.nombres} · DNI ${seleccionada.dni}`}
+          onClose={() => setFotoVisor(null)}
+        />
+      )}
     </div>
   )
 }
