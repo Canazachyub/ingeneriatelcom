@@ -24,16 +24,19 @@ const FOTOS = [
   { src: '/assets/images/operaciones/H12.webp', alt: 'Mantenimiento eléctrico nocturno con luces de trabajo' },
 ]
 
-const RADIO = 430            // radio del cilindro (px)
-const PASO_Y = 52            // separación vertical entre tarjetas de una hebra (px)
-const VELOCIDAD_AUTO = 0.08  // grados por frame en reposo
-const CARD_W = 280
-const CARD_H = 180
+const RADIO = 470            // radio del cilindro (px)
+const ALTURA_TOTAL = 820     // recorrido vertical de una vuelta completa de la hélice (px)
+const ALTO_VENTANA = 620     // alto visible del contenedor (px)
+const FADE_INICIO = 225      // |y| donde empieza a desvanecerse hacia el borde
+const FADE_FIN = 330         // |y| donde la tarjeta ya es invisible (antes del wrap)
+const VELOCIDAD_AUTO = 0.07  // grados por frame en reposo
+const CARD_W = 260
+const CARD_H = 170
 
-// Doble hélice (forma de ADN): cada foto aparece en las DOS hebras,
-// desfasadas 180°. La altura de cada tarjeta es FIJA (según su índice);
-// el drag solo cambia el ángulo de giro — por eso la rotación es continua,
-// sin saltos al completar una vuelta.
+// Galería infinita en tornillo (doble hélice): cada foto existe en las DOS
+// hebras (desfasadas 180° de giro). Al rotar, las tarjetas SUBEN en espiral;
+// cuando una llega arriba se desvanece y reaparece por abajo (el wrap ocurre
+// fuera de la zona visible, escondido por el fade de los bordes).
 const TARJETAS = [0, 180].flatMap((fase) =>
   FOTOS.map((foto, i) => ({ foto, indice: i, fase }))
 )
@@ -75,19 +78,34 @@ function GaleriaHelicoidal() {
       TARJETAS.forEach((t, k) => {
         const el = itemRefs.current[k]
         if (!el) return
-        const angulo = rotacion.current + t.indice * pasoAngular + t.fase
+        // Parámetro de la hélice (0..360): define a la vez el giro y la altura.
+        // Al avanzar, la tarjeta gira Y sube; al pasar de 360 vuelve a 0 y
+        // reaparece por abajo — el salto queda fuera de la zona visible.
+        const tGrados = (((rotacion.current + t.indice * pasoAngular) % 360) + 360) % 360
+        const y = (0.5 - tGrados / 360) * ALTURA_TOTAL   // sube al avanzar
+        const angulo = tGrados + t.fase                   // hebra B: mismo y, giro +180°
         const rad = (angulo * Math.PI) / 180
         const x = RADIO * Math.sin(rad)
         const z = RADIO * Math.cos(rad) - RADIO           // frente = 0, fondo = -2R
-        // Altura FIJA por índice: la hebra es una escalera en espiral estable
-        const y = (t.indice - (FOTOS.length - 1) / 2) * PASO_Y
         const profundidad = (1 - Math.cos(rad)) / 2       // 0 al frente, 1 al fondo
+
+        // Fade hacia los bordes verticales: esconde el wrap y despeja los lados
+        const absY = Math.abs(y)
+        const factorBorde = absY >= FADE_FIN ? 0
+          : absY <= FADE_INICIO ? 1
+          : (FADE_FIN - absY) / (FADE_FIN - FADE_INICIO)
+
+        const opacidad = factorBorde * (1 - profundidad * 0.55)
+        if (opacidad < 0.02) {
+          el.style.visibility = 'hidden'
+          return
+        }
+        el.style.visibility = 'visible'
         el.style.transform =
           `translate(-50%, -50%) translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, ${z.toFixed(1)}px) ` +
-          `rotateY(${(angulo % 360).toFixed(2)}deg) scale(${(1 - profundidad * 0.3).toFixed(3)})`
+          `rotateY(${(angulo % 360).toFixed(2)}deg) scale(${((1 - profundidad * 0.28) * (0.85 + factorBorde * 0.15)).toFixed(3)})`
         el.style.filter = profundidad > 0.15 ? `blur(${(profundidad * 4).toFixed(1)}px)` : 'none'
-        // La hebra trasera se ve atenuada ENTRE las tarjetas del frente (look ADN)
-        el.style.opacity = String(1 - profundidad * 0.62)
+        el.style.opacity = opacidad.toFixed(3)
         el.style.zIndex = String(Math.round((1 - profundidad) * 100))
       })
 
@@ -127,7 +145,7 @@ function GaleriaHelicoidal() {
       onPointerLeave={soltar}
       onPointerCancel={soltar}
       className="relative mx-auto select-none cursor-grab active:cursor-grabbing touch-pan-y"
-      style={{ height: 720, maxWidth: 1100, perspective: '1400px' }}
+      style={{ height: ALTO_VENTANA, maxWidth: 1100, perspective: '1400px' }}
       role="region"
       aria-label="Galería 3D de operaciones — arrastra horizontalmente para girar"
     >
