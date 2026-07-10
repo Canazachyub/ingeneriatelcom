@@ -118,6 +118,37 @@ export default function AboutSection() {
             </motion.div>
           ))}
         </div>
+
+        {/* El equipo: oficina y campo */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.5, delay: 0.7 }}
+          className="mt-12 grid md:grid-cols-2 gap-6"
+        >
+          <div className="relative rounded-2xl overflow-hidden border border-primary-700/50 group">
+            <img
+              src="/assets/images/operaciones/Q1.webp"
+              alt="Equipo administrativo de Ingeniería Telcom colaborando en oficina"
+              loading="lazy"
+              className="w-full aspect-video object-cover group-hover:scale-105 transition-transform duration-500"
+            />
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-primary-950/90 to-transparent p-4 pt-10">
+              <p className="text-white font-medium text-sm">Gestión y análisis en oficina</p>
+            </div>
+          </div>
+          <div className="relative rounded-2xl overflow-hidden border border-primary-700/50 group">
+            <img
+              src="/assets/images/operaciones/Q2.webp"
+              alt="Ingeniero de campo y coordinador de oficina de Ingeniería Telcom"
+              loading="lazy"
+              className="w-full aspect-video object-cover group-hover:scale-105 transition-transform duration-500"
+            />
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-primary-950/90 to-transparent p-4 pt-10">
+              <p className="text-white font-medium text-sm">Un solo equipo: oficina y campo</p>
+            </div>
+          </div>
+        </motion.div>
       </div>
     </SectionWrapper>
   )

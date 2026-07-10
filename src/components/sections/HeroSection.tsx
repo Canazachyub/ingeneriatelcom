@@ -4,11 +4,10 @@ import { FaBolt, FaBriefcase, FaChevronDown, FaFolder, FaUsers, FaClock, FaStar 
 import AnimatedCounter from '../common/AnimatedCounter'
 import { statistics } from '../../data/services'
 
+// Imágenes propias de operaciones (WebP optimizadas, servidas desde el mismo dominio)
 const heroImages = [
-  'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=1920&q=80',
-  'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1920&q=80',
-  'https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=1920&q=80',
-  'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=1920&q=80',
+  '/assets/images/operaciones/HERO1.webp',
+  '/assets/images/operaciones/HERO2.webp',
 ]
 
 const statIcons: Record<string, React.ReactNode> = {

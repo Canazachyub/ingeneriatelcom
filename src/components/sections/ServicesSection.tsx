@@ -1,15 +1,52 @@
+import { useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useInView } from 'react-intersection-observer'
 import { FaCode, FaNetworkWired, FaBolt, FaHardHat } from 'react-icons/fa'
 import SectionWrapper from '../common/SectionWrapper'
-import Card from '../common/Card'
 import { services } from '../../data/services'
 
 const iconMap: Record<string, React.ReactNode> = {
-  'clipboard-check': <FaCode className="text-3xl text-accent-electric" />,
-  'chart-bar': <FaNetworkWired className="text-3xl text-accent-electric" />,
-  'cog': <FaBolt className="text-3xl text-accent-electric" />,
-  'paint-brush': <FaHardHat className="text-3xl text-accent-electric" />,
+  'clipboard-check': <FaCode className="text-2xl text-accent-electric" />,
+  'chart-bar': <FaNetworkWired className="text-2xl text-accent-electric" />,
+  'cog': <FaBolt className="text-2xl text-accent-electric" />,
+  'paint-brush': <FaHardHat className="text-2xl text-accent-electric" />,
+}
+
+// Foto de operaciones para cada servicio (por id del servicio)
+const serviceImages: Record<string, string> = {
+  '1': '/assets/images/operaciones/S4.webp', // Software → equipo de gestión en oficina
+  '2': '/assets/images/operaciones/S2.webp', // TIC → antena sobre las nubes
+  '3': '/assets/images/operaciones/S1.webp', // Eléctrica → sala de tableros
+  '4': '/assets/images/operaciones/S3.webp', // Minería y Construcción → supervisión de obra
+}
+
+// Tarjeta con tilt 3D al mover el mouse (CSS puro, sin librerías).
+// En táctil o prefers-reduced-motion simplemente no se activa el listener de mouse.
+function TiltCard({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+
+  const onMouseMove = (e: React.MouseEvent) => {
+    const el = ref.current
+    if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const r = el.getBoundingClientRect()
+    const px = (e.clientX - r.left) / r.width - 0.5
+    const py = (e.clientY - r.top) / r.height - 0.5
+    el.style.transform = `perspective(900px) rotateY(${(px * 6).toFixed(2)}deg) rotateX(${(-py * 6).toFixed(2)}deg) translateY(-2px)`
+  }
+  const onMouseLeave = () => {
+    if (ref.current) ref.current.style.transform = ''
+  }
+
+  return (
+    <div
+      ref={ref}
+      onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
+      className="h-full transition-transform duration-200 ease-out will-change-transform"
+    >
+      {children}
+    </div>
+  )
 }
 
 export default function ServicesSection() {
@@ -49,7 +86,7 @@ export default function ServicesSection() {
           </motion.p>
         </div>
 
-        {/* Services Grid */}
+        {/* Services Grid — tarjetas con foto de operaciones y tilt 3D */}
         <div className="grid md:grid-cols-2 gap-6 mb-12">
           {services.map((service, index) => (
             <motion.div
@@ -58,12 +95,23 @@ export default function ServicesSection() {
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.5, delay: 0.3 + index * 0.1 }}
             >
-              <Card className="h-full group">
-                <div className="flex items-start gap-4">
-                  <div className="w-14 h-14 flex-shrink-0 bg-primary-800 rounded-xl flex items-center justify-center group-hover:bg-accent-electric/20 transition-colors duration-300">
-                    {iconMap[service.icon]}
-                  </div>
-                  <div>
+              <TiltCard>
+                <div className="h-full group bg-primary-900/60 rounded-2xl border border-primary-800 overflow-hidden hover:border-accent-electric/40 transition-colors duration-300">
+                  {serviceImages[service.id] && (
+                    <div className="relative h-44 overflow-hidden">
+                      <img
+                        src={serviceImages[service.id]}
+                        alt={service.title}
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-primary-900 via-primary-900/20 to-transparent" />
+                      <div className="absolute bottom-3 left-4 w-11 h-11 bg-primary-950/80 backdrop-blur-sm rounded-xl flex items-center justify-center border border-primary-700/60">
+                        {iconMap[service.icon]}
+                      </div>
+                    </div>
+                  )}
+                  <div className="p-6 pt-4">
                     <h3 className="text-xl font-display font-semibold text-white mb-2 group-hover:text-accent-electric transition-colors duration-300">
                       {service.title}
                     </h3>
@@ -72,7 +120,7 @@ export default function ServicesSection() {
                     </p>
                   </div>
                 </div>
-              </Card>
+              </TiltCard>
             </motion.div>
           ))}
         </div>

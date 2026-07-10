@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import HeroSection from '../components/sections/HeroSection'
 import AboutSection from '../components/sections/AboutSection'
 import ServicesSection from '../components/sections/ServicesSection'
+import OperacionesSection from '../components/sections/OperacionesSection'
 import MissionVisionSection from '../components/sections/MissionVisionSection'
 import EthicsSection from '../components/sections/EthicsSection'
 import OrganizationSection from '../components/sections/OrganizationSection'
@@ -33,6 +34,7 @@ export default function HomePage() {
       <HeroSection />
       <AboutSection />
       <ServicesSection />
+      <OperacionesSection />
       <MissionVisionSection />
       <EthicsSection />
       <OrganizationSection />
