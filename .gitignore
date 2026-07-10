@@ -35,3 +35,7 @@ dist-ssr
 *.xlsx
 *.csv
 ~$*
+
+# Imagenes originales de IA (~2 MB c/u): solo se commitean los .webp optimizados
+# (regenerar con `npm run optimize:images`)
+public/assets/images/fotos generadas/
