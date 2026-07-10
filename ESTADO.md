@@ -155,6 +155,11 @@ DashboardPage ─► getDashboardStats() ─► action getDashboard ─► sueld
 
 ### Fase 3 — Rediseño visual + auditoría AA
 - Según prompt maestro (tokens únicos, jerarquía tipográfica, dashboard con KPIs conectados, kiosko ≥44px, contraste AA).
+- **Animaciones 3D (aprobadas 10/07/2026):**
+  - **Galería helicoidal "Nuestras Operaciones"** en la landing — carrusel 3D arrastrable tipo claude.com/product/claude-science: tarjetas con fotos reales de campo en hélice (CSS 3D transforms: `translate3d` + `rotateY` + blur de profundidad — SIN three.js; se implementa con Framer Motion ya instalado o GSAP ~30 KB). Fotos optimizadas AVIF/WebP con `loading="lazy"`.
+  - **Tilt 3D en tarjetas** de servicios/proyectos (CSS puro, costo cero).
+  - Opcional si el presupuesto de peso lo permite: una escena WebGL protagonista (mapa del Perú 3D con sedes luminosas, React Three Fiber lazy-load solo en landing).
+  - Reglas: `prefers-reduced-motion` → versión estática; el admin y el kiosko NO cargan nada de esto; movimiento sobrio (rotación por drag/scroll, sin autoplay agresivo).
 
 ---
 
