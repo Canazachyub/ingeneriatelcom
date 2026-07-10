@@ -249,4 +249,26 @@ La fuente del backend ya NO es `appscript.js` a mano: es **`backend/*.gs`** (mó
 
 ---
 
+## 8. Fase 2A — Refactor frontend (10/07/2026)
+
+### Implementado
+
+| Brecha | Cambio |
+|--------|--------|
+| A2 | **`AttendancePage` y el kiosko consumen la API** (`getTrabajadores`): la constante hardcodeada `TRABAJADORES` fue eliminada de `src/data/trabajadores.ts` (quedan solo tipos/utilidades). El kiosko muestra spinner + botón "Reintentar" si la lista no carga — ya no falla en silencio. Las altas de personal aparecen solas en Asistencias. |
+| M6 | **Code-splitting**: 13 páginas admin + Capacitaciones/Evaluación en `lazy()` con `PageLoader`. Bundle inicial **854 KB → 609 KB** (−29%); cada página admin se descarga bajo demanda (20 chunks). |
+| M7 | Métodos muertos eliminados del cliente (`asistenciasHoy`, `reporteAsistencia` — llamaban actions inexistentes). |
+| M10 | **Revalidación de sesión** en `AuthContext`: al recuperar foco (throttle 60s) + intervalo de 10 min. Token rechazado → logout y redirect a login; corte de red NO cierra sesión. |
+| M9 | `PlanillaPage` migrada al `ToastContext` global (~17 llamadas); toast local eliminado. |
+| — | 24 imágenes de operaciones generadas por IA, optimizadas **48 MB → 2 MB** WebP (`public/assets/images/operaciones/`, pipeline `npm run optimize:images`, originales gitignoreados). |
+
+### Pendiente → Fase 2B
+
+- **M5**: React Query/caché de lecturas (cada navegación aún re-fetchea contra GAS).
+- **PlanillaPage** (1,027 líneas): partir en sub-vistas.
+- **C6**: archivos Drive `ANYONE_WITH_LINK` → visor autenticado (toca backend + frontend).
+- Skeletons de carga en tablas admin.
+
+---
+
 © 2026 Ingeniería Telcom EIRL — Documento de auditoría interna (Fase 0).

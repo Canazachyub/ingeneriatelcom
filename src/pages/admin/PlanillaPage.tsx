@@ -8,6 +8,7 @@ import {
 import AdminLayout from '../../components/admin/AdminLayout'
 import { api } from '../../api/appScriptApi'
 import { useAuth } from '../../context/AuthContext'
+import { useToast } from '../../context/ToastContext'
 import {
   ConfigPlanilla, CONFIG_DEFAULT, Incidencia, SueldoTrabajador,
   resumenMensual, calcularDisciplina, descuentoIncidencia, formatoSoles,
@@ -62,6 +63,7 @@ const nombreMes = (mes: string) => {
 
 export default function PlanillaPage() {
   const { user } = useAuth()
+  const toast = useToast()
   const [mes, setMes] = useState(mesActualISO())
   const [config, setConfig] = useState<ConfigPlanilla>(CONFIG_DEFAULT)
   const [sueldos, setSueldos] = useState<SueldoTrabajador[]>([])
@@ -69,7 +71,6 @@ export default function PlanillaPage() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [toast, setToast] = useState('')
   const [showConfig, setShowConfig] = useState(false)
   const [configDraft, setConfigDraft] = useState<Record<string, string>>({})
   const [savingConfig, setSavingConfig] = useState(false)
@@ -109,11 +110,6 @@ export default function PlanillaPage() {
     (user as unknown as { permisos?: string[] }).permisos?.some(p => p === 'all' || p === 'planilla')
   )
 
-  const showToast = (msg: string) => {
-    setToast(msg)
-    setTimeout(() => setToast(''), 4000)
-  }
-
   const loadData = async () => {
     setLoading(true)
     const [cfgRes, suelRes, incRes, bolsaRes] = await Promise.all([
@@ -126,7 +122,7 @@ export default function PlanillaPage() {
       setConfig({ ...CONFIG_DEFAULT, ...(cfgRes.data as unknown as Partial<ConfigPlanilla>) })
     }
     if (suelRes.success && suelRes.data) setSueldos(suelRes.data)
-    else if (suelRes.error) showToast(suelRes.error)
+    else if (suelRes.error) toast.error(suelRes.error)
     if (incRes.success && incRes.data) setIncidencias(incRes.data as unknown as Incidencia[])
     if (bolsaRes.success && bolsaRes.data) setBolsaSaldos(bolsaRes.data.saldos || {})
     setLoading(false)
@@ -140,10 +136,10 @@ export default function PlanillaPage() {
     const res = await api.sincronizarIncidencias(`${mes}-01`, hasta)
     setSyncing(false)
     if (res.success && res.data) {
-      showToast(`Sincronizado: ${res.data.creadas} incidencias nuevas, ${res.data.expiradas} expiradas a injustificada`)
+      toast.success(`Sincronizado: ${res.data.creadas} incidencias nuevas, ${res.data.expiradas} expiradas a injustificada`)
       loadData()
     } else {
-      showToast('Error: ' + (res.error || 'no se pudo sincronizar'))
+      toast.error('Error: ' + (res.error || 'no se pudo sincronizar'))
     }
   }
 
@@ -174,7 +170,7 @@ export default function PlanillaPage() {
   const guardarRevision = async () => {
     if (!revisando) return
     if (revEstado === 'justificada' && !revNota.trim() && !revSustento.trim()) {
-      showToast('Para justificar se requiere una nota o sustento adjunto')
+      toast.error('Para justificar se requiere una nota o sustento adjunto')
       return
     }
     setGuardandoRev(true)
@@ -187,23 +183,23 @@ export default function PlanillaPage() {
     })
     setGuardandoRev(false)
     if (res.success) {
-      showToast(`Incidencia marcada como ${ESTADO_LABELS[revEstado]}`)
+      toast.success(`Incidencia marcada como ${ESTADO_LABELS[revEstado]}`)
       setRevisando(null)
       loadData()
     } else {
-      showToast('Error: ' + res.error)
+      toast.error('Error: ' + res.error)
     }
   }
 
   const guardarSueldo = async (dni: string) => {
     const nuevo = parseFloat(sueldoDraft)
-    if (isNaN(nuevo) || nuevo <= 0) { showToast('Sueldo inválido'); return }
+    if (isNaN(nuevo) || nuevo <= 0) { toast.error('Sueldo inválido'); return }
     const res = await api.updateSueldo(dni, nuevo)
     if (res.success) {
       setSueldos((prev) => prev.map((s) => (s.dni === dni ? { ...s, sueldo: nuevo } : s)))
-      showToast('Sueldo actualizado')
+      toast.success('Sueldo actualizado')
     } else {
-      showToast('Error: ' + res.error)
+      toast.error('Error: ' + res.error)
     }
     setEditandoSueldo(null)
   }
@@ -219,18 +215,18 @@ export default function PlanillaPage() {
     })
     setGuardandoBolsa(false)
     if (res.success) {
-      showToast(`Salida 5pm autorizada para ${modal5pm.nombre} (${fecha5pm}). Sincroniza incidencias para acreditar la bolsa.`)
+      toast.success(`Salida 5pm autorizada para ${modal5pm.nombre} (${fecha5pm}). Sincroniza incidencias para acreditar la bolsa.`)
       setModal5pm(null)
       setNota5pm('')
     } else {
-      showToast('Error: ' + res.error)
+      toast.error('Error: ' + res.error)
     }
   }
 
   const muestreoHandler = async () => {
     if (!modalMuestreo) return
     const horas = parseFloat(horasMuestreo)
-    if (isNaN(horas) || horas <= 0) { showToast('Horas inválidas'); return }
+    if (isNaN(horas) || horas <= 0) { toast.error('Horas inválidas'); return }
     setGuardandoBolsa(true)
     const res = await api.registrarMuestreo({
       dni: modalMuestreo.dni,
@@ -240,21 +236,21 @@ export default function PlanillaPage() {
     })
     setGuardandoBolsa(false)
     if (res.success && res.data) {
-      showToast(`Bolsa descargada: ${res.data.horas_aplicadas}h aplicadas, saldo ${res.data.saldo_restante}h`)
+      toast.success(`Bolsa descargada: ${res.data.horas_aplicadas}h aplicadas, saldo ${res.data.saldo_restante}h`)
       setModalMuestreo(null)
       setHorasMuestreo('')
       setNotaMuestreo('')
       loadData()
     } else {
-      showToast('Error: ' + res.error)
+      toast.error('Error: ' + res.error)
     }
   }
 
   const crearTrabajadorHandler = async () => {
-    if (!/^\d{8}$/.test(nuevoDraft.dni)) { showToast('DNI inválido (8 dígitos)'); return }
-    if (!nuevoDraft.nombre.trim() || !nuevoDraft.cargo.trim()) { showToast('Nombre y cargo son obligatorios'); return }
+    if (!/^\d{8}$/.test(nuevoDraft.dni)) { toast.error('DNI inválido (8 dígitos)'); return }
+    if (!nuevoDraft.nombre.trim() || !nuevoDraft.cargo.trim()) { toast.error('Nombre y cargo son obligatorios'); return }
     if (!nuevoDraft.usa_rmv && (isNaN(parseFloat(nuevoDraft.sueldo)) || parseFloat(nuevoDraft.sueldo) <= 0)) {
-      showToast('Sueldo inválido'); return
+      toast.error('Sueldo inválido'); return
     }
     setGuardandoNuevo(true)
     const res = await api.crearTrabajador({
@@ -269,12 +265,12 @@ export default function PlanillaPage() {
     })
     setGuardandoNuevo(false)
     if (res.success) {
-      showToast('Trabajador creado — el kiosko de asistencia ya lo reconoce')
+      toast.success('Trabajador creado — el kiosko de asistencia ya lo reconoce')
       setModalNuevo(false)
       setNuevoDraft({ dni: '', nombre: '', cargo: '', sueldo: '', fecha_inicio: hoyISO(), usa_rmv: false, sede: 'Principal', email: '' })
       loadData()
     } else {
-      showToast('Error: ' + res.error)
+      toast.error('Error: ' + res.error)
     }
   }
 
@@ -285,10 +281,10 @@ export default function PlanillaPage() {
     if (res.success && res.data) {
       setConfig({ ...CONFIG_DEFAULT, ...(res.data as unknown as Partial<ConfigPlanilla>) })
       setShowConfig(false)
-      showToast('Configuración guardada')
+      toast.success('Configuración guardada')
       loadData()
     } else {
-      showToast('Error: ' + res.error)
+      toast.error('Error: ' + res.error)
     }
   }
 
@@ -381,18 +377,6 @@ export default function PlanillaPage() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        {/* Toast */}
-        <AnimatePresence>
-          {toast && (
-            <motion.div
-              initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className="fixed top-4 right-4 z-50 bg-gray-900 border border-primary-700 text-white px-5 py-3 rounded-xl shadow-xl text-sm max-w-sm"
-            >
-              {toast}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>

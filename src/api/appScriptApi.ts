@@ -713,45 +713,6 @@ class AppScriptApi {
     })
   }
 
-  // Obtener asistencias del dia actual
-  async asistenciasHoy(): Promise<ApiResponse<{
-    fecha: string
-    total: number
-    dentro: number
-    fuera: number
-    registros: Array<{
-      dni: string
-      nombre: string
-      entrada?: string
-      salida?: string
-      estado: 'dentro' | 'fuera'
-    }>
-  }>> {
-    return this.request('asistenciasHoy', 'GET')
-  }
-
-  // Reporte de asistencias de un empleado
-  async reporteAsistencia(
-    dni: string,
-    fechaInicio?: string,
-    fechaFin?: string
-  ): Promise<ApiResponse<{
-    empleado: { dni: string; nombre: string; puesto: string }
-    registros: Array<{
-      fecha: string
-      entrada?: string
-      salida?: string
-      horasTrabajadas?: number
-    }>
-    resumen: {
-      diasTrabajados: number
-      horasTotales: number
-      promedioHoras: number
-    }
-  }>> {
-    return this.request('reporteAsistencia', 'GET', { dni, fechaInicio, fechaFin })
-  }
-
   // Obtener asistencia de hoy para dashboard admin
   async getAttendanceToday(): Promise<ApiResponse<{
     fecha: string

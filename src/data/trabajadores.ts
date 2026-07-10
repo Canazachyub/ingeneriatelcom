@@ -1,7 +1,7 @@
-// Lista de trabajadores para el registro de asistencia.
-// FALLBACK local: la fuente de verdad es la hoja 'sueldos' del backend
+// Tipos y utilidades para el registro de asistencia.
+// La fuente de verdad de los trabajadores es la hoja 'sueldos' del backend
 // (endpoint público getTrabajadores, sin sueldos). Los trabajadores nuevos
-// se agregan desde el panel de Planilla y el kiosko los reconoce solo.
+// se agregan desde el panel de Planilla y el kiosko los reconoce sin redeploy.
 
 export interface TrabajadorFijo {
   dni: string
@@ -13,23 +13,7 @@ export interface TrabajadorFijo {
   registro_simple?: boolean
 }
 
-export const TRABAJADORES: TrabajadorFijo[] = [
-  { dni: '46809070', nombre: 'Araujo Álvarez, Andre Steven', cargo: 'Coordinador General' },
-  { dni: '73316735', nombre: 'Marroquín Concha, Diego Mauricio', cargo: 'Analista Legal de Reclamos' },
-  { dni: '74135306', nombre: 'Vargas Miranda, Juan Joseph', cargo: 'Analista Legal de Reclamos' },
-  { dni: '70401672', nombre: 'Montufar Diaz, Alvaro Rodrigo', cargo: 'Analista Junior de Reclamos' },
-  { dni: '74525595', nombre: 'León Umeres, Milagros Jhenifer', cargo: 'Asistente Administrativo' },
-  { dni: '72374021', nombre: 'Condori Cáceres, Jocabed Adriana', cargo: 'Tramitador / Digitador' },
-  { dni: '72743443', nombre: 'Ramos Serrani, Anais Gasdaly', cargo: 'Tramitador / Digitador' },
-  { dni: '74147961', nombre: 'Hurtado Vega, Marilyn', cargo: 'Tramitador / Digitador' },
-  { dni: '45298858', nombre: 'Canaza Chique, Darwin', cargo: 'Operario', registro_simple: true },
-  { dni: '80644637', nombre: 'Canaza Chique, Jael Fausto', cargo: 'Operario', registro_simple: true },
-  { dni: '42239901', nombre: 'Canaza Chique, Willy', cargo: 'Operario', registro_simple: true },
-  { dni: '47815297', nombre: 'Marin Callañaupa, George Smith', cargo: 'Operario', registro_simple: true },
-  { dni: '74323866', nombre: 'Maceda Econema, Franco Paolo', cargo: 'Operario', registro_simple: true },
-]
-
-export const buscarTrabajador = (dni: string, lista: TrabajadorFijo[] = TRABAJADORES): TrabajadorFijo | undefined =>
+export const buscarTrabajador = (dni: string, lista: TrabajadorFijo[]): TrabajadorFijo | undefined =>
   lista.find(t => t.dni === dni)
 
 // Los 4 eventos del día. Jornada L-V de 47h30min semanales (9.5h/día,

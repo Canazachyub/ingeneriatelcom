@@ -25,7 +25,6 @@ import { Link } from 'react-router-dom'
 import { api } from '../api/appScriptApi'
 import { useGeolocation } from '../hooks/useGeolocation'
 import {
-  TRABAJADORES,
   buscarTrabajador,
   TrabajadorFijo,
   EVENTOS,
@@ -74,16 +73,30 @@ export default function AsistenciaPage() {
 
   // Lista de trabajadores desde el backend (hoja sueldos, sin montos).
   // Los nuevos trabajadores creados en el panel aparecen aquí sin redeploy.
-  const [listaTrabajadores, setListaTrabajadores] = useState<TrabajadorFijo[]>(TRABAJADORES)
+  const [listaTrabajadores, setListaTrabajadores] = useState<TrabajadorFijo[]>([])
+  const [cargandoLista, setCargandoLista] = useState(true)
+  const [errorLista, setErrorLista] = useState(false)
 
-  useEffect(() => {
-    getLocation()
+  const cargarTrabajadores = useCallback(() => {
+    setCargandoLista(true)
+    setErrorLista(false)
     api.getTrabajadores().then((res) => {
       if (res.success && res.data && res.data.length > 0) {
         setListaTrabajadores(res.data)
+      } else {
+        setErrorLista(true)
       }
-    }).catch(() => { /* fallback a la lista local */ })
-  }, [getLocation])
+    }).catch(() => {
+      setErrorLista(true)
+    }).finally(() => {
+      setCargandoLista(false)
+    })
+  }, [])
+
+  useEffect(() => {
+    getLocation()
+    cargarTrabajadores()
+  }, [getLocation, cargarTrabajadores])
 
   // Countdown de reinicio en success/error
   useEffect(() => {
@@ -168,6 +181,11 @@ export default function AsistenciaPage() {
 
   const handleVerificarDni = () => {
     if (dni.length !== 8) return
+    if (errorLista || cargandoLista) {
+      setMensaje('No se pudo cargar la lista de trabajadores. Verifica tu conexión e intenta de nuevo.')
+      setViewState('error')
+      return
+    }
     const t = buscarTrabajador(dni, listaTrabajadores)
     if (t) {
       setTrabajador(t)
@@ -372,6 +390,22 @@ export default function AsistenciaPage() {
                   })}
                 </div>
               </div>
+
+              {errorLista && (
+                <p className="text-center text-xs text-rose-400 mb-4">
+                  <FaExclamationTriangle className="inline mr-1" />
+                  No se pudo cargar la lista de trabajadores.
+                  <button onClick={cargarTrabajadores} className="ml-2 text-cyan-400 underline">
+                    Reintentar
+                  </button>
+                </p>
+              )}
+              {cargandoLista && !errorLista && (
+                <p className="text-center text-xs text-primary-500 mb-4">
+                  <FaSpinner className="inline mr-1 animate-spin" />
+                  Cargando lista de trabajadores...
+                </p>
+              )}
 
               <TecladoNumerico
                 onKeyPress={handleKeyPress}

@@ -15,24 +15,24 @@ import AsistenciaPage from './pages/AsistenciaPage'
 const TermsPage = lazy(() => import('./pages/TermsPage'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
 
-// Capacitaciones
-import CapacitacionesPage from './pages/CapacitacionesPage'
-import EvaluacionPage from './pages/EvaluacionPage'
+// Capacitaciones (lazy: pesadas por webcam/proctoring)
+const CapacitacionesPage = lazy(() => import('./pages/CapacitacionesPage'))
+const EvaluacionPage = lazy(() => import('./pages/EvaluacionPage'))
 
-// Admin Pages
-import LoginPage from './pages/admin/LoginPage'
-import DashboardPage from './pages/admin/DashboardPage'
-import EmployeesPage from './pages/admin/EmployeesPage'
-import ProjectsPage from './pages/admin/ProjectsPage'
-import JobsManagementPage from './pages/admin/JobsManagementPage'
-import ApplicationsPage from './pages/admin/ApplicationsPage'
-import MessagesPage from './pages/admin/MessagesPage'
-import AttendancePage from './pages/admin/AttendancePage'
-import ReportsPage from './pages/admin/ReportsPage'
-import ApiTestPage from './pages/admin/ApiTestPage'
-import CapacitacionesManagementPage from './pages/admin/CapacitacionesManagementPage'
-import EvaluacionesAdminPage from './pages/admin/EvaluacionesPage'
-import PlanillaPage from './pages/admin/PlanillaPage'
+// Admin Pages (lazy: code-splitting para reducir bundle publico)
+const LoginPage = lazy(() => import('./pages/admin/LoginPage'))
+const DashboardPage = lazy(() => import('./pages/admin/DashboardPage'))
+const EmployeesPage = lazy(() => import('./pages/admin/EmployeesPage'))
+const ProjectsPage = lazy(() => import('./pages/admin/ProjectsPage'))
+const JobsManagementPage = lazy(() => import('./pages/admin/JobsManagementPage'))
+const ApplicationsPage = lazy(() => import('./pages/admin/ApplicationsPage'))
+const MessagesPage = lazy(() => import('./pages/admin/MessagesPage'))
+const AttendancePage = lazy(() => import('./pages/admin/AttendancePage'))
+const ReportsPage = lazy(() => import('./pages/admin/ReportsPage'))
+const ApiTestPage = lazy(() => import('./pages/admin/ApiTestPage'))
+const CapacitacionesManagementPage = lazy(() => import('./pages/admin/CapacitacionesManagementPage'))
+const EvaluacionesAdminPage = lazy(() => import('./pages/admin/EvaluacionesPage'))
+const PlanillaPage = lazy(() => import('./pages/admin/PlanillaPage'))
 
 import { useAuth } from './context/AuthContext'
 import { ToastProvider, useToast } from './context/ToastContext'
@@ -78,6 +78,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function PageLoader() {
+  return (
+    <div className="min-h-screen bg-primary-950 flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-accent-electric border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
+
 function App() {
   return (
     <ToastProvider>
@@ -117,12 +125,15 @@ function App() {
         }
       />
 
-      {/* Paginas legales */}
+      {/* Asistencia - Sin Layout (pagina tipo kiosko) */}
+      <Route path="/asistencia" element={<AsistenciaPage />} />
+
+      {/* Paginas legales (lazy) */}
       <Route
         path="/terminos"
         element={
           <Layout>
-            <Suspense fallback={<div className="min-h-screen bg-primary-950" />}>
+            <Suspense fallback={<PageLoader />}>
               <TermsPage />
             </Suspense>
           </Layout>
@@ -132,124 +143,161 @@ function App() {
         path="/privacidad"
         element={
           <Layout>
-            <Suspense fallback={<div className="min-h-screen bg-primary-950" />}>
+            <Suspense fallback={<PageLoader />}>
               <PrivacyPage />
             </Suspense>
           </Layout>
         }
       />
 
-      {/* Asistencia - Sin Layout (pagina tipo kiosko) */}
-      <Route path="/asistencia" element={<AsistenciaPage />} />
-
-      {/* Capacitaciones - pública con Layout */}
+      {/* Capacitaciones - pública con Layout (lazy) */}
       <Route
         path="/capacitaciones"
         element={
           <Layout>
-            <CapacitacionesPage />
+            <Suspense fallback={<PageLoader />}>
+              <CapacitacionesPage />
+            </Suspense>
           </Layout>
         }
       />
-      {/* Evaluación - Sin Layout (pantalla completa de examen) */}
-      <Route path="/evaluacion/:id" element={<EvaluacionPage />} />
+      {/* Evaluación - Sin Layout (pantalla completa de examen) (lazy) */}
+      <Route
+        path="/evaluacion/:id"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <EvaluacionPage />
+          </Suspense>
+        }
+      />
 
-      {/* Admin Routes */}
-      <Route path="/admin/login" element={<LoginPage />} />
+      {/* Admin Routes (lazy) */}
+      <Route
+        path="/admin/login"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <LoginPage />
+          </Suspense>
+        }
+      />
       <Route
         path="/admin"
         element={
-          <ProtectedRoute>
-            <DashboardPage />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
       <Route
         path="/admin/empleados"
         element={
-          <ProtectedRoute>
-            <EmployeesPage />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <EmployeesPage />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
       <Route
         path="/admin/proyectos"
         element={
-          <ProtectedRoute>
-            <ProjectsPage />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <ProjectsPage />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
       <Route
         path="/admin/bolsa-trabajo"
         element={
-          <ProtectedRoute>
-            <JobsManagementPage />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <JobsManagementPage />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
       <Route
         path="/admin/postulaciones"
         element={
-          <ProtectedRoute>
-            <ApplicationsPage />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <ApplicationsPage />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
       <Route
         path="/admin/mensajes"
         element={
-          <ProtectedRoute>
-            <MessagesPage />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <MessagesPage />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
       <Route
         path="/admin/asistencias"
         element={
-          <ProtectedRoute>
-            <AttendancePage />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <AttendancePage />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
       <Route
         path="/admin/reportes"
         element={
-          <ProtectedRoute>
-            <ReportsPage />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <ReportsPage />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
       <Route
         path="/admin/api-test"
         element={
-          <ProtectedRoute>
-            <ApiTestPage />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <ApiTestPage />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
       <Route
         path="/admin/capacitaciones"
         element={
-          <ProtectedRoute>
-            <CapacitacionesManagementPage />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <CapacitacionesManagementPage />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
       <Route
         path="/admin/evaluaciones"
         element={
-          <ProtectedRoute>
-            <EvaluacionesAdminPage />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <EvaluacionesAdminPage />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
       <Route
         path="/admin/planilla"
         element={
-          <ProtectedRoute>
-            <PlanillaPage />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <PlanillaPage />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
 

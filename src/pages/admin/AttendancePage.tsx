@@ -18,8 +18,9 @@ import {
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
+import { useToast } from '../../context/ToastContext'
 import {
-  TRABAJADORES,
+  TrabajadorFijo,
   EVENTOS,
   EVENTO_LABELS,
   tipoEvento,
@@ -93,10 +94,12 @@ const descargarCSV = (nombre: string, filas: string[][]) => {
 // ── Página ───────────────────────────────────────────────────
 
 export default function AttendancePage() {
+  const toast = useToast()
   const hoy = new Date()
   const [tab, setTab] = useState<Tab>('registros')
   const [registros, setRegistros] = useState<RegistroAsistencia[]>([])
   const [justificaciones, setJustificaciones] = useState<Justificacion[]>([])
+  const [trabajadores, setTrabajadores] = useState<TrabajadorFijo[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   // Filtros
@@ -107,6 +110,21 @@ export default function AttendancePage() {
 
   // Modal foto
   const [fotoModal, setFotoModal] = useState<RegistroAsistencia | null>(null)
+
+  // Roster de trabajadores (hoja 'sueldos' vía endpoint público, sin montos).
+  // Fuente única de verdad: altas/bajas del panel de Planilla se reflejan sin redeploy.
+  useEffect(() => {
+    api.getTrabajadores().then((res) => {
+      if (res.success && res.data) {
+        setTrabajadores(res.data)
+      } else {
+        toast.error(res.error || 'No se pudo cargar la lista de trabajadores')
+      }
+    }).catch(() => {
+      // Los errores de red ya se muestran globalmente vía ApiErrorBridge
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const loadData = async () => {
     setIsLoading(true)
@@ -184,7 +202,7 @@ export default function AttendancePage() {
     }
 
     const hoyISO = toLocalISO(new Date())
-    const filas = TRABAJADORES
+    const filas = trabajadores
       // Los de campo (registro_simple) quedan fuera del informe de faltas/tardanzas:
       // solo bitácora. Sus registros sí aparecen en la pestaña "Registros".
       .filter((t) => !t.registro_simple && (!filtroDni || t.dni === filtroDni))
@@ -211,7 +229,7 @@ export default function AttendancePage() {
       })
 
     return { fechas, filas }
-  }, [registros, justificaciones, desde, hasta, filtroDni])
+  }, [registros, justificaciones, desde, hasta, filtroDni, trabajadores])
 
   // ── Exportar CSV ───────────────────────────────────────────
   const exportarRegistros = () => {
@@ -301,7 +319,7 @@ export default function AttendancePage() {
             className="px-3 py-2 bg-primary-900 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric transition-colors"
           >
             <option value="">Todos los trabajadores</option>
-            {TRABAJADORES.map((t) => (
+            {trabajadores.map((t) => (
               <option key={t.dni} value={t.dni}>{t.nombre}</option>
             ))}
           </select>
