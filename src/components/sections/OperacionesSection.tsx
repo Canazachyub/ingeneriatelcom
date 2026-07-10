@@ -24,11 +24,19 @@ const FOTOS = [
   { src: '/assets/images/operaciones/H12.webp', alt: 'Mantenimiento eléctrico nocturno con luces de trabajo' },
 ]
 
-const RADIO = 460            // radio del cilindro (px)
-const ALTURA_HELICE = 340    // recorrido vertical total de la hélice (px)
-const VELOCIDAD_AUTO = 0.06  // grados por frame en reposo
-const CARD_W = 300
-const CARD_H = 200
+const RADIO = 430            // radio del cilindro (px)
+const PASO_Y = 52            // separación vertical entre tarjetas de una hebra (px)
+const VELOCIDAD_AUTO = 0.08  // grados por frame en reposo
+const CARD_W = 280
+const CARD_H = 180
+
+// Doble hélice (forma de ADN): cada foto aparece en las DOS hebras,
+// desfasadas 180°. La altura de cada tarjeta es FIJA (según su índice);
+// el drag solo cambia el ángulo de giro — por eso la rotación es continua,
+// sin saltos al completar una vuelta.
+const TARJETAS = [0, 180].flatMap((fase) =>
+  FOTOS.map((foto, i) => ({ foto, indice: i, fase }))
+)
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false)
@@ -55,7 +63,7 @@ function GaleriaHelicoidal() {
   useEffect(() => {
     if (!inView) return
 
-    const paso = 360 / FOTOS.length
+    const pasoAngular = 360 / FOTOS.length // 30° por tarjeta de cada hebra
 
     const pintar = () => {
       // Inercia: al soltar el drag la velocidad decae suavemente hacia el auto-giro
@@ -64,22 +72,22 @@ function GaleriaHelicoidal() {
         velocidad.current += (VELOCIDAD_AUTO - velocidad.current) * 0.04
       }
 
-      FOTOS.forEach((_, i) => {
-        const el = itemRefs.current[i]
+      TARJETAS.forEach((t, k) => {
+        const el = itemRefs.current[k]
         if (!el) return
-        const angulo = ((rotacion.current + i * paso) % 360 + 360) % 360
+        const angulo = rotacion.current + t.indice * pasoAngular + t.fase
         const rad = (angulo * Math.PI) / 180
         const x = RADIO * Math.sin(rad)
         const z = RADIO * Math.cos(rad) - RADIO           // frente = 0, fondo = -2R
-        // La altura depende del ángulo actual: al girar, las tarjetas suben
-        // en espiral (efecto tornado)
-        const y = (angulo / 360 - 0.5) * ALTURA_HELICE
+        // Altura FIJA por índice: la hebra es una escalera en espiral estable
+        const y = (t.indice - (FOTOS.length - 1) / 2) * PASO_Y
         const profundidad = (1 - Math.cos(rad)) / 2       // 0 al frente, 1 al fondo
         el.style.transform =
           `translate(-50%, -50%) translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, ${z.toFixed(1)}px) ` +
-          `rotateY(${angulo.toFixed(2)}deg) scale(${(1 - profundidad * 0.18).toFixed(3)})`
-        el.style.filter = profundidad > 0.12 ? `blur(${(profundidad * 5).toFixed(1)}px)` : 'none'
-        el.style.opacity = String(1 - profundidad * 0.45)
+          `rotateY(${(angulo % 360).toFixed(2)}deg) scale(${(1 - profundidad * 0.3).toFixed(3)})`
+        el.style.filter = profundidad > 0.15 ? `blur(${(profundidad * 4).toFixed(1)}px)` : 'none'
+        // La hebra trasera se ve atenuada ENTRE las tarjetas del frente (look ADN)
+        el.style.opacity = String(1 - profundidad * 0.62)
         el.style.zIndex = String(Math.round((1 - profundidad) * 100))
       })
 
@@ -119,7 +127,7 @@ function GaleriaHelicoidal() {
       onPointerLeave={soltar}
       onPointerCancel={soltar}
       className="relative mx-auto select-none cursor-grab active:cursor-grabbing touch-pan-y"
-      style={{ height: 560, maxWidth: 1100, perspective: '1200px' }}
+      style={{ height: 720, maxWidth: 1100, perspective: '1400px' }}
       role="region"
       aria-label="Galería 3D de operaciones — arrastra horizontalmente para girar"
     >
@@ -127,17 +135,18 @@ function GaleriaHelicoidal() {
         className="absolute left-1/2 top-1/2"
         style={{ transformStyle: 'preserve-3d' }}
       >
-        {FOTOS.map((foto, i) => (
+        {TARJETAS.map((t, k) => (
           <div
-            key={foto.src}
-            ref={(el) => { itemRefs.current[i] = el }}
+            key={`${t.foto.src}-${t.fase}`}
+            ref={(el) => { itemRefs.current[k] = el }}
             className="absolute left-0 top-0 will-change-transform"
             style={{ width: CARD_W, height: CARD_H }}
           >
             <div className="w-full h-full rounded-2xl overflow-hidden border border-primary-700/60 shadow-2xl shadow-black/50 bg-primary-900">
               <img
-                src={foto.src}
-                alt={foto.alt}
+                src={t.foto.src}
+                alt={t.fase === 0 ? t.foto.alt : ''}
+                aria-hidden={t.fase !== 0}
                 loading="lazy"
                 draggable={false}
                 className="w-full h-full object-cover pointer-events-none"
@@ -147,9 +156,11 @@ function GaleriaHelicoidal() {
         ))}
       </div>
 
-      {/* Degradados laterales para que la hélice "salga" de la oscuridad */}
+      {/* Degradados para que la hélice "emerja" de la oscuridad por los 4 bordes */}
       <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-primary-950 to-transparent z-[110]" />
       <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-primary-950 to-transparent z-[110]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-primary-950 to-transparent z-[110]" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-primary-950 to-transparent z-[110]" />
     </div>
   )
 }
