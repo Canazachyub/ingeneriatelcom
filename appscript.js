@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-08-12T20:40:48.889Z con tools/build-backend.mjs
+// Generado: 2026-08-12T20:46:24.865Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -4252,13 +4252,15 @@ function horaAMinutosPlanilla_(hora) {
 // ============================================================
 var HEADERS_FERIADOS = ['fecha', 'descripcion'];
 
-// Feriados oficiales de Peru 2026 (incluye los agregados por ley en 2022:
-// 23/07 Fuerza Aerea, 06/08 Batalla de Junin, 09/12 Batalla de Ayacucho)
+// Feriados oficiales de Peru 2026 (16 feriados nacionales, Decreto
+// Legislativo 713 y leyes 31530/31551/31646: incluye 07/06 Batalla de Arica,
+// 23/07 Fuerza Aerea, 06/08 Batalla de Junin y 09/12 Batalla de Ayacucho)
 var FERIADOS_PERU_2026 = [
   ['2026-01-01', 'Ano Nuevo'],
   ['2026-04-02', 'Jueves Santo'],
   ['2026-04-03', 'Viernes Santo'],
   ['2026-05-01', 'Dia del Trabajo'],
+  ['2026-06-07', 'Batalla de Arica y Dia de la Bandera'],
   ['2026-06-29', 'San Pedro y San Pablo'],
   ['2026-07-23', 'Dia de la Fuerza Aerea del Peru'],
   ['2026-07-28', 'Fiestas Patrias'],
@@ -4271,6 +4273,28 @@ var FERIADOS_PERU_2026 = [
   ['2026-12-09', 'Batalla de Ayacucho'],
   ['2026-12-25', 'Navidad']
 ];
+
+// Al declarar feriado una fecha, las incidencias de falta/omision PENDIENTES
+// de ese dia ya no aplican: se eliminan (las ya revisadas se respetan).
+// Devuelve cuantas filas se borraron.
+function eliminarIncidenciasDeFeriado_(ss, fecha) {
+  var sheet = ss.getSheetByName('incidencias');
+  if (!sheet) return 0;
+  var rows = sheet.getDataRange().getValues();
+  var borradas = 0;
+  for (var i = rows.length - 1; i >= 1; i--) {
+    var f = rows[i][3] instanceof Date
+      ? Utilities.formatDate(rows[i][3], 'America/Lima', 'yyyy-MM-dd')
+      : String(rows[i][3]);
+    var tipo = String(rows[i][4]);
+    var estado = String(rows[i][8] || 'pendiente');
+    if (f === fecha && (tipo === 'falta' || tipo === 'omision') && estado === 'pendiente') {
+      sheet.deleteRow(i + 1);
+      borradas++;
+    }
+  }
+  return borradas;
+}
 
 function leerFeriados_() {
   var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('feriados');
@@ -4303,7 +4327,9 @@ function agregarFeriado(data) {
     var existe = leerFeriados_().some(function (f) { return f.fecha === fecha; });
     if (existe) return { success: false, error: 'Esa fecha ya esta registrada como feriado' };
     sheet.appendRow([fecha, descripcion]);
-    return { success: true, data: leerFeriados_() };
+    // Limpiar incidencias pendientes de falta/omision de ese dia (retroactivo)
+    var limpiadas = eliminarIncidenciasDeFeriado_(ss, fecha);
+    return { success: true, data: leerFeriados_(), message: limpiadas > 0 ? (limpiadas + ' incidencias pendientes de ese dia eliminadas') : undefined };
   });
 }
 
@@ -4329,7 +4355,10 @@ function eliminarFeriado(data) {
   });
 }
 
-// Precarga los feriados oficiales de Peru 2026 (idempotente: no duplica)
+// Precarga los feriados oficiales de Peru 2026 (idempotente: no duplica).
+// Tambien limpia incidencias pendientes de falta/omision de TODAS las fechas
+// feriadas (incluidas las ya registradas antes), por si la sincronizacion
+// genero faltas en un feriado antes de declararlo.
 function sembrarFeriadosPeru2026() {
   return withLock_(function () {
     var ss = SpreadsheetApp.openById(SHEET_ID);
@@ -4337,12 +4366,19 @@ function sembrarFeriadosPeru2026() {
     var existentes = {};
     leerFeriados_().forEach(function (f) { existentes[f.fecha] = true; });
     var agregados = 0;
+    var limpiadas = 0;
     FERIADOS_PERU_2026.forEach(function (par) {
-      if (existentes[par[0]]) return;
-      sheet.appendRow([par[0], par[1]]);
-      agregados++;
+      if (!existentes[par[0]]) {
+        sheet.appendRow([par[0], par[1]]);
+        agregados++;
+      }
+      limpiadas += eliminarIncidenciasDeFeriado_(ss, par[0]);
     });
-    return { success: true, message: agregados + ' feriados agregados', data: leerFeriados_() };
+    return {
+      success: true,
+      message: agregados + ' feriados agregados' + (limpiadas > 0 ? ', ' + limpiadas + ' incidencias pendientes de esos dias eliminadas' : ''),
+      data: leerFeriados_()
+    };
   });
 }
 

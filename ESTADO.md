@@ -349,7 +349,8 @@ Nueva action `registrarAsistenciaManual` (nivel auth) + botón **"Registrar manu
 
 Antes solo se saltaban sábados y domingos (hardcodeado). Ahora hay hoja **`feriados`** (fecha, descripcion) gestionable desde el panel:
 
-- Actions: `getFeriados` (auth), `agregarFeriado` / `eliminarFeriado` / `sembrarFeriadosPeru2026` (admin — este último precarga los 15 feriados oficiales de Perú 2026, idempotente).
+- Actions: `getFeriados` (auth), `agregarFeriado` / `eliminarFeriado` / `sembrarFeriadosPeru2026` (admin — este último precarga los **16 feriados nacionales oficiales** de Perú 2026, idempotente; la lista se verificó contra gob.pe/El Peruano e incluye 07/06 Batalla de Arica, que faltaba en la primera versión).
+- **Limpieza retroactiva**: al declarar un feriado (manual o por precarga) se eliminan las incidencias PENDIENTES de tipo falta/omisión de esa fecha — la sincronización es idempotente y no las borraba sola (caso real: 06/08 Batalla de Junín figuraba como falta).
 - UI: `FeriadosPanel` en `/admin/planilla` (lista con eliminar, agregar fecha+descripción, botón de carga automática).
 - Efectos: `sincronizarIncidencias` no genera falta/omisión en feriados; el informe de `/admin/asistencias` no los cuenta como falta y los pinta violeta en la matriz.
 
