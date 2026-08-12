@@ -16,6 +16,7 @@ import {
   TIPO_LABELS, ESTADO_LABELS, mesActualISO, finDeMes, inicioTrimestre, hoyISO, nombreMes, Fila,
 } from './planilla/planilla.types'
 import ConfigPlanillaForm from './planilla/ConfigPlanillaForm'
+import FeriadosPanel from './planilla/FeriadosPanel'
 import SueldosTable from './planilla/SueldosTable'
 import IncidenciasPanel from './planilla/IncidenciasPanel'
 import BolsaHorasPanel from './planilla/BolsaHorasPanel'
@@ -414,6 +415,9 @@ export default function PlanillaPage() {
           onCancel={() => setShowConfig(false)}
           onGuardar={guardarConfig}
         />
+
+        {/* Feriados / días no laborables */}
+        <FeriadosPanel />
 
         {/* Loading */}
         {loading && (

@@ -345,6 +345,14 @@ Nueva action `registrarAsistenciaManual` (nivel auth) + botón **"Registrar manu
 - Sin foto ni GPS: el panel muestra badge "· manual" (tooltip con la nota). El timestamp se construye como `fechaThora-05:00` para que `getAsistenciasV2` y `sincronizarIncidencias` lo traten igual que una marca del kiosko (cancela falta/tardanza correspondiente).
 - Mismo anti-duplicado del kiosko para eventos de oficina (no permite duplicar un evento ya registrado ese día).
 
+### Feriados / días no laborables (12/08/2026)
+
+Antes solo se saltaban sábados y domingos (hardcodeado). Ahora hay hoja **`feriados`** (fecha, descripcion) gestionable desde el panel:
+
+- Actions: `getFeriados` (auth), `agregarFeriado` / `eliminarFeriado` / `sembrarFeriadosPeru2026` (admin — este último precarga los 15 feriados oficiales de Perú 2026, idempotente).
+- UI: `FeriadosPanel` en `/admin/planilla` (lista con eliminar, agregar fecha+descripción, botón de carga automática).
+- Efectos: `sincronizarIncidencias` no genera falta/omisión en feriados; el informe de `/admin/asistencias` no los cuenta como falta y los pinta violeta en la matriz.
+
 ### ⚠️ Checklist de deploy (backend, manual)
 
 1. `npm run build:backend` → pegar `appscript.js` en el editor GAS → `ejecutarTestSalud` → **0 FAIL** → Nueva versión.

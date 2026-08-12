@@ -889,6 +889,24 @@ class AppScriptApi {
     return this.request('registrarAsistenciaManual', 'POST', data as unknown as Record<string, unknown>)
   }
 
+  // Feriados / días no laborables (hoja 'feriados'): esos días no generan
+  // falta ni omisión en planilla y se muestran como no laborables en informes.
+  async getFeriados(): Promise<ApiResponse<{ fecha: string; descripcion: string }[]>> {
+    return this.request('getFeriados', 'POST')
+  }
+
+  async agregarFeriado(data: { fecha: string; descripcion: string }): Promise<ApiResponse<{ fecha: string; descripcion: string }[]>> {
+    return this.request('agregarFeriado', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async eliminarFeriado(fecha: string): Promise<ApiResponse<{ fecha: string; descripcion: string }[]>> {
+    return this.request('eliminarFeriado', 'POST', { fecha })
+  }
+
+  async sembrarFeriadosPeru2026(): Promise<ApiResponse<{ fecha: string; descripcion: string }[]>> {
+    return this.request('sembrarFeriadosPeru2026', 'POST')
+  }
+
   async getJustificaciones(filtros?: {
     dni?: string
     desde?: string

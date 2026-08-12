@@ -101,6 +101,12 @@ var ROUTES = {
   getAutorizaciones5pm: { nivel: 'admin', handler: function (ctx) { return getAutorizaciones5pm(ctx.data); } },
   registrarMuestreo: { nivel: 'admin', handler: function (ctx) { return registrarMuestreo(ctx.data); } },
   getBolsaHoras: { nivel: 'admin', handler: function (ctx) { return getBolsaHoras(ctx.data); } },
+  // Feriados: lectura para cualquier usuario logueado (informe de asistencias),
+  // escritura solo admin (afecta planilla/descuentos)
+  getFeriados: { nivel: 'auth', handler: function () { return getFeriados(); } },
+  agregarFeriado: { nivel: 'admin', handler: function (ctx) { return agregarFeriado(ctx.data); } },
+  eliminarFeriado: { nivel: 'admin', handler: function (ctx) { return eliminarFeriado(ctx.data); } },
+  sembrarFeriadosPeru2026: { nivel: 'admin', handler: function () { return sembrarFeriadosPeru2026(); } },
 
   // === CAPACITACIONES Y EVALUACIONES ===
   getCapacitaciones: { nivel: 'publico', handler: function () { return getCapacitaciones(); } },

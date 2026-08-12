@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-08-12T20:06:22.875Z con tools/build-backend.mjs
+// Generado: 2026-08-12T20:40:48.889Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -417,6 +417,12 @@ var ROUTES = {
   getAutorizaciones5pm: { nivel: 'admin', handler: function (ctx) { return getAutorizaciones5pm(ctx.data); } },
   registrarMuestreo: { nivel: 'admin', handler: function (ctx) { return registrarMuestreo(ctx.data); } },
   getBolsaHoras: { nivel: 'admin', handler: function (ctx) { return getBolsaHoras(ctx.data); } },
+  // Feriados: lectura para cualquier usuario logueado (informe de asistencias),
+  // escritura solo admin (afecta planilla/descuentos)
+  getFeriados: { nivel: 'auth', handler: function () { return getFeriados(); } },
+  agregarFeriado: { nivel: 'admin', handler: function (ctx) { return agregarFeriado(ctx.data); } },
+  eliminarFeriado: { nivel: 'admin', handler: function (ctx) { return eliminarFeriado(ctx.data); } },
+  sembrarFeriadosPeru2026: { nivel: 'admin', handler: function () { return sembrarFeriadosPeru2026(); } },
 
   // === CAPACITACIONES Y EVALUACIONES ===
   getCapacitaciones: { nivel: 'publico', handler: function () { return getCapacitaciones(); } },
@@ -4238,6 +4244,108 @@ function horaAMinutosPlanilla_(hora) {
   return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
 }
 
+// ============================================================
+// FERIADOS / DIAS NO LABORABLES
+// Hoja 'feriados': fecha (yyyy-mm-dd), descripcion
+// Esos dias no generan falta ni omision en sincronizarIncidencias
+// y el informe de asistencias los muestra como no laborables.
+// ============================================================
+var HEADERS_FERIADOS = ['fecha', 'descripcion'];
+
+// Feriados oficiales de Peru 2026 (incluye los agregados por ley en 2022:
+// 23/07 Fuerza Aerea, 06/08 Batalla de Junin, 09/12 Batalla de Ayacucho)
+var FERIADOS_PERU_2026 = [
+  ['2026-01-01', 'Ano Nuevo'],
+  ['2026-04-02', 'Jueves Santo'],
+  ['2026-04-03', 'Viernes Santo'],
+  ['2026-05-01', 'Dia del Trabajo'],
+  ['2026-06-29', 'San Pedro y San Pablo'],
+  ['2026-07-23', 'Dia de la Fuerza Aerea del Peru'],
+  ['2026-07-28', 'Fiestas Patrias'],
+  ['2026-07-29', 'Fiestas Patrias'],
+  ['2026-08-06', 'Batalla de Junin'],
+  ['2026-08-30', 'Santa Rosa de Lima'],
+  ['2026-10-08', 'Combate de Angamos'],
+  ['2026-11-01', 'Todos los Santos'],
+  ['2026-12-08', 'Inmaculada Concepcion'],
+  ['2026-12-09', 'Batalla de Ayacucho'],
+  ['2026-12-25', 'Navidad']
+];
+
+function leerFeriados_() {
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('feriados');
+  if (!sheet) return [];
+  var rows = sheet.getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < rows.length; i++) {
+    if (!rows[i][0]) continue;
+    var f = rows[i][0] instanceof Date
+      ? Utilities.formatDate(rows[i][0], 'America/Lima', 'yyyy-MM-dd')
+      : String(rows[i][0]);
+    out.push({ fecha: f, descripcion: String(rows[i][1] || '') });
+  }
+  return out;
+}
+
+function getFeriados() {
+  return { success: true, data: leerFeriados_() };
+}
+
+function agregarFeriado(data) {
+  var fecha = String(data.fecha || '');
+  var descripcion = String(data.descripcion || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return { success: false, error: 'Fecha invalida (yyyy-mm-dd)' };
+  if (!descripcion) return { success: false, error: 'La descripcion es obligatoria' };
+
+  return withLock_(function () {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = getOrCreateAsistenciaSheet_(ss, 'feriados', HEADERS_FERIADOS);
+    var existe = leerFeriados_().some(function (f) { return f.fecha === fecha; });
+    if (existe) return { success: false, error: 'Esa fecha ya esta registrada como feriado' };
+    sheet.appendRow([fecha, descripcion]);
+    return { success: true, data: leerFeriados_() };
+  });
+}
+
+function eliminarFeriado(data) {
+  var fecha = String(data.fecha || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return { success: false, error: 'Fecha invalida' };
+
+  return withLock_(function () {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = ss.getSheetByName('feriados');
+    if (!sheet) return { success: false, error: 'No hay hoja de feriados' };
+    var rows = sheet.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      var f = rows[i][0] instanceof Date
+        ? Utilities.formatDate(rows[i][0], 'America/Lima', 'yyyy-MM-dd')
+        : String(rows[i][0]);
+      if (f === fecha) {
+        sheet.deleteRow(i + 1);
+        return { success: true, data: leerFeriados_() };
+      }
+    }
+    return { success: false, error: 'Feriado no encontrado' };
+  });
+}
+
+// Precarga los feriados oficiales de Peru 2026 (idempotente: no duplica)
+function sembrarFeriadosPeru2026() {
+  return withLock_(function () {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = getOrCreateAsistenciaSheet_(ss, 'feriados', HEADERS_FERIADOS);
+    var existentes = {};
+    leerFeriados_().forEach(function (f) { existentes[f.fecha] = true; });
+    var agregados = 0;
+    FERIADOS_PERU_2026.forEach(function (par) {
+      if (existentes[par[0]]) return;
+      sheet.appendRow([par[0], par[1]]);
+      agregados++;
+    });
+    return { success: true, message: agregados + ' feriados agregados', data: leerFeriados_() };
+  });
+}
+
 // Genera incidencias desde asistencias_v2 para el rango [desde, hasta]
 // y auto-expira pendientes cuyo plazo de sustento (48h desde la
 // reincorporacion) ya vencio. Idempotente: no duplica.
@@ -4287,6 +4395,10 @@ function sincronizarIncidencias(data) {
     autIdx[a.dni + '|' + a.fecha] = true;
   });
 
+  // Feriados / dias no laborables: no generan falta ni omision
+  var feriadosIdx = {};
+  leerFeriados_().forEach(function(f) { feriadosIdx[f.fecha] = true; });
+
   // Movimientos de bolsa ya acreditados (idempotencia): dni|fecha con tipo salida_5pm
   var bolsaSheet = getOrCreateAsistenciaSheet_(ss, 'bolsa_horas', HEADERS_BOLSA);
   var bolsaExistente = {};
@@ -4330,6 +4442,7 @@ function sincronizarIncidencias(data) {
     var fecha = Utilities.formatDate(d, 'America/Lima', 'yyyy-MM-dd');
     var dow = d.getDay();
     if (dow === 0 || dow === 6) continue; // sabado y domingo no laborables
+    if (feriadosIdx[fecha]) continue;     // feriado / dia no laborable
     if (fecha > hoyISO) break;
     var diaTerminado = fecha < hoyISO;
 
@@ -5401,6 +5514,7 @@ var FUNCIONES_REQUERIDAS = [
   'getConfigPlanillaAction', 'updateConfigPlanilla', 'getSueldos', 'updateSueldo', 'crearTrabajador',
   'getIncidencias', 'revisarIncidencia', 'sincronizarIncidencias',
   'autorizarSalida5pm', 'getAutorizaciones5pm', 'registrarMuestreo', 'getBolsaHoras',
+  'getFeriados', 'agregarFeriado', 'eliminarFeriado', 'sembrarFeriadosPeru2026',
   'getCapacitaciones', 'getCapacitacionById', 'iniciarEvaluacion', 'submitEvaluacion',
   'guardarFotoWebcam', 'registrarEventoLog',
   'crearCapacitacion', 'actualizarCapacitacion', 'eliminarCapacitacion',

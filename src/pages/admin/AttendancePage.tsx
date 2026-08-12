@@ -127,6 +127,18 @@ export default function AttendancePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Feriados / días no laborables (fecha -> descripción): no cuentan como falta
+  const [feriados, setFeriados] = useState<Record<string, string>>({})
+  useEffect(() => {
+    api.getFeriados().then((res) => {
+      if (res.success && res.data) {
+        const map: Record<string, string> = {}
+        res.data.forEach((f) => { map[f.fecha] = f.descripcion })
+        setFeriados(map)
+      }
+    }).catch(() => { /* sin feriados: el informe funciona igual */ })
+  }, [])
+
   const loadData = async () => {
     setIsLoading(true)
     const filtros = {
@@ -271,8 +283,9 @@ export default function AttendancePage() {
             }
           } else {
             const dow = new Date(f + 'T00:00:00').getDay()
-            // Falta solo L-V, días ya transcurridos y desde que el sistema opera
-            if (dow >= 1 && dow <= 5 && f <= hoyISO && f >= FECHA_OPERATIVO) faltasLV++
+            // Falta solo L-V, días ya transcurridos, desde que el sistema opera
+            // y que no sean feriado / día no laborable
+            if (dow >= 1 && dow <= 5 && f <= hoyISO && f >= FECHA_OPERATIVO && !feriados[f]) faltasLV++
           }
         }
         const numJust = justificaciones.filter((j) => String(j.dni) === t.dni).length
@@ -280,7 +293,7 @@ export default function AttendancePage() {
       })
 
     return { fechas, filas }
-  }, [registros, justificaciones, desde, hasta, filtroDni, trabajadores])
+  }, [registros, justificaciones, desde, hasta, filtroDni, trabajadores, feriados])
 
   // ── Exportar CSV ───────────────────────────────────────────
   const exportarRegistros = () => {
@@ -585,6 +598,7 @@ export default function AttendancePage() {
               <p className="text-xs text-gray-500 mb-4">
                 Cada celda muestra los 4 eventos: <span className="text-emerald-400">●</span> puntual ·{' '}
                 <span className="text-amber-400">●</span> tarde · <span className="text-gray-600">●</span> sin registro ·{' '}
+                <span className="text-violet-400/60">●</span> feriado / no laborable ·{' '}
                 <span className="text-blue-400/50">●</span> justificado (antes de la implementación)
               </p>
               <div className="overflow-x-auto">
@@ -613,6 +627,7 @@ export default function AttendancePage() {
                         {informe.fechas.map((fecha) => {
                           const evs = f.porFecha[fecha] || {}
                           const preOperativo = fecha < FECHA_OPERATIVO
+                          const feriado = feriados[fecha]
                           return (
                             <td key={fecha} className="px-1.5 py-2 text-center">
                               <div className="flex gap-0.5 justify-center">
@@ -622,11 +637,15 @@ export default function AttendancePage() {
                                     ? esTarde(ev.key, String(reg.hora))
                                       ? 'bg-amber-400'
                                       : 'bg-emerald-400'
+                                    : feriado
+                                    ? 'bg-violet-400/40'
                                     : preOperativo
                                     ? 'bg-blue-400/25'
                                     : 'bg-gray-700'
                                   const title = reg
                                     ? `${ev.label}: ${String(reg.hora).slice(0, 5)}`
+                                    : feriado
+                                    ? `${ev.label}: no laborable (${feriado})`
                                     : preOperativo
                                     ? `${ev.label}: justificado (antes de la implementación)`
                                     : `${ev.label}: sin registro`

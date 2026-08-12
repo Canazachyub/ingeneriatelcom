@@ -34,6 +34,7 @@ var FUNCIONES_REQUERIDAS = [
   'getConfigPlanillaAction', 'updateConfigPlanilla', 'getSueldos', 'updateSueldo', 'crearTrabajador',
   'getIncidencias', 'revisarIncidencia', 'sincronizarIncidencias',
   'autorizarSalida5pm', 'getAutorizaciones5pm', 'registrarMuestreo', 'getBolsaHoras',
+  'getFeriados', 'agregarFeriado', 'eliminarFeriado', 'sembrarFeriadosPeru2026',
   'getCapacitaciones', 'getCapacitacionById', 'iniciarEvaluacion', 'submitEvaluacion',
   'guardarFotoWebcam', 'registrarEventoLog',
   'crearCapacitacion', 'actualizarCapacitacion', 'eliminarCapacitacion',

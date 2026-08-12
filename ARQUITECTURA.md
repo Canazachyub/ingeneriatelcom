@@ -158,6 +158,9 @@ Todo se opera desde `PlanillaPage` (`/admin/planilla`) y todas requieren token:
 | `sincronizarIncidencias(desde, hasta)` | `sincronizarIncidencias` | Lee `asistencias_v2` + `sueldos` → escribe `incidencias`, `bolsa_horas`, consulta `autorizaciones_5pm` |
 | `autorizarSalida5pm()` / `getAutorizaciones5pm()` | `autorizarSalida5pm` / `getAutorizaciones5pm` | `autorizaciones_5pm` |
 | `registrarMuestreo()` / `getBolsaHoras()` | `registrarMuestreo` / `getBolsaHoras` | `bolsa_horas` |
+| `getFeriados()` / `agregarFeriado()` / `eliminarFeriado()` / `sembrarFeriadosPeru2026()` | `getFeriados` (auth) / resto (admin) | `feriados` |
+
+Los feriados/no laborables se gestionan desde `FeriadosPanel` en `/admin/planilla`: `sincronizarIncidencias` no genera falta ni omisión en esas fechas y el informe de asistencias las excluye de las faltas.
 
 Los cálculos de descuentos (valor día, valor minuto) se hacen en el frontend con `src/utils/planilla.ts` a partir de la config y las incidencias.
 
