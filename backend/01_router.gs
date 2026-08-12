@@ -86,6 +86,7 @@ var ROUTES = {
   subirJustificacion: { nivel: 'publico', handler: function (ctx) { return subirJustificacion(ctx.data); } },
   getAsistenciasV2: { nivel: 'auth', handler: function (ctx) { return getAsistenciasV2(ctx.data); } },
   getJustificaciones: { nivel: 'auth', handler: function (ctx) { return getJustificaciones(ctx.data); } },
+  registrarAsistenciaManual: { nivel: 'auth', handler: function (ctx) { return registrarAsistenciaManual(ctx.data); } },
 
   // === PLANILLA (datos sensibles: sueldos → nivel admin) ===
   getConfigPlanilla: { nivel: 'admin', handler: function () { return getConfigPlanillaAction(); } },

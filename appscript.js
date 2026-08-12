@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-08-12T19:52:02.786Z con tools/build-backend.mjs
+// Generado: 2026-08-12T20:06:22.875Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -402,6 +402,7 @@ var ROUTES = {
   subirJustificacion: { nivel: 'publico', handler: function (ctx) { return subirJustificacion(ctx.data); } },
   getAsistenciasV2: { nivel: 'auth', handler: function (ctx) { return getAsistenciasV2(ctx.data); } },
   getJustificaciones: { nivel: 'auth', handler: function (ctx) { return getJustificaciones(ctx.data); } },
+  registrarAsistenciaManual: { nivel: 'auth', handler: function (ctx) { return registrarAsistenciaManual(ctx.data); } },
 
   // === PLANILLA (datos sensibles: sueldos → nivel admin) ===
   getConfigPlanilla: { nivel: 'admin', handler: function () { return getConfigPlanillaAction(); } },
@@ -3635,6 +3636,80 @@ function subirJustificacion(data) {
 
 // ── Admin (requieren token) ─────────────────────────────────
 
+// Registro manual desde el panel: para marcas que el trabajador no pudo hacer
+// (error del sistema, olvido justificado, etc.). Sin foto ni GPS; la 'nota'
+// (observacion) es OBLIGATORIA para auditoria. En el panel se distingue por
+// foto_url vacio -> badge "manual".
+function registrarAsistenciaManual(data) {
+  var dni = String(data.dni || '');
+  var evento = String(data.evento || '');
+  var fecha = String(data.fecha || '');
+  var hora = String(data.hora || '');
+  var nota = String(data.nota || '').trim();
+
+  var esCampo = EVENTOS_CAMPO.indexOf(evento) !== -1;
+  if (!/^\d{8}$/.test(dni)) return { success: false, error: 'DNI invalido' };
+  if (EVENTOS_ASISTENCIA_V2.indexOf(evento) === -1 && !esCampo) return { success: false, error: 'Evento invalido' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return { success: false, error: 'Fecha invalida (yyyy-mm-dd)' };
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) return { success: false, error: 'Hora invalida (HH:mm)' };
+  if (!nota) return { success: false, error: 'La observacion es obligatoria (auditoria del registro manual)' };
+
+  // nombre/cargo siempre desde el roster real, nunca desde el cliente
+  var roster = leerRosterReal_();
+  var trab = null;
+  for (var k = 0; k < roster.length; k++) { if (roster[k].dni === dni) { trab = roster[k]; break; } }
+  if (!trab) return { success: false, error: 'DNI no encontrado en el roster' };
+
+  // timestamp UTC coherente con las marcas del kiosko (hora America/Lima)
+  var ts = new Date(fecha + 'T' + hora + ':00-05:00');
+
+  return withLock_(function () {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = getOrCreateAsistenciaSheet_(ss, 'asistencias_v2', HEADERS_ASISTENCIAS_V2);
+
+    // Columna 'nota' (13): se agrega al header si la hoja aun no la tiene.
+    // Las filas antiguas simplemente la tienen vacia.
+    var headerRow = sheet.getRange(1, 1, 1, HEADERS_ASISTENCIAS_V2.length + 1).getValues()[0];
+    if (headerRow.indexOf('nota') < 0) {
+      sheet.getRange(1, HEADERS_ASISTENCIAS_V2.length + 1).setValue('nota').setFontWeight('bold');
+    }
+
+    // Anti-duplicado igual que el kiosko (solo eventos de oficina)
+    if (!esCampo) {
+      var rows = sheet.getDataRange().getValues();
+      var headers = rows[0];
+      var dniCol = headers.indexOf('dni');
+      var eventoCol = headers.indexOf('evento');
+      var fechaCol = headers.indexOf('fecha');
+      for (var i = 1; i < rows.length; i++) {
+        var celdaFecha = rows[i][fechaCol];
+        var fechaFila = (celdaFecha instanceof Date)
+          ? Utilities.formatDate(celdaFecha, 'America/Lima', 'yyyy-MM-dd')
+          : String(celdaFecha);
+        if (String(rows[i][dniCol]) === dni && rows[i][eventoCol] === evento && fechaFila === fecha) {
+          return { success: false, error: 'Ese evento ya esta registrado para ese trabajador ese dia' };
+        }
+      }
+    }
+
+    sheet.appendRow([
+      Utilities.getUuid(),
+      dni,
+      trab.nombre,
+      trab.cargo,
+      evento,
+      fecha,
+      hora + ':00',
+      '', '', '',  // sin GPS
+      '',          // sin foto -> el panel lo muestra como registro manual
+      ts.toISOString(),
+      nota
+    ]);
+
+    return { success: true, data: { evento: evento, fecha: fecha, hora: hora, nombre: trab.nombre } };
+  });
+}
+
 function filtrarPorRango_(result, data) {
   if (data && data.dni) {
     result = result.filter(function(r) { return String(r.dni) === String(data.dni); });
@@ -5322,6 +5397,7 @@ var FUNCIONES_REQUERIDAS = [
   'uploadFile', 'getArchivo', 'getDashboardStats',
   'verificarEmpleado', 'marcarAsistencia', 'getAttendances', 'obtenerAsistenciasHoy',
   'getTrabajadores', 'registrarAsistenciaFoto', 'subirJustificacion', 'getAsistenciasV2', 'getJustificaciones',
+  'registrarAsistenciaManual',
   'getConfigPlanillaAction', 'updateConfigPlanilla', 'getSueldos', 'updateSueldo', 'crearTrabajador',
   'getIncidencias', 'revisarIncidencia', 'sincronizarIncidencias',
   'autorizarSalida5pm', 'getAutorizaciones5pm', 'registrarMuestreo', 'getBolsaHoras',

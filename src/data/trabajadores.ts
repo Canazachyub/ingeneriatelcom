@@ -79,6 +79,7 @@ export interface RegistroAsistencia {
   gps_lng?: number | string
   gps_accuracy?: number | string
   foto_url?: string
+  nota?: string          // registros manuales del admin (foto_url vacío)
   timestamp?: string
 }
 

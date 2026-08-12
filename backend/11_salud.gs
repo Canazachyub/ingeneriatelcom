@@ -30,6 +30,7 @@ var FUNCIONES_REQUERIDAS = [
   'uploadFile', 'getArchivo', 'getDashboardStats',
   'verificarEmpleado', 'marcarAsistencia', 'getAttendances', 'obtenerAsistenciasHoy',
   'getTrabajadores', 'registrarAsistenciaFoto', 'subirJustificacion', 'getAsistenciasV2', 'getJustificaciones',
+  'registrarAsistenciaManual',
   'getConfigPlanillaAction', 'updateConfigPlanilla', 'getSueldos', 'updateSueldo', 'crearTrabajador',
   'getIncidencias', 'revisarIncidencia', 'sincronizarIncidencias',
   'autorizarSalida5pm', 'getAutorizaciones5pm', 'registrarMuestreo', 'getBolsaHoras',

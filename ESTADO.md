@@ -334,7 +334,16 @@ La fuente del backend ya NO es `appscript.js` a mano: es **`backend/*.gs`** (mó
 - **8 GET `getTrabajadores` simultáneos** → 8/8 HTTP 200 en 1.4–1.9 s (caché activo: 3.6 s en frío → ~2 s cacheado).
 - **3 `registrarAsistenciaFoto` simultáneos** (DNIs de prueba 99999991/92/93) → 3/3 `success:true` en 5–7.3 s, sin "Sistema ocupado".
 - **2 registros simultáneos del mismo DNI+evento** → expusieron el bug de anti-duplicado (ambos pasaron); corregido arriba.
-- Limpieza pendiente: borrar en la hoja `asistencias_v2` las 5 filas de prueba del 12/08/2026 con DNIs 9999999x ("PRUEBA CONCURRENCIA") y sus fotos en Drive `Asistencias/2026-08-12/9999999x/`.
+- Limpieza pendiente: borrar en la hoja `asistencias_v2` las filas de prueba del 12/08/2026 con DNIs 9999999x ("PRUEBA CONCURRENCIA") y sus fotos en Drive `Asistencias/2026-08-12/9999999x/`.
+
+### Registro manual de asistencia desde el panel (12/08/2026)
+
+Nueva action `registrarAsistenciaManual` (nivel auth) + botón **"Registrar manual"** en `/admin/asistencias`: el admin puede registrar la marca que un trabajador no pudo hacer (p. ej. por el error de concurrencia). Reglas:
+
+- Valida DNI contra el roster real, evento válido (oficina o campo), fecha `yyyy-mm-dd` y hora `HH:mm`; nombre/cargo se toman del roster, nunca del cliente.
+- **Observación obligatoria** (`nota`, columna 13 que se agrega al header de `asistencias_v2` si no existe) — auditoría del registro manual.
+- Sin foto ni GPS: el panel muestra badge "· manual" (tooltip con la nota). El timestamp se construye como `fechaThora-05:00` para que `getAsistenciasV2` y `sincronizarIncidencias` lo traten igual que una marca del kiosko (cancela falta/tardanza correspondiente).
+- Mismo anti-duplicado del kiosko para eventos de oficina (no permite duplicar un evento ya registrado ese día).
 
 ### ⚠️ Checklist de deploy (backend, manual)
 

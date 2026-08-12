@@ -877,6 +877,18 @@ class AppScriptApi {
     return this.request('getAsistenciasV2', 'POST', (filtros || {}) as Record<string, unknown>)
   }
 
+  // Registro manual desde el panel (marca que el trabajador no pudo hacer).
+  // La nota/observación es obligatoria (auditoría). Sin foto ni GPS.
+  async registrarAsistenciaManual(data: {
+    dni: string
+    evento: string
+    fecha: string
+    hora: string
+    nota: string
+  }): Promise<ApiResponse<{ evento: string; fecha: string; hora: string; nombre: string }>> {
+    return this.request('registrarAsistenciaManual', 'POST', data as unknown as Record<string, unknown>)
+  }
+
   async getJustificaciones(filtros?: {
     dni?: string
     desde?: string

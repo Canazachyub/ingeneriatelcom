@@ -12,6 +12,8 @@ import {
   FaChartBar,
   FaCheckCircle,
   FaExclamationTriangle,
+  FaUserClock,
+  FaTimes,
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
@@ -101,6 +103,15 @@ export default function AttendancePage() {
   const [fotoModal, setFotoModal] = useState<RegistroAsistencia | null>(null)
   const [justModal, setJustModal] = useState<Justificacion | null>(null)
 
+  // Registro manual (marca que el trabajador no pudo hacer: error del sistema, etc.)
+  const [manualOpen, setManualOpen] = useState(false)
+  const [manualDni, setManualDni] = useState('')
+  const [manualEvento, setManualEvento] = useState('')
+  const [manualFecha, setManualFecha] = useState(toLocalISO(new Date()))
+  const [manualHora, setManualHora] = useState('')
+  const [manualNota, setManualNota] = useState('')
+  const [manualSaving, setManualSaving] = useState(false)
+
   // Roster de trabajadores (hoja 'sueldos' vía endpoint público, sin montos).
   // Fuente única de verdad: altas/bajas del panel de Planilla se reflejan sin redeploy.
   useEffect(() => {
@@ -162,6 +173,56 @@ export default function AttendancePage() {
     const d = new Date()
     setDesde(maxFecha(toLocalISO(new Date(d.getFullYear(), d.getMonth(), 1)), FECHA_INICIO_REPORTE))
     setHasta(toLocalISO(d))
+  }
+
+  // ── Registro manual ────────────────────────────────────────
+  const trabajadorManual = trabajadores.find((t) => t.dni === manualDni)
+  const eventosManual = trabajadorManual?.registro_simple
+    ? [
+        { key: 'ingreso_campo', label: 'Ingreso (campo)' },
+        { key: 'salida_campo', label: 'Salida (campo)' },
+      ]
+    : EVENTOS.map((e) => ({ key: e.key, label: e.label }))
+
+  const abrirManual = () => {
+    setManualDni('')
+    setManualEvento('')
+    setManualFecha(toLocalISO(new Date()))
+    setManualHora('')
+    setManualNota('')
+    setManualOpen(true)
+  }
+
+  const handleRegistrarManual = async () => {
+    if (!manualDni || !manualEvento || !manualFecha || !manualHora) {
+      toast.error('Completa trabajador, evento, fecha y hora')
+      return
+    }
+    if (!manualNota.trim()) {
+      toast.error('La observación es obligatoria (queda como evidencia del registro manual)')
+      return
+    }
+    setManualSaving(true)
+    try {
+      const res = await api.registrarAsistenciaManual({
+        dni: manualDni,
+        evento: manualEvento,
+        fecha: manualFecha,
+        hora: manualHora,
+        nota: manualNota.trim(),
+      })
+      if (res.success) {
+        toast.success(`Registrado: ${res.data?.nombre || ''} · ${EVENTO_LABELS[manualEvento] || manualEvento} ${manualFecha} ${manualHora}`)
+        setManualOpen(false)
+        loadData()
+      } else {
+        toast.error(res.error || 'No se pudo registrar')
+      }
+    } catch {
+      toast.error('Error de conexión. Intenta de nuevo.')
+    } finally {
+      setManualSaving(false)
+    }
   }
 
   const registrosOrdenados = useMemo(
@@ -269,13 +330,22 @@ export default function AttendancePage() {
               Registros con foto y GPS · Informes semanales y mensuales
             </p>
           </div>
-          <button
-            onClick={tab === 'informe' ? exportarInforme : exportarRegistros}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-accent-electric/20 border border-accent-electric/40 text-accent-electric rounded-lg text-sm font-medium hover:bg-accent-electric/30 transition-colors self-start"
-          >
-            <FaDownload className="text-xs" />
-            Exportar CSV
-          </button>
+          <div className="flex items-center gap-2 self-start">
+            <button
+              onClick={abrirManual}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-accent-energy/15 border border-accent-energy/40 text-accent-energy rounded-lg text-sm font-medium hover:bg-accent-energy/25 transition-colors"
+            >
+              <FaUserClock className="text-xs" />
+              Registrar manual
+            </button>
+            <button
+              onClick={tab === 'informe' ? exportarInforme : exportarRegistros}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-accent-electric/20 border border-accent-electric/40 text-accent-electric rounded-lg text-sm font-medium hover:bg-accent-electric/30 transition-colors"
+            >
+              <FaDownload className="text-xs" />
+              Exportar CSV
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -409,6 +479,11 @@ export default function AttendancePage() {
                             }`}>
                               {EVENTO_LABELS[r.evento] || r.evento}
                               {!cfg && <span className="ml-1 opacity-60">· campo</span>}
+                              {!r.foto_url && (
+                                <span className="ml-1 opacity-80" title={r.nota ? `Registro manual: ${r.nota}` : 'Registro manual (sin foto)'}>
+                                  · manual
+                                </span>
+                              )}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center text-gray-300 hidden sm:table-cell">{r.fecha}</td>
@@ -651,6 +726,99 @@ export default function AttendancePage() {
             title={`${justModal.nombre} · ${justModal.motivo} · ${justModal.fecha}`}
             onClose={() => setJustModal(null)}
           />
+        )}
+
+        {/* ── Modal registro manual ── */}
+        {manualOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => !manualSaving && setManualOpen(false)}>
+            <div
+              className="w-full max-w-md bg-primary-900 border border-primary-700 rounded-2xl p-6 space-y-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <FaUserClock className="text-accent-energy" />
+                  Registrar asistencia manual
+                </h3>
+                <button
+                  onClick={() => !manualSaving && setManualOpen(false)}
+                  className="text-gray-500 hover:text-white transition-colors"
+                >
+                  <FaTimes />
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 leading-snug">
+                Para marcas que el trabajador no pudo hacer (error del sistema, olvido justificado, etc.).
+                Se guarda <span className="text-amber-300">sin foto ni GPS</span> y con la observación como evidencia.
+              </p>
+
+              <div className="space-y-3">
+                <select
+                  value={manualDni}
+                  onChange={(e) => { setManualDni(e.target.value); setManualEvento('') }}
+                  className="w-full px-3 py-2.5 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric transition-colors"
+                >
+                  <option value="">Selecciona trabajador…</option>
+                  {trabajadores.map((t) => (
+                    <option key={t.dni} value={t.dni}>{t.nombre} — {t.cargo}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={manualEvento}
+                  onChange={(e) => setManualEvento(e.target.value)}
+                  disabled={!manualDni}
+                  className="w-full px-3 py-2.5 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric transition-colors disabled:opacity-50"
+                >
+                  <option value="">Selecciona evento…</option>
+                  {eventosManual.map((ev) => (
+                    <option key={ev.key} value={ev.key}>{ev.label}</option>
+                  ))}
+                </select>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="date"
+                    value={manualFecha}
+                    max={toLocalISO(new Date())}
+                    onChange={(e) => setManualFecha(e.target.value)}
+                    className="px-3 py-2.5 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric transition-colors"
+                  />
+                  <input
+                    type="time"
+                    value={manualHora}
+                    onChange={(e) => setManualHora(e.target.value)}
+                    className="px-3 py-2.5 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric transition-colors"
+                  />
+                </div>
+
+                <textarea
+                  value={manualNota}
+                  onChange={(e) => setManualNota(e.target.value)}
+                  rows={2}
+                  placeholder="Observación (obligatoria): ej. El sistema no le permitió registrar a las 2:00 pm"
+                  className="w-full px-3 py-2.5 bg-primary-950 border border-primary-800 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric transition-colors resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => setManualOpen(false)}
+                  disabled={manualSaving}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium border border-primary-700 text-gray-300 hover:text-white hover:border-primary-600 transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleRegistrarManual}
+                  disabled={manualSaving}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-bold bg-accent-energy text-primary-950 hover:brightness-110 transition-all disabled:opacity-50"
+                >
+                  {manualSaving ? 'Guardando…' : 'Registrar'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </AdminLayout>
