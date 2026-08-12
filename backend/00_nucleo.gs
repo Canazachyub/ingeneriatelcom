@@ -123,7 +123,7 @@ function rowToObject(headers, row) {
 // duplicados cuando dos requests escriben a la vez (kiosko + admin).
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
-  const acquired = lock.tryLock(20000); // hasta 20s de espera
+  const acquired = lock.tryLock(30000); // hasta 30s de espera (maximo permitido)
   if (!acquired) {
     return { success: false, error: 'Sistema ocupado, intenta de nuevo en unos segundos' };
   }

@@ -191,15 +191,35 @@ function getSueldos() {
 
 // Lista publica para el kiosko de asistencia: SIN sueldos ni correos.
 // registro_simple = trabajador de campo (sin correo): flujo Ingreso/Salida simple.
+// Cacheada 10 min: a la hora de ingreso muchos trabajadores abren el kiosko a
+// la vez; responder desde CacheService evita abrir el Spreadsheet en cada
+// request (cada openById tarda ~1s y bajo rafaga alguna peticion falla).
+var CACHE_KEY_TRABAJADORES = 'kiosk_trabajadores_v1';
+var CACHE_TTL_TRABAJADORES = 600; // 10 min (max practico de CacheService)
+
+function invalidarCacheTrabajadores_() {
+  try {
+    CacheService.getScriptCache().remove(CACHE_KEY_TRABAJADORES);
+  } catch (e) { /* si el cache falla, expira solo en 10 min */ }
+}
+
 function getTrabajadores() {
+  try {
+    var cached = CacheService.getScriptCache().get(CACHE_KEY_TRABAJADORES);
+    if (cached) return { success: true, data: JSON.parse(cached) };
+  } catch (e) { /* cache no disponible: seguir contra Sheets */ }
+
   var res = getSueldos();
   if (!res.success) return res;
-  return {
-    success: true,
-    data: res.data.map(function(t) {
-      return { dni: t.dni, nombre: t.nombre, cargo: t.cargo, sede: t.sede || '', registro_simple: !t.email };
-    })
-  };
+  var lista = res.data.map(function(t) {
+    return { dni: t.dni, nombre: t.nombre, cargo: t.cargo, sede: t.sede || '', registro_simple: !t.email };
+  });
+
+  try {
+    CacheService.getScriptCache().put(CACHE_KEY_TRABAJADORES, JSON.stringify(lista), CACHE_TTL_TRABAJADORES);
+  } catch (e) { /* no critico */ }
+
+  return { success: true, data: lista };
 }
 
 function updateSueldo(data) {
@@ -217,6 +237,7 @@ function updateSueldo(data) {
           return { success: false, error: 'Este trabajador gana la RMV: su sueldo se ajusta con el parametro rmv de la configuracion' };
         }
         sheet.getRange(i + 1, sueldoCol + 1).setValue(Number(data.sueldo) || 0);
+        invalidarCacheTrabajadores_();
         return { success: true, message: 'Sueldo actualizado' };
       }
     }
@@ -250,6 +271,7 @@ function crearTrabajador(data) {
       data.sede || 'Principal',
       data.email || ''
     ]);
+    invalidarCacheTrabajadores_();
     return { success: true, message: 'Trabajador creado: ' + data.nombre };
   });
 }

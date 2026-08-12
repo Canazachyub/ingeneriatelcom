@@ -36,6 +36,8 @@ import {
 
 type ViewState = 'input' | 'menu' | 'camara' | 'justificacion' | 'success' | 'error'
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 const MOTIVOS_JUSTIFICACION = [
   'Tardanza',
   'Inasistencia',
@@ -80,17 +82,28 @@ export default function AsistenciaPage() {
   const cargarTrabajadores = useCallback(() => {
     setCargandoLista(true)
     setErrorLista(false)
-    api.getTrabajadores().then((res) => {
-      if (res.success && res.data && res.data.length > 0) {
-        setListaTrabajadores(res.data)
-      } else {
+    // Reintentos con espera: a la hora de ingreso varios trabajadores abren el
+    // kiosko a la vez y el backend (Apps Script) puede responder un error
+    // transitorio. Solo si los 3 intentos fallan se muestra la pantalla de error.
+    const intentar = async (intento: number): Promise<void> => {
+      try {
+        const res = await api.getTrabajadores()
+        if (res.success && res.data && res.data.length > 0) {
+          setListaTrabajadores(res.data)
+          return
+        }
+        throw new Error(res.error || 'Lista vacía')
+      } catch {
+        if (intento < 2) {
+          await sleep(intento === 0 ? 1500 : 3000)
+          return intentar(intento + 1)
+        }
         setErrorLista(true)
+      } finally {
+        if (intento === 2) setCargandoLista(false)
       }
-    }).catch(() => {
-      setErrorLista(true)
-    }).finally(() => {
-      setCargandoLista(false)
-    })
+    }
+    intentar(0).then(() => setCargandoLista(false))
   }, [])
 
   useEffect(() => {
@@ -213,18 +226,25 @@ export default function AsistenciaPage() {
       return
     }
     setIsLoading(true)
+    const payload = {
+      dni: trabajador.dni,
+      nombre: trabajador.nombre,
+      cargo: trabajador.cargo,
+      evento: eventoSel,
+      gps_lat: location.lat,
+      gps_lng: location.lng,
+      gps_accuracy: location.accuracy,
+      fileContent: fotoPreview.split(',')[1],
+      mimeType: 'image/jpeg',
+    }
     try {
-      const res = await api.registrarAsistenciaFoto({
-        dni: trabajador.dni,
-        nombre: trabajador.nombre,
-        cargo: trabajador.cargo,
-        evento: eventoSel,
-        gps_lat: location.lat,
-        gps_lng: location.lng,
-        gps_accuracy: location.accuracy,
-        fileContent: fotoPreview.split(',')[1],
-        mimeType: 'image/jpeg',
-      })
+      let res = await api.registrarAsistenciaFoto(payload)
+      // "Sistema ocupado" = el backend NO escribió nada (no obtuvo el lock):
+      // es seguro reintentar una vez tras una breve espera.
+      if (!res.success && res.error && res.error.indexOf('Sistema ocupado') !== -1) {
+        await sleep(2500)
+        res = await api.registrarAsistenciaFoto(payload)
+      }
       if (res.success && res.data) {
         detenerCamara()
         setHoraRegistro(res.data.hora)

@@ -207,6 +207,7 @@ function createEmployee(data) {
     // Registrar alta en historial
     addHistoryRecord(emp.id, 'ingreso', null, sede, 'Ingreso a la empresa');
 
+    invalidarCacheTrabajadores_();
     return { success: true, data: emp, message: 'Empleado registrado exitosamente' };
   });
 }
@@ -247,6 +248,7 @@ function updateEmployee(data) {
         // phone, department, status: la hoja sueldos no los tiene -> se ignoran con gracia.
 
         const trabajador = leerRosterReal_().filter(function(t) { return t.dni === dni; })[0];
+        invalidarCacheTrabajadores_();
         return { success: true, data: trabajadorRosterAEmployee_(trabajador), message: 'Empleado actualizado' };
       }
 
@@ -329,6 +331,7 @@ function transferEmployee(data) {
           sendTransferNotification(emp.email, emp.nombre_completo, ciudadAnterior, nuevaCiudad);
         }
 
+        invalidarCacheTrabajadores_();
         return { success: true, data: emp, message: 'Empleado transferido exitosamente' };
       }
 

@@ -414,6 +414,25 @@ function registrarAsistenciaFoto(data) {
   var fecha = Utilities.formatDate(ahora, 'America/Lima', 'yyyy-MM-dd');
   var hora = Utilities.formatDate(ahora, 'America/Lima', 'HH:mm:ss');
 
+  // Subir foto a Drive FUERA del lock: la subida tarda varios segundos y
+  // mantener el lock global durante la subida hacia esperar (y fallar con
+  // "Sistema ocupado") a los demas trabajadores que marcan a la misma hora.
+  var fotoUrl = '';
+  try {
+    var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+    var asisFolder = getOrCreateFolder(mainFolder, 'Asistencias');
+    var fechaFolder = getOrCreateFolder(asisFolder, fecha);
+    var dniFolder = getOrCreateFolder(fechaFolder, dni);
+    var fileName = evento + '_' + ahora.getTime() + '.jpg';
+    var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
+    var file = dniFolder.createFile(blob);
+    // C6: archivo privado — el visor admin lo sirve via getArchivo (nivel auth)
+    fotoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
+  } catch (e) {
+    return { success: false, error: 'Error al guardar la foto: ' + e.message };
+  }
+
+  // Lock solo para la verificacion anti-duplicado + appendRow (<1s)
   return withLock_(function () {
     var ss = SpreadsheetApp.openById(SHEET_ID);
     var sheet = getOrCreateAsistenciaSheet_(ss, 'asistencias_v2', HEADERS_ASISTENCIAS_V2);
@@ -427,26 +446,16 @@ function registrarAsistenciaFoto(data) {
       var eventoCol = headers.indexOf('evento');
       var fechaCol = headers.indexOf('fecha');
       for (var i = 1; i < rows.length; i++) {
-        if (String(rows[i][dniCol]) === dni && rows[i][eventoCol] === evento && String(rows[i][fechaCol]) === fecha) {
+        // Sheets auto-convierte 'yyyy-MM-dd' a Date al appendRow: normalizar
+        // antes de comparar o el anti-duplicado nunca matchea.
+        var celdaFecha = rows[i][fechaCol];
+        var fechaFila = (celdaFecha instanceof Date)
+          ? Utilities.formatDate(celdaFecha, 'America/Lima', 'yyyy-MM-dd')
+          : String(celdaFecha);
+        if (String(rows[i][dniCol]) === dni && rows[i][eventoCol] === evento && fechaFila === fecha) {
           return { success: false, error: 'Ya registraste este evento hoy' };
         }
       }
-    }
-
-    // Subir foto a Drive: Asistencias/<fecha>/<dni>/
-    var fotoUrl = '';
-    try {
-      var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-      var asisFolder = getOrCreateFolder(mainFolder, 'Asistencias');
-      var fechaFolder = getOrCreateFolder(asisFolder, fecha);
-      var dniFolder = getOrCreateFolder(fechaFolder, dni);
-      var fileName = evento + '_' + ahora.getTime() + '.jpg';
-      var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
-      var file = dniFolder.createFile(blob);
-      // C6: archivo privado — el visor admin lo sirve via getArchivo (nivel auth)
-      fotoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
-    } catch (e) {
-      return { success: false, error: 'Error al guardar la foto: ' + e.message };
     }
 
     sheet.appendRow([
@@ -486,27 +495,28 @@ function subirJustificacion(data) {
   var ahora = new Date();
   var fecha = Utilities.formatDate(ahora, 'America/Lima', 'yyyy-MM-dd');
 
+  // Subir el adjunto a Drive FUERA del lock (mismo motivo que en
+  // registrarAsistenciaFoto: la subida tarda y no debe bloquear a otros).
+  var archivoUrl = '';
+  if (data.fileContent) {
+    try {
+      var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+      var justFolder = getOrCreateFolder(mainFolder, 'Justificaciones');
+      var fechaFolder = getOrCreateFolder(justFolder, fecha);
+      var dniFolder = getOrCreateFolder(fechaFolder, dni);
+      var fileName = data.fileName || ('just_' + ahora.getTime() + '.jpg');
+      var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
+      var file = dniFolder.createFile(blob);
+      // C6: archivo privado — el visor admin lo sirve via getArchivo (nivel auth)
+      archivoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
+    } catch (e) {
+      return { success: false, error: 'Error al guardar el archivo: ' + e.message };
+    }
+  }
+
   return withLock_(function () {
     var ss = SpreadsheetApp.openById(SHEET_ID);
     var sheet = getOrCreateAsistenciaSheet_(ss, 'justificaciones', HEADERS_JUSTIFICACIONES);
-
-    // Archivo adjunto opcional (foto o documento)
-    var archivoUrl = '';
-    if (data.fileContent) {
-      try {
-        var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-        var justFolder = getOrCreateFolder(mainFolder, 'Justificaciones');
-        var fechaFolder = getOrCreateFolder(justFolder, fecha);
-        var dniFolder = getOrCreateFolder(fechaFolder, dni);
-        var fileName = data.fileName || ('just_' + ahora.getTime() + '.jpg');
-        var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
-        var file = dniFolder.createFile(blob);
-        // C6: archivo privado — el visor admin lo sirve via getArchivo (nivel auth)
-        archivoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
-      } catch (e) {
-        return { success: false, error: 'Error al guardar el archivo: ' + e.message };
-      }
-    }
 
     sheet.appendRow([
       Utilities.getUuid(),

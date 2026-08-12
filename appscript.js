@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-07-10T11:53:53.019Z con tools/build-backend.mjs
+// Generado: 2026-08-12T19:52:02.786Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -131,7 +131,7 @@ function rowToObject(headers, row) {
 // duplicados cuando dos requests escriben a la vez (kiosko + admin).
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
-  const acquired = lock.tryLock(20000); // hasta 20s de espera
+  const acquired = lock.tryLock(30000); // hasta 30s de espera (maximo permitido)
   if (!acquired) {
     return { success: false, error: 'Sistema ocupado, intenta de nuevo en unos segundos' };
   }
@@ -1170,6 +1170,7 @@ function createEmployee(data) {
     // Registrar alta en historial
     addHistoryRecord(emp.id, 'ingreso', null, sede, 'Ingreso a la empresa');
 
+    invalidarCacheTrabajadores_();
     return { success: true, data: emp, message: 'Empleado registrado exitosamente' };
   });
 }
@@ -1210,6 +1211,7 @@ function updateEmployee(data) {
         // phone, department, status: la hoja sueldos no los tiene -> se ignoran con gracia.
 
         const trabajador = leerRosterReal_().filter(function(t) { return t.dni === dni; })[0];
+        invalidarCacheTrabajadores_();
         return { success: true, data: trabajadorRosterAEmployee_(trabajador), message: 'Empleado actualizado' };
       }
 
@@ -1292,6 +1294,7 @@ function transferEmployee(data) {
           sendTransferNotification(emp.email, emp.nombre_completo, ciudadAnterior, nuevaCiudad);
         }
 
+        invalidarCacheTrabajadores_();
         return { success: true, data: emp, message: 'Empleado transferido exitosamente' };
       }
 
@@ -3510,6 +3513,25 @@ function registrarAsistenciaFoto(data) {
   var fecha = Utilities.formatDate(ahora, 'America/Lima', 'yyyy-MM-dd');
   var hora = Utilities.formatDate(ahora, 'America/Lima', 'HH:mm:ss');
 
+  // Subir foto a Drive FUERA del lock: la subida tarda varios segundos y
+  // mantener el lock global durante la subida hacia esperar (y fallar con
+  // "Sistema ocupado") a los demas trabajadores que marcan a la misma hora.
+  var fotoUrl = '';
+  try {
+    var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+    var asisFolder = getOrCreateFolder(mainFolder, 'Asistencias');
+    var fechaFolder = getOrCreateFolder(asisFolder, fecha);
+    var dniFolder = getOrCreateFolder(fechaFolder, dni);
+    var fileName = evento + '_' + ahora.getTime() + '.jpg';
+    var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
+    var file = dniFolder.createFile(blob);
+    // C6: archivo privado — el visor admin lo sirve via getArchivo (nivel auth)
+    fotoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
+  } catch (e) {
+    return { success: false, error: 'Error al guardar la foto: ' + e.message };
+  }
+
+  // Lock solo para la verificacion anti-duplicado + appendRow (<1s)
   return withLock_(function () {
     var ss = SpreadsheetApp.openById(SHEET_ID);
     var sheet = getOrCreateAsistenciaSheet_(ss, 'asistencias_v2', HEADERS_ASISTENCIAS_V2);
@@ -3523,26 +3545,16 @@ function registrarAsistenciaFoto(data) {
       var eventoCol = headers.indexOf('evento');
       var fechaCol = headers.indexOf('fecha');
       for (var i = 1; i < rows.length; i++) {
-        if (String(rows[i][dniCol]) === dni && rows[i][eventoCol] === evento && String(rows[i][fechaCol]) === fecha) {
+        // Sheets auto-convierte 'yyyy-MM-dd' a Date al appendRow: normalizar
+        // antes de comparar o el anti-duplicado nunca matchea.
+        var celdaFecha = rows[i][fechaCol];
+        var fechaFila = (celdaFecha instanceof Date)
+          ? Utilities.formatDate(celdaFecha, 'America/Lima', 'yyyy-MM-dd')
+          : String(celdaFecha);
+        if (String(rows[i][dniCol]) === dni && rows[i][eventoCol] === evento && fechaFila === fecha) {
           return { success: false, error: 'Ya registraste este evento hoy' };
         }
       }
-    }
-
-    // Subir foto a Drive: Asistencias/<fecha>/<dni>/
-    var fotoUrl = '';
-    try {
-      var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-      var asisFolder = getOrCreateFolder(mainFolder, 'Asistencias');
-      var fechaFolder = getOrCreateFolder(asisFolder, fecha);
-      var dniFolder = getOrCreateFolder(fechaFolder, dni);
-      var fileName = evento + '_' + ahora.getTime() + '.jpg';
-      var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
-      var file = dniFolder.createFile(blob);
-      // C6: archivo privado — el visor admin lo sirve via getArchivo (nivel auth)
-      fotoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
-    } catch (e) {
-      return { success: false, error: 'Error al guardar la foto: ' + e.message };
     }
 
     sheet.appendRow([
@@ -3582,27 +3594,28 @@ function subirJustificacion(data) {
   var ahora = new Date();
   var fecha = Utilities.formatDate(ahora, 'America/Lima', 'yyyy-MM-dd');
 
+  // Subir el adjunto a Drive FUERA del lock (mismo motivo que en
+  // registrarAsistenciaFoto: la subida tarda y no debe bloquear a otros).
+  var archivoUrl = '';
+  if (data.fileContent) {
+    try {
+      var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+      var justFolder = getOrCreateFolder(mainFolder, 'Justificaciones');
+      var fechaFolder = getOrCreateFolder(justFolder, fecha);
+      var dniFolder = getOrCreateFolder(fechaFolder, dni);
+      var fileName = data.fileName || ('just_' + ahora.getTime() + '.jpg');
+      var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
+      var file = dniFolder.createFile(blob);
+      // C6: archivo privado — el visor admin lo sirve via getArchivo (nivel auth)
+      archivoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
+    } catch (e) {
+      return { success: false, error: 'Error al guardar el archivo: ' + e.message };
+    }
+  }
+
   return withLock_(function () {
     var ss = SpreadsheetApp.openById(SHEET_ID);
     var sheet = getOrCreateAsistenciaSheet_(ss, 'justificaciones', HEADERS_JUSTIFICACIONES);
-
-    // Archivo adjunto opcional (foto o documento)
-    var archivoUrl = '';
-    if (data.fileContent) {
-      try {
-        var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-        var justFolder = getOrCreateFolder(mainFolder, 'Justificaciones');
-        var fechaFolder = getOrCreateFolder(justFolder, fecha);
-        var dniFolder = getOrCreateFolder(fechaFolder, dni);
-        var fileName = data.fileName || ('just_' + ahora.getTime() + '.jpg');
-        var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
-        var file = dniFolder.createFile(blob);
-        // C6: archivo privado — el visor admin lo sirve via getArchivo (nivel auth)
-        archivoUrl = 'https://drive.google.com/file/d/' + file.getId() + '/view';
-      } catch (e) {
-        return { success: false, error: 'Error al guardar el archivo: ' + e.message };
-      }
-    }
 
     sheet.appendRow([
       Utilities.getUuid(),
@@ -3892,15 +3905,35 @@ function getSueldos() {
 
 // Lista publica para el kiosko de asistencia: SIN sueldos ni correos.
 // registro_simple = trabajador de campo (sin correo): flujo Ingreso/Salida simple.
+// Cacheada 10 min: a la hora de ingreso muchos trabajadores abren el kiosko a
+// la vez; responder desde CacheService evita abrir el Spreadsheet en cada
+// request (cada openById tarda ~1s y bajo rafaga alguna peticion falla).
+var CACHE_KEY_TRABAJADORES = 'kiosk_trabajadores_v1';
+var CACHE_TTL_TRABAJADORES = 600; // 10 min (max practico de CacheService)
+
+function invalidarCacheTrabajadores_() {
+  try {
+    CacheService.getScriptCache().remove(CACHE_KEY_TRABAJADORES);
+  } catch (e) { /* si el cache falla, expira solo en 10 min */ }
+}
+
 function getTrabajadores() {
+  try {
+    var cached = CacheService.getScriptCache().get(CACHE_KEY_TRABAJADORES);
+    if (cached) return { success: true, data: JSON.parse(cached) };
+  } catch (e) { /* cache no disponible: seguir contra Sheets */ }
+
   var res = getSueldos();
   if (!res.success) return res;
-  return {
-    success: true,
-    data: res.data.map(function(t) {
-      return { dni: t.dni, nombre: t.nombre, cargo: t.cargo, sede: t.sede || '', registro_simple: !t.email };
-    })
-  };
+  var lista = res.data.map(function(t) {
+    return { dni: t.dni, nombre: t.nombre, cargo: t.cargo, sede: t.sede || '', registro_simple: !t.email };
+  });
+
+  try {
+    CacheService.getScriptCache().put(CACHE_KEY_TRABAJADORES, JSON.stringify(lista), CACHE_TTL_TRABAJADORES);
+  } catch (e) { /* no critico */ }
+
+  return { success: true, data: lista };
 }
 
 function updateSueldo(data) {
@@ -3918,6 +3951,7 @@ function updateSueldo(data) {
           return { success: false, error: 'Este trabajador gana la RMV: su sueldo se ajusta con el parametro rmv de la configuracion' };
         }
         sheet.getRange(i + 1, sueldoCol + 1).setValue(Number(data.sueldo) || 0);
+        invalidarCacheTrabajadores_();
         return { success: true, message: 'Sueldo actualizado' };
       }
     }
@@ -3951,6 +3985,7 @@ function crearTrabajador(data) {
       data.sede || 'Principal',
       data.email || ''
     ]);
+    invalidarCacheTrabajadores_();
     return { success: true, message: 'Trabajador creado: ' + data.nombre };
   });
 }

@@ -315,4 +315,33 @@ La fuente del backend ya NO es `appscript.js` a mano: es **`backend/*.gs`** (mó
 
 ---
 
+## 11. Fix concurrencia kiosko de asistencia (12/08/2026)
+
+**Síntoma:** a la hora de ingreso (ej. 14:00) varios trabajadores abrían `/asistencia` a la vez; solo uno lograba registrar y los demás veían "No se pudo cargar la lista de trabajadores".
+
+**Causas y cambios:**
+
+| Causa | Fix | Archivo |
+|-------|-----|---------|
+| `registrarAsistenciaFoto` mantenía el lock global durante la subida de la foto a Drive (3–15 s) → los demás requests esperaban y fallaban con "Sistema ocupado" | Subida a Drive **fuera** de `withLock_`; el lock solo cubre verificación anti-duplicado + `appendRow` (<1 s). Igual en `subirJustificacion` | `backend/07_asistencia.gs` |
+| `getTrabajadores` abría el Spreadsheet 2 veces por request, sin caché → ventana de fallo grande bajo ráfaga | Roster del kiosko cacheado 10 min en `CacheService` (`kiosk_trabajadores_v1`); invalidación en `crearTrabajador`, `updateSueldo`, `createEmployee`, `updateEmployee`, `transferEmployee` | `backend/08_planilla.gs`, `backend/03_empleados.gs` |
+| Espera del lock 20 s (insuficiente en la cola) | `tryLock(30000)` (máximo permitido) | `backend/00_nucleo.gs` |
+| El kiosko no reintentaba nada: un fallo transitorio = pantalla de error fatal | `cargarTrabajadores` reintenta hasta 3 veces (1.5 s / 3 s); `handleRegistrar` reintenta 1 vez si el error es "Sistema ocupado" (caso en que el backend no escribió nada) | `src/pages/AsistenciaPage.tsx` |
+| **Bug latente hallado en las pruebas:** el anti-duplicado ("Ya registraste este evento hoy") NUNCA matcheaba — Sheets auto-convierte `fecha` a `Date` al `appendRow` y la comparación `String(date) === 'yyyy-MM-dd'` siempre fallaba | Normalizar la celda: si es `Date`, formatear a `yyyy-MM-dd` antes de comparar | `backend/07_asistencia.gs` |
+
+### Pruebas de concurrencia ejecutadas (12/08/2026, contra el Web App en producción)
+
+- **8 GET `getTrabajadores` simultáneos** → 8/8 HTTP 200 en 1.4–1.9 s (caché activo: 3.6 s en frío → ~2 s cacheado).
+- **3 `registrarAsistenciaFoto` simultáneos** (DNIs de prueba 99999991/92/93) → 3/3 `success:true` en 5–7.3 s, sin "Sistema ocupado".
+- **2 registros simultáneos del mismo DNI+evento** → expusieron el bug de anti-duplicado (ambos pasaron); corregido arriba.
+- Limpieza pendiente: borrar en la hoja `asistencias_v2` las 5 filas de prueba del 12/08/2026 con DNIs 9999999x ("PRUEBA CONCURRENCIA") y sus fotos en Drive `Asistencias/2026-08-12/9999999x/`.
+
+### ⚠️ Checklist de deploy (backend, manual)
+
+1. `npm run build:backend` → pegar `appscript.js` en el editor GAS → `ejecutarTestSalud` → **0 FAIL** → Nueva versión.
+2. Sin cambios de hojas ni de Script Properties; compatible con el frontend actual.
+3. Prueba de humo: abrir `/asistencia` en 2–3 dispositivos a la vez y registrar ingreso en cada uno.
+
+---
+
 © 2026 Ingeniería Telcom EIRL — Documento de auditoría interna (Fase 0).
