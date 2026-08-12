@@ -11,6 +11,7 @@ import {
 import AdminLayout from '../../components/admin/AdminLayout'
 import { api, Employee } from '../../api/appScriptApi'
 import { JobApplication } from '../../types/job.types'
+import { exportarExcel } from '../../utils/excel'
 
 // ─────────────────────────────────────────────
 // Types
@@ -31,25 +32,25 @@ interface AttendanceRecord {
 }
 
 // ─────────────────────────────────────────────
-// CSV helper
+// Excel helper (misma firma que el antiguo CSV)
 // ─────────────────────────────────────────────
 
 const exportToCSV = (data: Record<string, unknown>[], filename: string) => {
   if (!data.length) return
   const headers = Object.keys(data[0])
-  const rows = data.map(row =>
-    headers.map(h => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(',')
-  )
-  const csv = '﻿' + [headers.join(','), ...rows].join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  exportarExcel(`${filename}_${new Date().toISOString().split('T')[0]}.xlsx`, [
+    {
+      nombre: 'Reporte',
+      columnas: headers.map((h) => ({ titulo: h })),
+      filas: data.map((row) =>
+        headers.map((h) => {
+          const v = row[h]
+          if (v === null || v === undefined || v === '') return null
+          return typeof v === 'number' ? v : String(v)
+        })
+      ),
+    },
+  ])
 }
 
 // ─────────────────────────────────────────────
@@ -166,7 +167,7 @@ function AsistenciasTab() {
               className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors ml-auto"
             >
               <FaDownload />
-              Exportar CSV
+              Exportar Excel
             </button>
           )}
         </div>
@@ -368,7 +369,7 @@ function PostulacionesTab() {
               className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors ml-auto"
             >
               <FaDownload />
-              Exportar CSV
+              Exportar Excel
             </button>
           )}
         </div>
@@ -568,7 +569,7 @@ function EmpleadosTab() {
               className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors ml-auto"
             >
               <FaDownload />
-              Exportar CSV
+              Exportar Excel
             </button>
           )}
         </div>

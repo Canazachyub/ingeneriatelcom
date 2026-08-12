@@ -354,6 +354,14 @@ Antes solo se saltaban sábados y domingos (hardcodeado). Ahora hay hoja **`feri
 - UI: `FeriadosPanel` en `/admin/planilla` (lista con eliminar, agregar fecha+descripción, botón de carga automática).
 - Efectos: `sincronizarIncidencias` no genera falta/omisión en feriados; el informe de `/admin/asistencias` no los cuenta como falta y los pinta violeta en la matriz.
 
+### Exportaciones en Excel real (12/08/2026)
+
+Los botones "Exportar CSV" pasaron a **Excel (.xlsx) con formato** vía `src/utils/excel.ts` (`exportarExcel`, ExcelJS con dynamic import — chunk lazy de ~271 KB gzip que solo se descarga al exportar): encabezado azul con negrita, fila congelada, autofiltro, anchos automáticos y formatos numéricos (`#,##0.00` para montos). Aplicado en:
+
+- **Planilla** — un archivo con 2 hojas: `Resumen` (sueldos, conteos, descuentos, alerta) y `Detalle incidencias`.
+- **Asistencias** — registros (con columna Origen Kiosko/Manual y nota) e informe por trabajador.
+- **Reportes** — las 3 exportaciones (misma firma que el helper CSV anterior).
+
 ### ⚠️ Checklist de deploy (backend, manual)
 
 1. `npm run build:backend` → pegar `appscript.js` en el editor GAS → `ejecutarTestSalud` → **0 FAIL** → Nueva versión.

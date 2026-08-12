@@ -12,6 +12,7 @@ import {
   resumenMensual, calcularDisciplina, descuentoIncidencia, formatoSoles,
   valorDia, valorMinuto, sueldoEfectivo,
 } from '../../utils/planilla'
+import { exportarExcel } from '../../utils/excel'
 import {
   TIPO_LABELS, ESTADO_LABELS, mesActualISO, finDeMes, inicioTrimestre, hoyISO, nombreMes, Fila,
 } from './planilla/planilla.types'
@@ -250,36 +251,47 @@ export default function PlanillaPage() {
   }
 
   // ── Exportar ─────────────────────────────────────────────
-  const exportarCSV = () => {
-    const filasCSV: string[][] = [
-      ['Trabajador', 'Cargo', 'Correo', 'Sueldo (S/)', 'Tardanzas', 'Min. acumulados', 'Faltas injust.',
-        'Faltas just.', 'Omisiones', 'Salidas antic. s/aut.', 'Bolsa 5pm (h)', 'Pendientes',
-        'Descuento confirmado (S/)', 'Descuento proyectado (S/)', 'Alerta disciplinaria'],
-      ...filas.map((f) => [
-        f.trabajador.nombre, f.trabajador.cargo, f.trabajador.email || '', String(f.sueldo),
-        String(f.resumen.tardanzas), String(f.resumen.minutosAcumulados),
-        String(f.resumen.faltasInjustificadas), String(f.resumen.faltasJustificadas),
-        String(f.resumen.omisiones), String(f.resumen.salidasAnticipadas),
-        f.bolsa.toFixed(2), String(f.resumen.pendientes),
-        f.resumen.descuentoConfirmado.toFixed(2), f.resumen.descuentoProyectado.toFixed(2),
-        f.disciplina.etiqueta || '',
-      ]),
-      [],
-      ['DETALLE DE INCIDENCIAS'],
-      ['Trabajador', 'Fecha', 'Tipo', 'Evento', 'Minutos', 'Grave', 'Estado', 'Descuento parcial (S/)', 'Nota'],
-      ...filas.flatMap((f) => f.incMes.map((i) => [
-        f.trabajador.nombre, String(i.fecha), TIPO_LABELS[i.tipo] || i.tipo, i.evento || '',
-        String(i.minutos ?? ''), i.grave ? 'Sí' : 'No', ESTADO_LABELS[i.estado] || i.estado,
-        descuentoIncidencia(i, f.sueldo, config).toFixed(2), i.nota || '',
-      ])),
-    ]
-    const csv = filasCSV.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `planilla_${mes}.csv`
-    a.click()
-    URL.revokeObjectURL(a.href)
+  const exportarExcelPlanilla = () => {
+    exportarExcel(`planilla_${mes}.xlsx`, [
+      {
+        nombre: 'Resumen',
+        columnas: [
+          { titulo: 'Trabajador', ancho: 32 }, { titulo: 'Cargo', ancho: 26 }, { titulo: 'Correo', ancho: 34 },
+          { titulo: 'Sueldo (S/)', formato: '#,##0.00' },
+          { titulo: 'Tardanzas' }, { titulo: 'Min. acumulados' },
+          { titulo: 'Faltas injust.' }, { titulo: 'Faltas just.' },
+          { titulo: 'Omisiones' }, { titulo: 'Salidas antic. s/aut.' },
+          { titulo: 'Bolsa 5pm (h)', formato: '0.00' }, { titulo: 'Pendientes' },
+          { titulo: 'Descuento confirmado (S/)', formato: '#,##0.00' },
+          { titulo: 'Descuento proyectado (S/)', formato: '#,##0.00' },
+          { titulo: 'Alerta disciplinaria', ancho: 28 },
+        ],
+        filas: filas.map((f) => [
+          f.trabajador.nombre, f.trabajador.cargo, f.trabajador.email || null, f.sueldo,
+          f.resumen.tardanzas, f.resumen.minutosAcumulados,
+          f.resumen.faltasInjustificadas, f.resumen.faltasJustificadas,
+          f.resumen.omisiones, f.resumen.salidasAnticipadas,
+          Number(f.bolsa.toFixed(2)), f.resumen.pendientes,
+          Number(f.resumen.descuentoConfirmado.toFixed(2)),
+          Number(f.resumen.descuentoProyectado.toFixed(2)),
+          f.disciplina.etiqueta || null,
+        ]),
+      },
+      {
+        nombre: 'Detalle incidencias',
+        columnas: [
+          { titulo: 'Trabajador', ancho: 32 }, { titulo: 'Fecha', ancho: 12 },
+          { titulo: 'Tipo', ancho: 18 }, { titulo: 'Evento', ancho: 16 },
+          { titulo: 'Minutos' }, { titulo: 'Grave' }, { titulo: 'Estado', ancho: 14 },
+          { titulo: 'Descuento parcial (S/)', formato: '#,##0.00' }, { titulo: 'Nota', ancho: 40 },
+        ],
+        filas: filas.flatMap((f) => f.incMes.map((i) => [
+          f.trabajador.nombre, String(i.fecha), TIPO_LABELS[i.tipo] || i.tipo, i.evento || null,
+          i.minutos ?? null, i.grave ? 'Sí' : 'No', ESTADO_LABELS[i.estado] || i.estado,
+          Number(descuentoIncidencia(i, f.sueldo, config).toFixed(2)), i.nota || null,
+        ])),
+      },
+    ])
   }
 
   const imprimirTrabajador = (fila: Fila) => {
@@ -367,11 +379,11 @@ export default function PlanillaPage() {
               Sincronizar incidencias
             </button>
             <button
-              onClick={exportarCSV}
+              onClick={exportarExcelPlanilla}
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary-900 border border-primary-800 text-primary-300 rounded-lg text-sm hover:text-white hover:border-accent-electric/50 transition-colors"
             >
               <FaDownload className="text-xs" />
-              CSV
+              Excel
             </button>
             <button
               onClick={() => setModalNuevo(true)}

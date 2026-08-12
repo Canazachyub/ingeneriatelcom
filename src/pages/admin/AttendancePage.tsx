@@ -21,6 +21,7 @@ import FileViewerModal from '../../components/admin/FileViewerModal'
 import TableSkeleton from '../../components/common/TableSkeleton'
 import EmptyState from '../../components/common/EmptyState'
 import { useToast } from '../../context/ToastContext'
+import { exportarExcel } from '../../utils/excel'
 import {
   TrabajadorFijo,
   EVENTOS,
@@ -70,16 +71,6 @@ const esTarde = (evento: string, hora: string): boolean => {
   const cfg = EVENTOS.find((e) => e.key === evento)
   if (!cfg || cfg.tipo !== 'ingreso' || !hora) return false
   return horaAMinutos(hora) > cfg.horaMinutos + (TOLERANCIA_POR_EVENTO[evento] ?? 0)
-}
-
-const descargarCSV = (nombre: string, filas: string[][]) => {
-  const csv = filas.map((f) => f.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = nombre
-  a.click()
-  URL.revokeObjectURL(a.href)
 }
 
 // ── Página ───────────────────────────────────────────────────
@@ -295,41 +286,48 @@ export default function AttendancePage() {
     return { fechas, filas }
   }, [registros, justificaciones, desde, hasta, filtroDni, trabajadores, feriados])
 
-  // ── Exportar CSV ───────────────────────────────────────────
+// ── Exportar Excel ─────────────────────────────────────────
   const exportarRegistros = () => {
-    const filas: string[][] = [
-      ['DNI', 'Nombre', 'Cargo', 'Evento', 'Fecha', 'Hora', 'Puntualidad', 'GPS Lat', 'GPS Lng', 'Precisión (m)', 'Foto'],
-      ...registrosOrdenados.map((r) => [
-        String(r.dni),
-        r.nombre,
-        r.cargo,
-        EVENTO_LABELS[r.evento] || r.evento,
-        r.fecha,
-        String(r.hora),
-        esTarde(r.evento, String(r.hora)) ? 'Tarde' : 'Puntual',
-        String(r.gps_lat ?? ''),
-        String(r.gps_lng ?? ''),
-        String(r.gps_accuracy ?? ''),
-        r.foto_url || '',
-      ]),
-    ]
-    descargarCSV(`asistencias_${desde}_a_${hasta}.csv`, filas)
+    exportarExcel(`asistencias_${desde}_a_${hasta}.xlsx`, [
+      {
+        nombre: 'Registros',
+        columnas: [
+          { titulo: 'DNI', ancho: 12 }, { titulo: 'Nombre', ancho: 32 }, { titulo: 'Cargo', ancho: 26 },
+          { titulo: 'Evento', ancho: 16 }, { titulo: 'Fecha', ancho: 12 }, { titulo: 'Hora', ancho: 9 },
+          { titulo: 'Puntualidad', ancho: 12 },
+          { titulo: 'GPS Lat', ancho: 12 }, { titulo: 'GPS Lng', ancho: 12 }, { titulo: 'Precisión (m)' },
+          { titulo: 'Origen', ancho: 10 }, { titulo: 'Nota', ancho: 36 }, { titulo: 'Foto', ancho: 50 },
+        ],
+        filas: registrosOrdenados.map((r) => [
+          String(r.dni), r.nombre, r.cargo,
+          EVENTO_LABELS[r.evento] || r.evento, r.fecha, String(r.hora),
+          esTarde(r.evento, String(r.hora)) ? 'Tarde' : 'Puntual',
+          r.gps_lat !== '' && r.gps_lat != null ? Number(r.gps_lat) : null,
+          r.gps_lng !== '' && r.gps_lng != null ? Number(r.gps_lng) : null,
+          r.gps_accuracy !== '' && r.gps_accuracy != null ? Number(r.gps_accuracy) : null,
+          r.foto_url ? 'Kiosko' : 'Manual',
+          r.nota || null,
+          r.foto_url || null,
+        ]),
+      },
+    ])
   }
 
   const exportarInforme = () => {
-    const filas: string[][] = [
-      ['DNI', 'Nombre', 'Cargo', 'Días asistidos', 'Tardanzas', 'Faltas (L-V)', 'Justificaciones'],
-      ...informe.filas.map((f) => [
-        f.trabajador.dni,
-        f.trabajador.nombre,
-        f.trabajador.cargo,
-        String(f.diasAsistidos),
-        String(f.tardanzas),
-        String(f.faltasLV),
-        String(f.numJust),
-      ]),
-    ]
-    descargarCSV(`informe_asistencia_${desde}_a_${hasta}.csv`, filas)
+    exportarExcel(`informe_asistencia_${desde}_a_${hasta}.xlsx`, [
+      {
+        nombre: 'Informe',
+        columnas: [
+          { titulo: 'DNI', ancho: 12 }, { titulo: 'Nombre', ancho: 32 }, { titulo: 'Cargo', ancho: 26 },
+          { titulo: 'Días asistidos' }, { titulo: 'Tardanzas' },
+          { titulo: 'Faltas (L-V)' }, { titulo: 'Justificaciones' },
+        ],
+        filas: informe.filas.map((f) => [
+          f.trabajador.dni, f.trabajador.nombre, f.trabajador.cargo,
+          f.diasAsistidos, f.tardanzas, f.faltasLV, f.numJust,
+        ]),
+      },
+    ])
   }
 
   return (
@@ -356,7 +354,7 @@ export default function AttendancePage() {
               className="inline-flex items-center gap-2 px-4 py-2 bg-accent-electric/20 border border-accent-electric/40 text-accent-electric rounded-lg text-sm font-medium hover:bg-accent-electric/30 transition-colors"
             >
               <FaDownload className="text-xs" />
-              Exportar CSV
+              Exportar Excel
             </button>
           </div>
         </div>
