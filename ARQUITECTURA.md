@@ -141,6 +141,7 @@ Cada fila conecta: **página React → método del cliente API → `action` de A
 | `AsistenciaPage` | `verificarEmpleado(dni)` | `verificarEmpleado` | No | `empleados`, `Asistencias` |
 | `AsistenciaPage` | `registrarAsistenciaFoto()` | `registrarAsistenciaFoto` | No | `asistencias_v2` + foto a Drive `Asistencias/<fecha>/<dni>/` |
 | `AsistenciaPage` | `subirJustificacion()` | `subirJustificacion` | No | `justificaciones` + archivo a Drive `Justificaciones/<fecha>/<dni>/` |
+| `AttendancePage` (admin) | `registrarAsistenciaManual()` | `registrarAsistenciaManual` | Sí | `asistencias_v2` (sin foto/GPS, columna `nota` obligatoria) |
 | `AttendancePage` (admin) | `getAsistenciasV2()` | `getAsistenciasV2` | Sí | `asistencias_v2` (hora normalizada a Lima) |
 | `AttendancePage` (admin) | `getJustificaciones()` | `getJustificaciones` | Sí | `justificaciones` |
 | `DashboardPage` | `getAttendanceToday()` | `obtenerAsistenciasHoy` | Sí | `sueldos` + `asistencias_v2` |
@@ -304,7 +305,9 @@ Todos los archivos se comparten como `ANYONE_WITH_LINK` (solo lectura) para pode
 ### 9.2 Asistencia V2 y zona horaria
 
 - Cada marca guarda **timestamp ISO en UTC** + fecha/hora ya formateadas en `America/Lima`. Al leer, el backend re-normaliza desde el timestamp para evitar el bug histórico de -12:20 (LMT de Sheets).
-- Personal de **oficina**: no puede marcar el mismo evento dos veces el mismo día. Personal de **campo**: sin esa restricción (flujo de múltiples marcas).
+- Personal de **oficina**: no puede marcar el mismo evento dos veces el mismo día (la comparación normaliza la celda `fecha`, que Sheets auto-convierte a `Date`). Personal de **campo**: sin esa restricción (flujo de múltiples marcas).
+- **Concurrencia (fix 12/08/2026)**: la subida de foto a Drive va FUERA del lock (`withLock_` solo cubre anti-duplicado + `appendRow`); `getTrabajadores` responde desde `CacheService` (10 min, invalidado en altas/ediciones de personal); el kiosko reintenta solo ante fallos transitorios o "Sistema ocupado".
+- **Registro manual (12/08/2026)**: el admin puede crear una marca desde `/admin/asistencias` (botón "Registrar manual") para marcas no hechas por error del sistema. Sin foto/GPS, con `nota` obligatoria (columna 13 de `asistencias_v2`); el panel la distingue con el badge "· manual".
 
 ### 9.3 Planilla — `sincronizarIncidencias()`
 
