@@ -34,6 +34,24 @@ function getOrCreateFolder(parentFolder, folderName) {
   return parentFolder.createFolder(folderName);
 }
 
+// Variante con cache de IDs de carpeta (CacheService, 6h). En horas punta
+// (07:30, 14:00) cada getFoldersByName/createFolder es una llamada a la API
+// de Drive y Google aplica rate limit por rafaga ("Service invoked too many
+// times") — con los IDs cacheados una subida pasa de ~6 llamadas a ~2.
+// getId() sobre un objeto ya obtenido es local (no llama a la API).
+function getOrCreateFolderCached_(parentFolder, folderName) {
+  const cacheKey = 'fld:' + parentFolder.getId() + '/' + folderName;
+  try {
+    const cachedId = CacheService.getScriptCache().get(cacheKey);
+    if (cachedId) return DriveApp.getFolderById(cachedId);
+  } catch (e) { /* cache caido o carpeta borrada: seguir por la via normal */ }
+  const folder = getOrCreateFolder(parentFolder, folderName);
+  try {
+    CacheService.getScriptCache().put(cacheKey, folder.getId(), 21600);
+  } catch (e) { /* no critico */ }
+  return folder;
+}
+
 function generateTempPassword() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
   let password = '';

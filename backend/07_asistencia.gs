@@ -420,9 +420,9 @@ function registrarAsistenciaFoto(data) {
   var fotoUrl = '';
   try {
     var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-    var asisFolder = getOrCreateFolder(mainFolder, 'Asistencias');
-    var fechaFolder = getOrCreateFolder(asisFolder, fecha);
-    var dniFolder = getOrCreateFolder(fechaFolder, dni);
+    var asisFolder = getOrCreateFolderCached_(mainFolder, 'Asistencias');
+    var fechaFolder = getOrCreateFolderCached_(asisFolder, fecha);
+    var dniFolder = getOrCreateFolderCached_(fechaFolder, dni);
     var fileName = evento + '_' + ahora.getTime() + '.jpg';
     var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
     var file = dniFolder.createFile(blob);
@@ -501,9 +501,9 @@ function subirJustificacion(data) {
   if (data.fileContent) {
     try {
       var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-      var justFolder = getOrCreateFolder(mainFolder, 'Justificaciones');
-      var fechaFolder = getOrCreateFolder(justFolder, fecha);
-      var dniFolder = getOrCreateFolder(fechaFolder, dni);
+      var justFolder = getOrCreateFolderCached_(mainFolder, 'Justificaciones');
+      var fechaFolder = getOrCreateFolderCached_(justFolder, fecha);
+      var dniFolder = getOrCreateFolderCached_(fechaFolder, dni);
       var fileName = data.fileName || ('just_' + ahora.getTime() + '.jpg');
       var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
       var file = dniFolder.createFile(blob);

@@ -509,9 +509,9 @@ function guardarFotoWebcam(data) {
 
   try {
     var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-    var proctoringFolder = getOrCreateFolder(mainFolder, 'Evaluaciones_Proctoring');
-    var capFolder = getOrCreateFolder(proctoringFolder, String(capacitacion_id));
-    var dniFolder = getOrCreateFolder(capFolder, String(dni));
+    var proctoringFolder = getOrCreateFolderCached_(mainFolder, 'Evaluaciones_Proctoring');
+    var capFolder = getOrCreateFolderCached_(proctoringFolder, String(capacitacion_id));
+    var dniFolder = getOrCreateFolderCached_(capFolder, String(dni));
 
     var blob = Utilities.newBlob(Utilities.base64Decode(fileContent), mimeType, fileName);
     var file = dniFolder.createFile(blob);

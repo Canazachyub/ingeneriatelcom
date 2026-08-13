@@ -362,6 +362,17 @@ Los botones "Exportar CSV" pasaron a **Excel (.xlsx) con formato** vía `src/uti
 - **Asistencias** — registros (con columna Origen Kiosko/Manual y nota) e informe por trabajador.
 - **Reportes** — las 3 exportaciones (misma firma que el helper CSV anterior).
 
+### Refuerzo anti-ráfaga del kiosko (13/08/2026)
+
+A pesar del fix del 12/08, en la ráfaga de las 07:30–07:53 volvieron los errores ("no carga la lista", spinner eterno en Registrar). Causas y correcciones:
+
+| Causa | Fix |
+|-------|-----|
+| Cada subida de foto hacía ~6 llamadas a la API de Drive (traversar carpetas); bajo ráfaga Google aplica rate limit ("Service invoked too many times") | `getOrCreateFolderCached_`: IDs de carpeta cacheados 6 h en CacheService → ~2 llamadas por subida. Aplicado en asistencia, justificaciones y fotos de proctoring |
+| `fetch` sin timeout: si la red móvil o Google se cuelgan, el botón Registrar giraba para siempre | Timeout con `AbortController` en `request()`: 90 s en subidas (foto/justificación), 25 s en `getTrabajadores` |
+| Reintentos solo ante "Sistema ocupado"; un corte de red o timeout mostraba error fatal | El kiosko reintenta el registro hasta 3 veces ante **cualquier** fallo transitorio; la lista hasta 5 veces (1.5/3/5/8 s) |
+| Si el servidor escribía la marca pero la respuesta se perdía, el reintento podía duplicar o asustar al trabajador | **Éxito idempotente**: si el reintento responde "Ya registraste este evento hoy", se muestra como registro exitoso (el intento anterior sí quedó guardado) |
+
 ### ⚠️ Checklist de deploy (backend, manual)
 
 1. `npm run build:backend` → pegar `appscript.js` en el editor GAS → `ejecutarTestSalud` → **0 FAIL** → Nueva versión.

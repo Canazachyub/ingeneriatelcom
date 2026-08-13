@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-08-12T20:46:24.865Z con tools/build-backend.mjs
+// Generado: 2026-08-13T13:21:27.024Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -40,6 +40,24 @@ function getOrCreateFolder(parentFolder, folderName) {
   const folders = parentFolder.getFoldersByName(folderName);
   if (folders.hasNext()) return folders.next();
   return parentFolder.createFolder(folderName);
+}
+
+// Variante con cache de IDs de carpeta (CacheService, 6h). En horas punta
+// (07:30, 14:00) cada getFoldersByName/createFolder es una llamada a la API
+// de Drive y Google aplica rate limit por rafaga ("Service invoked too many
+// times") — con los IDs cacheados una subida pasa de ~6 llamadas a ~2.
+// getId() sobre un objeto ya obtenido es local (no llama a la API).
+function getOrCreateFolderCached_(parentFolder, folderName) {
+  const cacheKey = 'fld:' + parentFolder.getId() + '/' + folderName;
+  try {
+    const cachedId = CacheService.getScriptCache().get(cacheKey);
+    if (cachedId) return DriveApp.getFolderById(cachedId);
+  } catch (e) { /* cache caido o carpeta borrada: seguir por la via normal */ }
+  const folder = getOrCreateFolder(parentFolder, folderName);
+  try {
+    CacheService.getScriptCache().put(cacheKey, folder.getId(), 21600);
+  } catch (e) { /* no critico */ }
+  return folder;
 }
 
 function generateTempPassword() {
@@ -3063,9 +3081,9 @@ function guardarFotoWebcam(data) {
 
   try {
     var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-    var proctoringFolder = getOrCreateFolder(mainFolder, 'Evaluaciones_Proctoring');
-    var capFolder = getOrCreateFolder(proctoringFolder, String(capacitacion_id));
-    var dniFolder = getOrCreateFolder(capFolder, String(dni));
+    var proctoringFolder = getOrCreateFolderCached_(mainFolder, 'Evaluaciones_Proctoring');
+    var capFolder = getOrCreateFolderCached_(proctoringFolder, String(capacitacion_id));
+    var dniFolder = getOrCreateFolderCached_(capFolder, String(dni));
 
     var blob = Utilities.newBlob(Utilities.base64Decode(fileContent), mimeType, fileName);
     var file = dniFolder.createFile(blob);
@@ -3526,9 +3544,9 @@ function registrarAsistenciaFoto(data) {
   var fotoUrl = '';
   try {
     var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-    var asisFolder = getOrCreateFolder(mainFolder, 'Asistencias');
-    var fechaFolder = getOrCreateFolder(asisFolder, fecha);
-    var dniFolder = getOrCreateFolder(fechaFolder, dni);
+    var asisFolder = getOrCreateFolderCached_(mainFolder, 'Asistencias');
+    var fechaFolder = getOrCreateFolderCached_(asisFolder, fecha);
+    var dniFolder = getOrCreateFolderCached_(fechaFolder, dni);
     var fileName = evento + '_' + ahora.getTime() + '.jpg';
     var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
     var file = dniFolder.createFile(blob);
@@ -3607,9 +3625,9 @@ function subirJustificacion(data) {
   if (data.fileContent) {
     try {
       var mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-      var justFolder = getOrCreateFolder(mainFolder, 'Justificaciones');
-      var fechaFolder = getOrCreateFolder(justFolder, fecha);
-      var dniFolder = getOrCreateFolder(fechaFolder, dni);
+      var justFolder = getOrCreateFolderCached_(mainFolder, 'Justificaciones');
+      var fechaFolder = getOrCreateFolderCached_(justFolder, fecha);
+      var dniFolder = getOrCreateFolderCached_(fechaFolder, dni);
       var fileName = data.fileName || ('just_' + ahora.getTime() + '.jpg');
       var blob = Utilities.newBlob(Utilities.base64Decode(data.fileContent), data.mimeType || 'image/jpeg', fileName);
       var file = dniFolder.createFile(blob);

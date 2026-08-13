@@ -82,28 +82,28 @@ export default function AsistenciaPage() {
   const cargarTrabajadores = useCallback(() => {
     setCargandoLista(true)
     setErrorLista(false)
-    // Reintentos con espera: a la hora de ingreso varios trabajadores abren el
-    // kiosko a la vez y el backend (Apps Script) puede responder un error
-    // transitorio. Solo si los 3 intentos fallan se muestra la pantalla de error.
-    const intentar = async (intento: number): Promise<void> => {
+    // Reintentos con espera creciente: a la hora de ingreso varios trabajadores
+    // abren el kiosko a la vez y el backend (Apps Script) puede responder un
+    // error transitorio. Solo si los 5 intentos fallan se muestra error.
+    const ESPERAS = [1500, 3000, 5000, 8000]
+    const intentar = async (intento: number): Promise<boolean> => {
       try {
         const res = await api.getTrabajadores()
         if (res.success && res.data && res.data.length > 0) {
           setListaTrabajadores(res.data)
-          return
+          return true
         }
-        throw new Error(res.error || 'Lista vacía')
-      } catch {
-        if (intento < 2) {
-          await sleep(intento === 0 ? 1500 : 3000)
-          return intentar(intento + 1)
-        }
-        setErrorLista(true)
-      } finally {
-        if (intento === 2) setCargandoLista(false)
+      } catch { /* se reintenta abajo */ }
+      if (intento < ESPERAS.length) {
+        await sleep(ESPERAS[intento])
+        return intentar(intento + 1)
       }
+      return false
     }
-    intentar(0).then(() => setCargandoLista(false))
+    intentar(0).then((ok) => {
+      if (!ok) setErrorLista(true)
+      setCargandoLista(false)
+    })
   }, [])
 
   useEffect(() => {
@@ -239,11 +239,25 @@ export default function AsistenciaPage() {
     }
     try {
       let res = await api.registrarAsistenciaFoto(payload)
-      // "Sistema ocupado" = el backend NO escribió nada (no obtuvo el lock):
-      // es seguro reintentar una vez tras una breve espera.
-      if (!res.success && res.error && res.error.indexOf('Sistema ocupado') !== -1) {
-        await sleep(2500)
+      // Reintentos ante CUALQUIER fallo transitorio (red caida, timeout,
+      // "Sistema ocupado"). Caso clave: si el intento anterior SI escribio
+      // en la hoja pero la respuesta se perdio en el camino, el reintento
+      // responde "Ya registraste este evento hoy" — eso confirma el registro
+      // y se muestra como exito (la hora exacta quedo guardada en el servidor).
+      for (let intento = 1; !res.success && intento < 3; intento++) {
+        await sleep(2500 * intento)
         res = await api.registrarAsistenciaFoto(payload)
+        if (!res.success && res.error && res.error.indexOf('Ya registraste este evento hoy') !== -1) {
+          res = {
+            success: true,
+            data: {
+              evento: eventoSel,
+              fecha: '',
+              hora: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
+              foto_url: '',
+            },
+          }
+        }
       }
       if (res.success && res.data) {
         detenerCamara()

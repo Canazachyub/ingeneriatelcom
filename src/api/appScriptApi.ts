@@ -238,7 +238,8 @@ class AppScriptApi {
   private async request<T>(
     action: string,
     method: 'GET' | 'POST' = 'GET',
-    data?: Record<string, unknown>
+    data?: Record<string, unknown>,
+    timeoutMs = 0
   ): Promise<ApiResponse<T>> {
     if (!this.baseUrl) {
       console.warn('Apps Script URL not configured')
@@ -251,6 +252,10 @@ class AppScriptApi {
     const token = this.getToken()
     const requestData = token ? { ...data, token } : data
 
+    // Timeout opcional (kiosko): sin él un fetch colgado deja el spinner eterno
+    const controller = timeoutMs > 0 ? new AbortController() : null
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null
+
     try {
       let response: Response
 
@@ -262,6 +267,7 @@ class AppScriptApi {
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify(requestData),
           redirect: 'follow',
+          signal: controller?.signal,
         })
       } else {
         // GET with URL params for read-only / lightweight requests
@@ -271,6 +277,7 @@ class AppScriptApi {
         response = await fetch(url.toString(), {
           method: 'GET',
           redirect: 'follow',
+          signal: controller?.signal,
         })
       }
 
@@ -289,9 +296,14 @@ class AppScriptApi {
       }
     } catch (error) {
       console.error('API request failed:', action, error)
-      const message = 'Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.'
+      const esTimeout = error instanceof DOMException && error.name === 'AbortError'
+      const message = esTimeout
+        ? 'El servidor tardó demasiado en responder. Intenta de nuevo.'
+        : 'Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.'
       this.notifyError(message, action)
       return { success: false, error: message }
+    } finally {
+      if (timer) clearTimeout(timer)
     }
   }
 
@@ -851,7 +863,9 @@ class AppScriptApi {
     fileContent: string
     mimeType?: string
   }): Promise<ApiResponse<{ evento: string; fecha: string; hora: string; foto_url: string }>> {
-    return this.request('registrarAsistenciaFoto', 'POST', data as unknown as Record<string, unknown>)
+    // Timeout 90s: la foto sube a Drive y bajo rafaga puede demorar;
+    // sin timeout el fetch puede quedar colgado indefinidamente (spinner eterno)
+    return this.request('registrarAsistenciaFoto', 'POST', data as unknown as Record<string, unknown>, 90000)
   }
 
   async subirJustificacion(data: {
@@ -864,7 +878,7 @@ class AppScriptApi {
     fileName?: string
     mimeType?: string
   }): Promise<ApiResponse<{ fecha: string; archivo_url: string }>> {
-    return this.request('subirJustificacion', 'POST', data as unknown as Record<string, unknown>)
+    return this.request('subirJustificacion', 'POST', data as unknown as Record<string, unknown>, 90000)
   }
 
   // Admin — requieren token
@@ -947,7 +961,7 @@ class AppScriptApi {
 
   // Lista pública para el kiosko (sin sueldos ni correos)
   async getTrabajadores(): Promise<ApiResponse<{ dni: string; nombre: string; cargo: string; sede?: string; registro_simple?: boolean }[]>> {
-    return this.request('getTrabajadores', 'GET', {})
+    return this.request('getTrabajadores', 'GET', {}, 25000)
   }
 
   async crearTrabajador(data: {
