@@ -381,4 +381,46 @@ A pesar del fix del 12/08, en la ráfaga de las 07:30–07:53 volvieron los erro
 
 ---
 
+## 12. Bajas de personal — columna `fecha_fin` en el roster (26/08/2026)
+
+**Problema:** la hoja `sueldos` no tenía forma de dar de baja a nadie: o estaba la fila o no estaba. Al terminar un contrato, la única salida era borrar la fila — lo que dejaba huérfanas sus incidencias y le quitaba el nombre a las planillas de meses ya cerrados. Mientras tanto, el cesado seguía apareciendo en el kiosko y **acumulando una falta por cada día hábil** transcurrido desde su salida.
+
+### Cambios
+
+| Área | Cambio | Archivo |
+|------|--------|---------|
+| Roster | Columna **`fecha_fin`** en `sueldos` = último día laborado (vacío = activo). La fila **nunca se borra**. `leerRosterReal_(incluirCesados)` filtra por defecto a los activos | `backend/08_planilla.gs`, `backend/03_empleados.gs` |
+| Núcleo | Helpers `fechaISO_()` y `hoyISO_()` — normalizan celdas de fecha a `yyyy-MM-dd` (el patrón `instanceof Date ? formatDate : String` estaba repetido en 6 sitios) | `backend/00_nucleo.gs` |
+| Kiosko | `getTrabajadores` solo lista activos (clave de caché a `kiosk_trabajadores_v2` para no servir la lista vieja tras el deploy); `verificarEmpleado` responde *"Trabajador cesado el …"* en vez de *"DNI no encontrado"* | `backend/08_planilla.gs`, `backend/07_asistencia.gs` |
+| Planilla | `sincronizarIncidencias` no computa días posteriores a `fecha_fin` (el guard va **antes** del filtro por correo, para que la baja no dependa de si se liberó el buzón) | `backend/08_planilla.gs` |
+| Planilla | `getSueldos` sigue devolviendo a los cesados con `activo:false` — la planilla del mes en curso y los meses cerrados conservan su fila | `backend/08_planilla.gs` |
+| Actions | `darDeBajaTrabajador` / `reactivarTrabajador` (nivel admin). La primera **limpia las incidencias pendientes posteriores al cese** (mismo criterio que la limpieza retroactiva de feriados: los días entre la salida real y el registro de la baja son faltas fantasma) y valida que la fecha de cese no sea anterior al ingreso | `backend/08_planilla.gs`, `backend/01_router.gs` |
+| Migración | `asegurarColumnaFechaFin_()` agrega la columna al vuelo en la primera baja — igual que se hizo con la columna `nota` de `asistencias_v2`. **No requiere tocar la hoja a mano** | `backend/08_planilla.gs` |
+| Empleados | `getEmployees` lista solo activos salvo filtro explícito (`estado: 'inactivo'` o `'todos'`); `getEmployeeById` sí abre la ficha de un cesado | `backend/03_empleados.gs` |
+| Frontend | Badge **CESADO** + fila atenuada + botones "Dar de baja" / "Reactivar" en `SueldosTable`; `BajaTrabajadorModal` nuevo | `src/pages/admin/planilla/` |
+
+### Movimiento de personal aplicado (agosto 2026)
+
+| Trabajador | DNI | Movimiento |
+|-----------|-----|-----------|
+| Montufar Diaz, Alvaro Rodrigo | 70401672 | Baja — último día **14/08/2026** |
+| Marroquín Concha, Diego Mauricio | 73316735 | Baja — último día **21/08/2026** |
+| **Vargas Pinto, Marcela Devora** | 71227060 | **Alta** — Analista Legal de Reclamos, S/ 2,200.00, desde **20/08/2026**, `analista.legal1@ingenieriatelcom.com` (buzón que libera Marroquín) |
+
+Datos tomados del contrato `02_Contrato_VARGAS_PINTO_71227060_MEJORADO.pdf` (CP-SER-026-2026-ELSE, primer tramo 20/08/2026 – 31/12/2026, jornada 47 h 30 min, S/ 2,200.00). El PDF se archivó en `CONTRATOS/PDF_FINAL/`.
+
+`SUELDOS_INICIALES` se actualizó en paralelo, pero **solo aplica a una hoja creada desde cero**: en producción los movimientos se hacen desde `/admin/planilla`.
+
+### ⚠️ Checklist de deploy
+
+1. `npm run build:backend` → pegar `appscript.js` en el editor GAS → `ejecutarTestSalud` → **0 FAIL** → Nueva versión.
+   (El test avisa con WARN si `sueldos` aún no tiene la columna `fecha_fin`; es esperado hasta la primera baja.)
+2. En `/admin/planilla` → **Agregar trabajador**: DNI 71227060, Vargas Pinto Marcela Devora, Analista Legal de Reclamos, S/ 2200, inicio 2026-08-20, sede Principal, correo `analista.legal1@ingenieriatelcom.com`.
+3. En el detalle de **Montufar Diaz** → *Dar de baja* → 14/08/2026. Ídem **Marroquín Concha** → 21/08/2026.
+4. Liberar `analista.legal1@` en Google Workspace antes del paso 2 (dos filas con el mismo correo no rompen nada, pero confunden el roster).
+5. Verificar en `/asistencia` que la lista ya no muestre a los dos cesados (la caché del kiosko cambió de clave, el efecto es inmediato).
+6. **Marcela**: su alta con inicio 20/08 hará que `sincronizarIncidencias` genere **faltas el 20, 21, 24 y 25 de agosto** — no estaba en el roster, así que el kiosko la rechazaba. Corregirlas con *Registrar manual* en `/admin/asistencias` (si sí trabajó) o justificarlas desde el panel de incidencias.
+
+---
+
 © 2026 Ingeniería Telcom EIRL — Documento de auditoría interna (Fase 0).

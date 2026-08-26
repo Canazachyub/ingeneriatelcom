@@ -22,6 +22,7 @@ import SueldosTable from './planilla/SueldosTable'
 import IncidenciasPanel from './planilla/IncidenciasPanel'
 import BolsaHorasPanel from './planilla/BolsaHorasPanel'
 import NuevoTrabajadorModal, { NuevoTrabajadorDraft } from './planilla/NuevoTrabajadorModal'
+import BajaTrabajadorModal from './planilla/BajaTrabajadorModal'
 
 export default function PlanillaPage() {
   const { user } = useAuth()
@@ -64,6 +65,11 @@ export default function PlanillaPage() {
     dni: '', nombre: '', cargo: '', sueldo: '', fecha_inicio: hoyISO(), usa_rmv: false, sede: 'Principal', email: '',
   })
   const [guardandoNuevo, setGuardandoNuevo] = useState(false)
+
+  // Baja de trabajador (cese)
+  const [modalBaja, setModalBaja] = useState<SueldoTrabajador | null>(null)
+  const [fechaFinDraft, setFechaFinDraft] = useState(hoyISO())
+  const [guardandoBaja, setGuardandoBaja] = useState(false)
 
   // Solo el Administrador de Planilla (rol admin o permiso 'planilla') ve montos
   const autorizado = !!user && (
@@ -230,6 +236,34 @@ export default function PlanillaPage() {
       toast.success('Trabajador creado — el kiosko de asistencia ya lo reconoce')
       setModalNuevo(false)
       setNuevoDraft({ dni: '', nombre: '', cargo: '', sueldo: '', fecha_inicio: hoyISO(), usa_rmv: false, sede: 'Principal', email: '' })
+      loadData()
+    } else {
+      toast.error('Error: ' + res.error)
+    }
+  }
+
+  const darDeBajaHandler = async () => {
+    if (!modalBaja) return
+    setGuardandoBaja(true)
+    const res = await api.darDeBajaTrabajador(modalBaja.dni, fechaFinDraft)
+    setGuardandoBaja(false)
+    if (res.success) {
+      const borradas = res.data?.incidencias_eliminadas || 0
+      toast.success(
+        `${modalBaja.nombre} dado de baja (último día ${fechaFinDraft}). Sale del kiosko` +
+        (borradas ? ` y se eliminaron ${borradas} incidencia(s) pendiente(s) posteriores.` : '.')
+      )
+      setModalBaja(null)
+      loadData()
+    } else {
+      toast.error('Error: ' + res.error)
+    }
+  }
+
+  const reactivarHandler = async (trabajador: SueldoTrabajador) => {
+    const res = await api.reactivarTrabajador(trabajador.dni)
+    if (res.success) {
+      toast.success(`${trabajador.nombre} reactivado — vuelve a aparecer en el kiosko`)
       loadData()
     } else {
       toast.error('Error: ' + res.error)
@@ -463,6 +497,8 @@ export default function PlanillaPage() {
             abrirRevision={abrirRevision}
             onAbrir5pm={(trabajador) => { setModal5pm(trabajador); setFecha5pm(hoyISO()) }}
             onAbrirMuestreo={(trabajador) => setModalMuestreo(trabajador)}
+            onAbrirBaja={(trabajador) => { setModalBaja(trabajador); setFechaFinDraft(hoyISO()) }}
+            onReactivar={reactivarHandler}
             imprimirTrabajador={imprimirTrabajador}
           />
         )}
@@ -510,6 +546,16 @@ export default function PlanillaPage() {
           config={config}
           onCerrar={() => setModalNuevo(false)}
           onCrear={crearTrabajadorHandler}
+        />
+
+        {/* ── Modal baja de trabajador ── */}
+        <BajaTrabajadorModal
+          trabajador={modalBaja}
+          fechaFin={fechaFinDraft}
+          setFechaFin={setFechaFinDraft}
+          guardando={guardandoBaja}
+          onCerrar={() => setModalBaja(null)}
+          onConfirmar={darDeBajaHandler}
         />
       </div>
     </AdminLayout>

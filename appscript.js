@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-08-13T13:21:27.024Z con tools/build-backend.mjs
+// Generado: 2026-08-26T14:27:52.563Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -140,6 +140,23 @@ function rowToObject(headers, row) {
     obj[header] = normalizeCellValue_(row[index]);
   });
   return obj;
+}
+
+// Normaliza una celda de fecha a 'yyyy-MM-dd' (Sheets devuelve Date en las
+// columnas con formato fecha y string en las de texto). Devuelve '' si esta
+// vacia. Las comparaciones de calendario del sistema son lexicograficas sobre
+// este formato, asi que todo lector debe pasar por aqui.
+function fechaISO_(value) {
+  if (!value && value !== 0) return '';
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, 'America/Lima', 'yyyy-MM-dd');
+  }
+  return String(value).slice(0, 10);
+}
+
+// Fecha de hoy en America/Lima ('yyyy-MM-dd').
+function hoyISO_() {
+  return Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
 }
 
 // ============================================
@@ -428,6 +445,8 @@ var ROUTES = {
   getSueldos: { nivel: 'admin', handler: function () { return getSueldos(); } },
   updateSueldo: { nivel: 'admin', handler: function (ctx) { return updateSueldo(ctx.data); } },
   crearTrabajador: { nivel: 'admin', handler: function (ctx) { return crearTrabajador(ctx.data); } },
+  darDeBajaTrabajador: { nivel: 'admin', handler: function (ctx) { return darDeBajaTrabajador(ctx.data); } },
+  reactivarTrabajador: { nivel: 'admin', handler: function (ctx) { return reactivarTrabajador(ctx.data); } },
   getIncidencias: { nivel: 'admin', handler: function (ctx) { return getIncidencias(ctx.data); } },
   revisarIncidencia: { nivel: 'admin', handler: function (ctx) { return revisarIncidencia(ctx.data); } },
   sincronizarIncidencias: { nivel: 'admin', handler: function (ctx) { return sincronizarIncidencias(ctx.data); } },
@@ -996,26 +1015,42 @@ function createDefaultAdmin() {
 // ============================================
 // Roster real de trabajadores (hoja 'sueldos') — fuente unica de la verdad.
 // Reemplaza los datos demo de la hoja 'empleados' en Dashboard/Empleados.
-function leerRosterReal_() {
+//
+// Bajas: la columna 'fecha_fin' marca el ULTIMO DIA LABORADO. Un trabajador
+// cesado se conserva en la hoja (su historial de asistencias, incidencias y
+// planillas de meses ya cerrados debe seguir siendo auditable) pero queda
+// FUERA del roster activo: no aparece en el kiosko, no genera faltas ni
+// tardanzas y no cuenta en el dashboard. Pasar incluirCesados=true para
+// listarlos igual (panel de planilla, reportes historicos).
+function leerRosterReal_(incluirCesados) {
   var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('sueldos');
   if (!sheet) return [];
   var rows = sheet.getDataRange().getValues();
   if (rows.length <= 1) return [];
   var h = rows[0];
   var cDni = h.indexOf('dni'), cNom = h.indexOf('nombre'), cCargo = h.indexOf('cargo'),
-      cSede = h.indexOf('sede'), cEmail = h.indexOf('email');
+      cSede = h.indexOf('sede'), cEmail = h.indexOf('email'),
+      cIni = h.indexOf('fecha_inicio'), cFin = h.indexOf('fecha_fin');
+  var hoy = hoyISO_();
   var out = [];
   for (var i = 1; i < rows.length; i++) {
     var dni = rows[i][cDni];
     if (!dni) continue;
     var email = cEmail >= 0 ? String(rows[i][cEmail] || '') : '';
+    // Hojas creadas antes de la baja logica no tienen la columna: todos activos.
+    var fechaFin = cFin >= 0 ? fechaISO_(rows[i][cFin]) : '';
+    var activo = !fechaFin || fechaFin >= hoy; // el dia del cese aun se trabaja
+    if (!activo && !incluirCesados) continue;
     out.push({
       dni: String(dni),
       nombre: String(rows[i][cNom] || ''),
       cargo: cCargo >= 0 ? String(rows[i][cCargo] || '') : '',
       sede: cSede >= 0 ? String(rows[i][cSede] || '') : '',
       email: email,
-      es_campo: !email
+      es_campo: !email,
+      fecha_inicio: cIni >= 0 ? fechaISO_(rows[i][cIni]) : '',
+      fecha_fin: fechaFin,
+      activo: activo
     });
   }
   return out;
@@ -1035,21 +1070,26 @@ function trabajadorRosterAEmployee_(t) {
     cargo: t.cargo,
     area: t.es_campo ? 'Campo' : 'Oficina',
     ciudad_actual: t.sede || 'Principal',
-    estado: 'activo',
+    estado: t.activo === false ? 'inactivo' : 'activo',
+    fecha_fin: t.fecha_fin || '',
     registro_simple: t.es_campo
   };
 }
 
+// Lee tambien a los cesados para que un filtro explicito por estado pueda
+// mostrarlos; sin filtro, la vista solo lista a los activos.
 function getEmployees(filters) {
-  var employees = leerRosterReal_().map(trabajadorRosterAEmployee_);
+  var employees = leerRosterReal_(true).map(trabajadorRosterAEmployee_);
+  var f = filters ? (typeof filters === 'string' ? JSON.parse(filters) : filters) : {};
 
-  if (filters) {
-    var f = typeof filters === 'string' ? JSON.parse(filters) : filters;
-    if (f.estado) employees = employees.filter(function(e){ return e.estado === f.estado; });
-    if (f.ciudad) employees = employees.filter(function(e){ return e.ciudad_actual === f.ciudad; });
-    if (f.area) employees = employees.filter(function(e){ return e.area === f.area; });
-    if (f.cargo) employees = employees.filter(function(e){ return e.cargo === f.cargo; });
+  // Sin filtro de estado se listan solo los activos; 'todos' los incluye a ambos.
+  var estado = f.estado || 'activo';
+  if (estado !== 'todos') {
+    employees = employees.filter(function(e){ return e.estado === estado; });
   }
+  if (f.ciudad) employees = employees.filter(function(e){ return e.ciudad_actual === f.ciudad; });
+  if (f.area) employees = employees.filter(function(e){ return e.area === f.area; });
+  if (f.cargo) employees = employees.filter(function(e){ return e.cargo === f.cargo; });
 
   return { success: true, data: employees };
 }
@@ -1067,8 +1107,9 @@ function getEmployeeById(id) {
   const dni = dniDesdeIdRoster_(id);
 
   if (dni) {
-    // Roster real (hoja 'sueldos') — fuente unica de la verdad.
-    const trabajador = leerRosterReal_().filter(function(t) { return t.dni === dni; })[0];
+    // Roster real (hoja 'sueldos') — fuente unica de la verdad. Se incluyen los
+    // cesados: su ficha e historial deben poder consultarse tras la baja.
+    const trabajador = leerRosterReal_(true).filter(function(t) { return t.dni === dni; })[0];
     if (!trabajador) {
       return { success: false, error: 'Empleado no encontrado' };
     }
@@ -1235,7 +1276,7 @@ function updateEmployee(data) {
         if (data.salary != null && colMap.salary >= 0) sheet.getRange(i + 1, colMap.salary + 1).setValue(data.salary);
         // phone, department, status: la hoja sueldos no los tiene -> se ignoran con gracia.
 
-        const trabajador = leerRosterReal_().filter(function(t) { return t.dni === dni; })[0];
+        const trabajador = leerRosterReal_(true).filter(function(t) { return t.dni === dni; })[0];
         invalidarCacheTrabajadores_();
         return { success: true, data: trabajadorRosterAEmployee_(trabajador), message: 'Empleado actualizado' };
       }
@@ -3138,15 +3179,20 @@ function verificarEmpleado(dni) {
 
   // Roster real (hoja 'sueldos') — fuente unica de la verdad. La hoja legado
   // 'empleados' esta vacia y rechazaba a los 13 trabajadores reales.
-  const roster = leerRosterReal_();
+  // Se leen tambien los cesados para poder dar un mensaje claro en vez de
+  // "DNI no encontrado", que haria pensar en un error del sistema.
+  const roster = leerRosterReal_(true);
   const trabajador = roster.find(function (t) { return t.dni === dni; });
 
   if (!trabajador) {
     return { success: false, error: 'DNI no encontrado en el sistema' };
   }
 
-  // El roster real no maneja 'estado' (todos activos); id sintetico igual
-  // al usado en getEmployees ('SUE-<dni>') para no romper el shape.
+  if (!trabajador.activo) {
+    return { success: false, error: 'Trabajador cesado el ' + trabajador.fecha_fin + '. Comuniquese con administracion.' };
+  }
+
+  // Id sintetico igual al usado en getEmployees ('SUE-<dni>') para no romper el shape.
   const id = 'SUE-' + trabajador.dni;
 
   // Verificar si ya marco hoy
@@ -3854,7 +3900,10 @@ var HEADERS_PLANILLA_LOG = [
   'nota', 'usuario', 'timestamp'
 ];
 
-var HEADERS_SUELDOS = ['dni', 'nombre', 'cargo', 'sueldo', 'fecha_inicio', 'usa_rmv', 'sede', 'email'];
+// 'fecha_fin' = ultimo dia laborado (vacio = activo). La fila NUNCA se borra:
+// el historial de asistencias, incidencias y planillas cerradas debe seguir
+// siendo auditable despues del cese. Ver leerRosterReal_ en 03_empleados.gs.
+var HEADERS_SUELDOS = ['dni', 'nombre', 'cargo', 'sueldo', 'fecha_inicio', 'usa_rmv', 'sede', 'email', 'fecha_fin'];
 
 var HEADERS_AUTORIZACIONES = ['id', 'dni', 'fecha', 'autorizado_por', 'nota', 'timestamp'];
 
@@ -3864,20 +3913,26 @@ var HEADERS_BOLSA = ['id', 'dni', 'fecha', 'tipo', 'horas', 'nota', 'usuario', '
 // Correos corporativos: dominio ingenieriatelcom.com (Google Workspace).
 // Los operarios (RMV) y los ingresos nuevos arrancan 2026-07-07 para no
 // generar faltas retroactivas; el admin ajusta la fecha real desde la hoja.
+// Ultima columna = fecha_fin (ultimo dia laborado; vacio = activo).
+// Solo se usa al CREAR la hoja desde cero: la hoja viva manda. Las altas y
+// bajas reales se hacen desde /admin/planilla (crearTrabajador / darDeBajaTrabajador).
 var SUELDOS_INICIALES = [
-  ['46809070', 'Araujo Álvarez, Andre Steven', 'Coordinador General', 3500, '2026-07-01', 'FALSE', 'Principal', 'coordinador.general@ingenieriatelcom.com'],
-  ['73316735', 'Marroquín Concha, Diego Mauricio', 'Analista Legal de Reclamos', 3000, '2026-07-01', 'FALSE', 'Principal', 'analista.legal1@ingenieriatelcom.com'],
-  ['74135306', 'Vargas Miranda, Juan Joseph', 'Analista Legal de Reclamos', 1800, '2026-07-01', 'FALSE', 'Principal', 'analista.legal2@ingenieriatelcom.com'],
-  ['70401672', 'Montufar Diaz, Alvaro Rodrigo', 'Analista Junior de Reclamos', 1800, '2026-07-06', 'FALSE', 'Principal', 'analista.junior@ingenieriatelcom.com'],
-  ['74525595', 'León Umeres, Milagros Jhenifer', 'Asistente Administrativo', 1800, '2026-07-01', 'FALSE', 'Principal', 'asistente.admin@ingenieriatelcom.com'],
-  ['72374021', 'Condori Cáceres, Jocabed Adriana', 'Tramitador / Digitador', 1500, '2026-07-01', 'FALSE', 'Principal', 'tramitador2@ingenieriatelcom.com'],
-  ['72743443', 'Ramos Serrani, Anais Gasdaly', 'Tramitador / Digitador', 1500, '2026-07-07', 'FALSE', 'Principal', 'tramitador3@ingenieriatelcom.com'],
-  ['74147961', 'Hurtado Vega, Marilyn', 'Tramitador / Digitador', 1500, '2026-07-01', 'FALSE', 'Principal', 'tramitador1@ingenieriatelcom.com'],
-  ['45298858', 'Canaza Chique, Darwin', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', ''],
-  ['80644637', 'Canaza Chique, Jael Fausto', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', ''],
-  ['42239901', 'Canaza Chique, Willy', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', ''],
-  ['47815297', 'Marin Callañaupa, George Smith', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', ''],
-  ['74323866', 'Maceda Econema, Franco Paolo', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', '']
+  ['46809070', 'Araujo Álvarez, Andre Steven', 'Coordinador General', 3500, '2026-07-01', 'FALSE', 'Principal', 'coordinador.general@ingenieriatelcom.com', ''],
+  // Cesado 21/08/2026; su correo pasa a Vargas Pinto, que ocupa el puesto.
+  ['73316735', 'Marroquín Concha, Diego Mauricio', 'Analista Legal de Reclamos', 3000, '2026-07-01', 'FALSE', 'Principal', '', '2026-08-21'],
+  ['74135306', 'Vargas Miranda, Juan Joseph', 'Analista Legal de Reclamos', 1800, '2026-07-01', 'FALSE', 'Principal', 'analista.legal2@ingenieriatelcom.com', ''],
+  // Cesado 14/08/2026.
+  ['70401672', 'Montufar Diaz, Alvaro Rodrigo', 'Analista Junior de Reclamos', 1800, '2026-07-06', 'FALSE', 'Principal', '', '2026-08-14'],
+  ['71227060', 'Vargas Pinto, Marcela Devora', 'Analista Legal de Reclamos', 2200, '2026-08-20', 'FALSE', 'Principal', 'analista.legal1@ingenieriatelcom.com', ''],
+  ['74525595', 'León Umeres, Milagros Jhenifer', 'Asistente Administrativo', 1800, '2026-07-01', 'FALSE', 'Principal', 'asistente.admin@ingenieriatelcom.com', ''],
+  ['72374021', 'Condori Cáceres, Jocabed Adriana', 'Tramitador / Digitador', 1500, '2026-07-01', 'FALSE', 'Principal', 'tramitador2@ingenieriatelcom.com', ''],
+  ['72743443', 'Ramos Serrani, Anais Gasdaly', 'Tramitador / Digitador', 1500, '2026-07-07', 'FALSE', 'Principal', 'tramitador3@ingenieriatelcom.com', ''],
+  ['74147961', 'Hurtado Vega, Marilyn', 'Tramitador / Digitador', 1500, '2026-07-01', 'FALSE', 'Principal', 'tramitador1@ingenieriatelcom.com', ''],
+  ['45298858', 'Canaza Chique, Darwin', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', '', ''],
+  ['80644637', 'Canaza Chique, Jael Fausto', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', '', ''],
+  ['42239901', 'Canaza Chique, Willy', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', '', ''],
+  ['47815297', 'Marin Callañaupa, George Smith', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', '', ''],
+  ['74323866', 'Maceda Econema, Franco Paolo', 'Operario', 1130, '2026-07-07', 'TRUE', 'Principal', '', '']
 ];
 
 // Ejecutar UNA VEZ desde el editor (no toca hojas existentes)
@@ -3984,6 +4039,9 @@ function getSueldos() {
   if (!sheet) return { success: false, error: 'Ejecuta setupPlanillaSheets() primero' };
   var rows = sheet.getDataRange().getValues();
   var headers = rows[0];
+  var hoy = hoyISO_();
+  // Incluye a los cesados: la planilla del mes en curso y los meses ya
+  // cerrados deben seguir mostrandolos. 'activo' distingue unos de otros.
   var result = rows.slice(1)
     .filter(function(r) { return r[0] !== ''; })
     .map(function(r) {
@@ -3992,10 +4050,9 @@ function getSueldos() {
       o.usa_rmv = o.usa_rmv === true || o.usa_rmv === 'TRUE' || o.usa_rmv === 'true';
       // RMV con ajuste automatico
       o.sueldo = o.usa_rmv ? Number(cfg.rmv) : (Number(o.sueldo) || 0);
-      if (o.fecha_inicio instanceof Date) {
-        o.fecha_inicio = Utilities.formatDate(o.fecha_inicio, 'America/Lima', 'yyyy-MM-dd');
-      }
-      o.fecha_inicio = String(o.fecha_inicio || cfg.fecha_operativo);
+      o.fecha_inicio = fechaISO_(o.fecha_inicio) || String(cfg.fecha_operativo);
+      o.fecha_fin = fechaISO_(o.fecha_fin);
+      o.activo = !o.fecha_fin || o.fecha_fin >= hoy; // el dia del cese aun se trabaja
       o.email = String(o.email || '');
       return o;
     });
@@ -4004,10 +4061,14 @@ function getSueldos() {
 
 // Lista publica para el kiosko de asistencia: SIN sueldos ni correos.
 // registro_simple = trabajador de campo (sin correo): flujo Ingreso/Salida simple.
+// Solo trabajadores ACTIVOS: un cesado no debe poder marcar ni figurar en la
+// pantalla del kiosko (su historial si se conserva en la hoja).
 // Cacheada 10 min: a la hora de ingreso muchos trabajadores abren el kiosko a
 // la vez; responder desde CacheService evita abrir el Spreadsheet en cada
 // request (cada openById tarda ~1s y bajo rafaga alguna peticion falla).
-var CACHE_KEY_TRABAJADORES = 'kiosk_trabajadores_v1';
+// v2: la lista dejo de incluir cesados — la clave cambia para no servir el
+// cache viejo (con los cesados dentro) durante los 10 min posteriores al deploy.
+var CACHE_KEY_TRABAJADORES = 'kiosk_trabajadores_v2';
 var CACHE_TTL_TRABAJADORES = 600; // 10 min (max practico de CacheService)
 
 function invalidarCacheTrabajadores_() {
@@ -4024,9 +4085,11 @@ function getTrabajadores() {
 
   var res = getSueldos();
   if (!res.success) return res;
-  var lista = res.data.map(function(t) {
-    return { dni: t.dni, nombre: t.nombre, cargo: t.cargo, sede: t.sede || '', registro_simple: !t.email };
-  });
+  var lista = res.data
+    .filter(function(t) { return t.activo; })
+    .map(function(t) {
+      return { dni: t.dni, nombre: t.nombre, cargo: t.cargo, sede: t.sede || '', registro_simple: !t.email };
+    });
 
   try {
     CacheService.getScriptCache().put(CACHE_KEY_TRABAJADORES, JSON.stringify(lista), CACHE_TTL_TRABAJADORES);
@@ -4074,18 +4137,115 @@ function crearTrabajador(data) {
     }
 
     var cfg = leerConfigPlanilla_();
+    asegurarColumnaFechaFin_(sheet);
     sheet.appendRow([
       dni,
       data.nombre,
       data.cargo,
       data.usa_rmv ? Number(cfg.rmv) : (Number(data.sueldo) || 0),
-      String(data.fecha_inicio || Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd')),
+      String(data.fecha_inicio || hoyISO_()),
       data.usa_rmv ? 'TRUE' : 'FALSE',
       data.sede || 'Principal',
-      data.email || ''
+      data.email || '',
+      '' // fecha_fin: activo
     ]);
     invalidarCacheTrabajadores_();
     return { success: true, message: 'Trabajador creado: ' + data.nombre };
+  });
+}
+
+// ── Bajas de personal ───────────────────────────────────────
+// La hoja 'sueldos' nacio sin columna de cese. Se agrega al vuelo la primera
+// vez que se necesita, igual que se hizo con la columna 'nota' de asistencias_v2.
+function asegurarColumnaFechaFin_(sheet) {
+  var ancho = Math.max(sheet.getLastColumn(), HEADERS_SUELDOS.length);
+  var headers = sheet.getRange(1, 1, 1, ancho).getValues()[0];
+  var col = headers.indexOf('fecha_fin');
+  if (col >= 0) return col + 1;
+  var nueva = sheet.getLastColumn() + 1;
+  sheet.getRange(1, nueva).setValue('fecha_fin').setFontWeight('bold');
+  return nueva;
+}
+
+// Elimina las incidencias PENDIENTES posteriores al cese. Sin esto, los dias
+// transcurridos entre la salida real del trabajador y el registro de su baja
+// quedan como faltas fantasma (mismo criterio que la limpieza retroactiva de
+// feriados). Solo toca 'pendiente': lo ya revisado o descontado no se altera.
+function limpiarIncidenciasPosterioresACese_(ss, dni, fechaFin) {
+  var incSheet = ss.getSheetByName('incidencias');
+  if (!incSheet) return 0;
+  var rows = incSheet.getDataRange().getValues();
+  var borradas = 0;
+  for (var i = rows.length - 1; i >= 1; i--) {
+    if (String(rows[i][1]) !== String(dni)) continue;
+    if (String(rows[i][8]) !== 'pendiente') continue;
+    if (fechaISO_(rows[i][3]) <= fechaFin) continue;
+    incSheet.deleteRow(i + 1);
+    borradas++;
+  }
+  return borradas;
+}
+
+// Da de baja a un trabajador: registra su ultimo dia laborado y lo saca del
+// roster activo SIN borrar la fila (el historial debe seguir siendo auditable).
+function darDeBajaTrabajador(data) {
+  return withLock_(function () {
+    data = data || {};
+    var dni = String(data.dni || '').trim();
+    var fechaFin = fechaISO_(data.fecha_fin);
+    if (!/^\d{8}$/.test(dni)) return { success: false, error: 'DNI invalido (8 digitos)' };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaFin)) return { success: false, error: 'Fecha de cese invalida (yyyy-mm-dd)' };
+
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = ss.getSheetByName('sueldos');
+    if (!sheet) return { success: false, error: 'Hoja sueldos no encontrada' };
+
+    var colFin = asegurarColumnaFechaFin_(sheet);
+    var rows = sheet.getDataRange().getValues();
+    var colIni = rows[0].indexOf('fecha_inicio');
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) !== dni) continue;
+
+      var fechaInicio = colIni >= 0 ? fechaISO_(rows[i][colIni]) : '';
+      if (fechaInicio && fechaFin < fechaInicio) {
+        return { success: false, error: 'La fecha de cese es anterior a la fecha de ingreso (' + fechaInicio + ')' };
+      }
+
+      sheet.getRange(i + 1, colFin).setValue(fechaFin);
+      var borradas = limpiarIncidenciasPosterioresACese_(ss, dni, fechaFin);
+      invalidarCacheTrabajadores_();
+
+      return {
+        success: true,
+        message: 'Baja registrada: ' + String(rows[i][1]) + ' — ultimo dia ' + fechaFin +
+          (borradas ? ' (' + borradas + ' incidencias pendientes posteriores eliminadas)' : ''),
+        data: { dni: dni, fecha_fin: fechaFin, incidencias_eliminadas: borradas }
+      };
+    }
+    return { success: false, error: 'DNI no encontrado en hoja sueldos' };
+  });
+}
+
+// Revierte una baja (cese registrado por error o recontratacion en el mismo
+// puesto). No regenera las incidencias eliminadas: si hacen falta, se vuelve
+// a correr sincronizarIncidencias sobre el rango.
+function reactivarTrabajador(data) {
+  return withLock_(function () {
+    var dni = String((data || {}).dni || '').trim();
+    if (!/^\d{8}$/.test(dni)) return { success: false, error: 'DNI invalido (8 digitos)' };
+
+    var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('sueldos');
+    if (!sheet) return { success: false, error: 'Hoja sueldos no encontrada' };
+
+    var colFin = asegurarColumnaFechaFin_(sheet);
+    var rows = sheet.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) !== dni) continue;
+      sheet.getRange(i + 1, colFin).setValue('');
+      invalidarCacheTrabajadores_();
+      return { success: true, message: 'Trabajador reactivado: ' + String(rows[i][1]) };
+    }
+    return { success: false, error: 'DNI no encontrado en hoja sueldos' };
   });
 }
 
@@ -4501,11 +4661,14 @@ function sincronizarIncidencias(data) {
     var diaTerminado = fecha < hoyISO;
 
     trabajadores.forEach(function(t) {
+      // No computar asistencia fuera del vinculo laboral: ni antes del ingreso
+      // ni despues del ultimo dia laborado (fecha_fin). Va primero que el filtro
+      // de correo para que la baja no dependa de si se libero el buzon.
+      if (t.fecha_inicio && fecha < String(t.fecha_inicio)) return;
+      if (t.fecha_fin && fecha > String(t.fecha_fin)) return;
       // Trabajadores de campo (sin correo) quedan FUERA del modelo de descuentos:
       // solo dejan bitacora de presencia (Ingreso/Salida) + justificaciones.
       if (!t.email) return;
-      // No computar asistencia antes de la fecha de inicio del trabajador
-      if (t.fecha_inicio && fecha < String(t.fecha_inicio)) return;
 
       var regs = (regIdx[t.dni] || {})[fecha] || {};
       var tieneAlguno = Object.keys(regs).length > 0;
@@ -5566,6 +5729,7 @@ var FUNCIONES_REQUERIDAS = [
   'getTrabajadores', 'registrarAsistenciaFoto', 'subirJustificacion', 'getAsistenciasV2', 'getJustificaciones',
   'registrarAsistenciaManual',
   'getConfigPlanillaAction', 'updateConfigPlanilla', 'getSueldos', 'updateSueldo', 'crearTrabajador',
+  'darDeBajaTrabajador', 'reactivarTrabajador',
   'getIncidencias', 'revisarIncidencia', 'sincronizarIncidencias',
   'autorizarSalida5pm', 'getAutorizaciones5pm', 'registrarMuestreo', 'getBolsaHoras',
   'getFeriados', 'agregarFeriado', 'eliminarFeriado', 'sembrarFeriadosPeru2026',
@@ -5627,6 +5791,18 @@ function ejecutarTestSalud() {
       if (sinDni.length) warn(sinDni.length + ' trabajador(es) con DNI invalido en sueldos');
       var sinEmailOficina = roster.filter(function (t3) { return !t3.es_campo && !t3.email; });
       if (sinEmailOficina.length) warn(sinEmailOficina.length + ' trabajador(es) de oficina sin email');
+
+      // Columna de bajas: si falta, se crea sola en la primera baja, pero
+      // conviene saberlo antes de intentarla.
+      var hSueldos = SpreadsheetApp.openById(SHEET_ID).getSheetByName('sueldos')
+        .getRange(1, 1, 1, HEADERS_SUELDOS.length).getValues()[0];
+      if (hSueldos.indexOf('fecha_fin') < 0) {
+        warn('La hoja sueldos aun no tiene la columna `fecha_fin` (se creara en la primera baja)');
+      } else {
+        ok();
+        var cesados = leerRosterReal_(true).filter(function (t4) { return !t4.activo; });
+        if (cesados.length) warn(cesados.length + ' trabajador(es) cesado(s) fuera del roster activo (esperado tras una baja)');
+      }
     }
   } catch (e) { fail('leerRosterReal_ lanzo error: ' + e.message); }
 

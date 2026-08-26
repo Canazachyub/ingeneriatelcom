@@ -63,6 +63,11 @@ export interface SueldoTrabajador {
   usa_rmv?: boolean
   sede?: string
   email?: string
+  /** Último día laborado. Vacío = sigue activo. La fila nunca se borra: el
+   *  historial de asistencias e incidencias debe seguir siendo auditable. */
+  fecha_fin?: string
+  /** Lo calcula el backend comparando fecha_fin con hoy (America/Lima). */
+  activo?: boolean
 }
 
 // Los trabajadores con usa_rmv ganan la RMV con ajuste automático: si la RMV

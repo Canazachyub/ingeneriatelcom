@@ -1,5 +1,6 @@
 import {
   FaChevronDown, FaChevronRight, FaCheckCircle, FaPen, FaClock, FaHourglassHalf, FaPrint,
+  FaUserSlash, FaUndo,
 } from 'react-icons/fa'
 import { ConfigPlanilla, formatoSoles, valorDia, valorMinuto, descuentoIncidencia, SueldoTrabajador } from '../../../utils/planilla'
 import { Fila, TIPO_LABELS, ESTADO_BADGE, ESTADO_LABELS } from './planilla.types'
@@ -19,13 +20,15 @@ interface SueldosTableProps {
   abrirRevision: (inc: Fila['incMes'][number]) => void
   onAbrir5pm: (trabajador: SueldoTrabajador) => void
   onAbrirMuestreo: (trabajador: SueldoTrabajador) => void
+  onAbrirBaja: (trabajador: SueldoTrabajador) => void
+  onReactivar: (trabajador: SueldoTrabajador) => void
   imprimirTrabajador: (fila: Fila) => void
 }
 
 export default function SueldosTable({
   filas, config, esMesActual, totalProyectado, expanded, setExpanded,
   editandoSueldo, setEditandoSueldo, sueldoDraft, setSueldoDraft, guardarSueldo,
-  abrirRevision, onAbrir5pm, onAbrirMuestreo, imprimirTrabajador,
+  abrirRevision, onAbrir5pm, onAbrirMuestreo, onAbrirBaja, onReactivar, imprimirTrabajador,
 }: SueldosTableProps) {
   return (
     <div className="bg-primary-900/60 border border-primary-800 rounded-2xl overflow-hidden">
@@ -52,16 +55,28 @@ export default function SueldosTable({
           <tbody className="divide-y divide-primary-800/60">
             {filas.map((f) => {
               const abierto = expanded === f.trabajador.dni
+              // Cesado: la fila se conserva (historial auditable) pero se atenúa.
+              const cesado = f.trabajador.activo === false
               return (
                 <>
                   <tr
                     key={f.trabajador.dni}
                     onClick={() => setExpanded(abierto ? null : f.trabajador.dni)}
-                    className="hover:bg-primary-800/30 transition-colors cursor-pointer"
+                    className={`hover:bg-primary-800/30 transition-colors cursor-pointer ${cesado ? 'opacity-60' : ''}`}
                   >
                     <td className="px-4 py-3">
-                      <div className="font-medium text-white leading-tight">{f.trabajador.nombre}</div>
+                      <div className="font-medium text-white leading-tight">
+                        {f.trabajador.nombre}
+                        {cesado && (
+                          <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400 font-bold align-middle">
+                            CESADO
+                          </span>
+                        )}
+                      </div>
                       <div className="text-gray-500 text-xs">{f.trabajador.cargo}</div>
+                      {cesado && f.trabajador.fecha_fin && (
+                        <div className="text-gray-500 text-[11px]">Último día: {f.trabajador.fecha_fin}</div>
+                      )}
                       {f.trabajador.email && (
                         <div className="text-primary-500 text-[11px] truncate max-w-[220px]">{f.trabajador.email}</div>
                       )}
@@ -153,28 +168,50 @@ export default function SueldosTable({
                             Disciplina trimestre: <strong className="text-white">{f.disciplina.faltasDisciplinarias} falta(s)</strong> ·
                             Bolsa 5pm: <strong className="text-accent-electric">{f.bolsa.toFixed(2)}h</strong>
                             {f.trabajador.fecha_inicio && <> · Inicio: <strong className="text-white">{f.trabajador.fecha_inicio}</strong></>}
+                            {f.trabajador.fecha_fin && <> · Cese: <strong className="text-white">{f.trabajador.fecha_fin}</strong></>}
                           </p>
                           <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => onAbrir5pm(f.trabajador)}
-                              className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:underline"
-                            >
-                              <FaClock className="text-[10px]" /> Autorizar salida 5pm
-                            </button>
-                            <button
-                              onClick={() => onAbrirMuestreo(f.trabajador)}
-                              disabled={f.bolsa <= 0}
-                              className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:underline disabled:opacity-40 disabled:no-underline"
-                              title={f.bolsa <= 0 ? 'Sin horas en bolsa' : 'Registrar horas de muestreo ELSE'}
-                            >
-                              <FaHourglassHalf className="text-[10px]" /> Muestreo ELSE
-                            </button>
+                            {!cesado && (
+                              <>
+                                <button
+                                  onClick={() => onAbrir5pm(f.trabajador)}
+                                  className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:underline"
+                                >
+                                  <FaClock className="text-[10px]" /> Autorizar salida 5pm
+                                </button>
+                                <button
+                                  onClick={() => onAbrirMuestreo(f.trabajador)}
+                                  disabled={f.bolsa <= 0}
+                                  className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:underline disabled:opacity-40 disabled:no-underline"
+                                  title={f.bolsa <= 0 ? 'Sin horas en bolsa' : 'Registrar horas de muestreo ELSE'}
+                                >
+                                  <FaHourglassHalf className="text-[10px]" /> Muestreo ELSE
+                                </button>
+                              </>
+                            )}
                             <button
                               onClick={() => imprimirTrabajador(f)}
                               className="inline-flex items-center gap-1.5 text-xs text-accent-electric hover:underline"
                             >
                               <FaPrint className="text-[10px]" /> Imprimir / PDF
                             </button>
+                            {cesado ? (
+                              <button
+                                onClick={() => onReactivar(f.trabajador)}
+                                className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:underline"
+                                title="Revertir la baja: vuelve al kiosko y al cómputo de asistencia"
+                              >
+                                <FaUndo className="text-[10px]" /> Reactivar
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => onAbrirBaja(f.trabajador)}
+                                className="inline-flex items-center gap-1.5 text-xs text-rose-400 hover:underline"
+                                title="Registrar cese: sale del kiosko sin borrar su historial"
+                              >
+                                <FaUserSlash className="text-[10px]" /> Dar de baja
+                              </button>
+                            )}
                           </div>
                         </div>
                         {f.incMes.length === 0 ? (

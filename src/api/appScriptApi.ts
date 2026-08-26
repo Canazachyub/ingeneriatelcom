@@ -951,7 +951,9 @@ class AppScriptApi {
     return this.request('updateConfigPlanilla', 'POST', { valores })
   }
 
-  async getSueldos(): Promise<ApiResponse<{ dni: string; nombre: string; cargo: string; sueldo: number; fecha_inicio?: string; usa_rmv?: boolean; sede?: string; email?: string }[]>> {
+  // Incluye a los trabajadores cesados (activo:false, con fecha_fin): la
+  // planilla del mes en curso y los meses cerrados deben seguir mostrándolos.
+  async getSueldos(): Promise<ApiResponse<{ dni: string; nombre: string; cargo: string; sueldo: number; fecha_inicio?: string; usa_rmv?: boolean; sede?: string; email?: string; fecha_fin?: string; activo?: boolean }[]>> {
     return this.request('getSueldos', 'POST', {})
   }
 
@@ -975,6 +977,19 @@ class AppScriptApi {
     email?: string
   }): Promise<ApiResponse<null>> {
     return this.request('crearTrabajador', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  /** Baja de personal: registra el último día laborado. No borra la fila —
+   *  el trabajador sale del kiosko y deja de generar faltas, pero su historial
+   *  de asistencias, incidencias y planillas cerradas se conserva. */
+  async darDeBajaTrabajador(dni: string, fecha_fin: string): Promise<ApiResponse<{ dni: string; fecha_fin: string; incidencias_eliminadas: number }>> {
+    return this.request('darDeBajaTrabajador', 'POST', { dni, fecha_fin })
+  }
+
+  /** Revierte una baja registrada por error. No regenera las incidencias
+   *  pendientes que la baja hubiera eliminado. */
+  async reactivarTrabajador(dni: string): Promise<ApiResponse<null>> {
+    return this.request('reactivarTrabajador', 'POST', { dni })
   }
 
   async autorizarSalida5pm(data: {

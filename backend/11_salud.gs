@@ -32,6 +32,7 @@ var FUNCIONES_REQUERIDAS = [
   'getTrabajadores', 'registrarAsistenciaFoto', 'subirJustificacion', 'getAsistenciasV2', 'getJustificaciones',
   'registrarAsistenciaManual',
   'getConfigPlanillaAction', 'updateConfigPlanilla', 'getSueldos', 'updateSueldo', 'crearTrabajador',
+  'darDeBajaTrabajador', 'reactivarTrabajador',
   'getIncidencias', 'revisarIncidencia', 'sincronizarIncidencias',
   'autorizarSalida5pm', 'getAutorizaciones5pm', 'registrarMuestreo', 'getBolsaHoras',
   'getFeriados', 'agregarFeriado', 'eliminarFeriado', 'sembrarFeriadosPeru2026',
@@ -93,6 +94,18 @@ function ejecutarTestSalud() {
       if (sinDni.length) warn(sinDni.length + ' trabajador(es) con DNI invalido en sueldos');
       var sinEmailOficina = roster.filter(function (t3) { return !t3.es_campo && !t3.email; });
       if (sinEmailOficina.length) warn(sinEmailOficina.length + ' trabajador(es) de oficina sin email');
+
+      // Columna de bajas: si falta, se crea sola en la primera baja, pero
+      // conviene saberlo antes de intentarla.
+      var hSueldos = SpreadsheetApp.openById(SHEET_ID).getSheetByName('sueldos')
+        .getRange(1, 1, 1, HEADERS_SUELDOS.length).getValues()[0];
+      if (hSueldos.indexOf('fecha_fin') < 0) {
+        warn('La hoja sueldos aun no tiene la columna `fecha_fin` (se creara en la primera baja)');
+      } else {
+        ok();
+        var cesados = leerRosterReal_(true).filter(function (t4) { return !t4.activo; });
+        if (cesados.length) warn(cesados.length + ' trabajador(es) cesado(s) fuera del roster activo (esperado tras una baja)');
+      }
     }
   } catch (e) { fail('leerRosterReal_ lanzo error: ' + e.message); }
 

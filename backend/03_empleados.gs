@@ -8,26 +8,42 @@
 // ============================================
 // Roster real de trabajadores (hoja 'sueldos') — fuente unica de la verdad.
 // Reemplaza los datos demo de la hoja 'empleados' en Dashboard/Empleados.
-function leerRosterReal_() {
+//
+// Bajas: la columna 'fecha_fin' marca el ULTIMO DIA LABORADO. Un trabajador
+// cesado se conserva en la hoja (su historial de asistencias, incidencias y
+// planillas de meses ya cerrados debe seguir siendo auditable) pero queda
+// FUERA del roster activo: no aparece en el kiosko, no genera faltas ni
+// tardanzas y no cuenta en el dashboard. Pasar incluirCesados=true para
+// listarlos igual (panel de planilla, reportes historicos).
+function leerRosterReal_(incluirCesados) {
   var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('sueldos');
   if (!sheet) return [];
   var rows = sheet.getDataRange().getValues();
   if (rows.length <= 1) return [];
   var h = rows[0];
   var cDni = h.indexOf('dni'), cNom = h.indexOf('nombre'), cCargo = h.indexOf('cargo'),
-      cSede = h.indexOf('sede'), cEmail = h.indexOf('email');
+      cSede = h.indexOf('sede'), cEmail = h.indexOf('email'),
+      cIni = h.indexOf('fecha_inicio'), cFin = h.indexOf('fecha_fin');
+  var hoy = hoyISO_();
   var out = [];
   for (var i = 1; i < rows.length; i++) {
     var dni = rows[i][cDni];
     if (!dni) continue;
     var email = cEmail >= 0 ? String(rows[i][cEmail] || '') : '';
+    // Hojas creadas antes de la baja logica no tienen la columna: todos activos.
+    var fechaFin = cFin >= 0 ? fechaISO_(rows[i][cFin]) : '';
+    var activo = !fechaFin || fechaFin >= hoy; // el dia del cese aun se trabaja
+    if (!activo && !incluirCesados) continue;
     out.push({
       dni: String(dni),
       nombre: String(rows[i][cNom] || ''),
       cargo: cCargo >= 0 ? String(rows[i][cCargo] || '') : '',
       sede: cSede >= 0 ? String(rows[i][cSede] || '') : '',
       email: email,
-      es_campo: !email
+      es_campo: !email,
+      fecha_inicio: cIni >= 0 ? fechaISO_(rows[i][cIni]) : '',
+      fecha_fin: fechaFin,
+      activo: activo
     });
   }
   return out;
@@ -47,21 +63,26 @@ function trabajadorRosterAEmployee_(t) {
     cargo: t.cargo,
     area: t.es_campo ? 'Campo' : 'Oficina',
     ciudad_actual: t.sede || 'Principal',
-    estado: 'activo',
+    estado: t.activo === false ? 'inactivo' : 'activo',
+    fecha_fin: t.fecha_fin || '',
     registro_simple: t.es_campo
   };
 }
 
+// Lee tambien a los cesados para que un filtro explicito por estado pueda
+// mostrarlos; sin filtro, la vista solo lista a los activos.
 function getEmployees(filters) {
-  var employees = leerRosterReal_().map(trabajadorRosterAEmployee_);
+  var employees = leerRosterReal_(true).map(trabajadorRosterAEmployee_);
+  var f = filters ? (typeof filters === 'string' ? JSON.parse(filters) : filters) : {};
 
-  if (filters) {
-    var f = typeof filters === 'string' ? JSON.parse(filters) : filters;
-    if (f.estado) employees = employees.filter(function(e){ return e.estado === f.estado; });
-    if (f.ciudad) employees = employees.filter(function(e){ return e.ciudad_actual === f.ciudad; });
-    if (f.area) employees = employees.filter(function(e){ return e.area === f.area; });
-    if (f.cargo) employees = employees.filter(function(e){ return e.cargo === f.cargo; });
+  // Sin filtro de estado se listan solo los activos; 'todos' los incluye a ambos.
+  var estado = f.estado || 'activo';
+  if (estado !== 'todos') {
+    employees = employees.filter(function(e){ return e.estado === estado; });
   }
+  if (f.ciudad) employees = employees.filter(function(e){ return e.ciudad_actual === f.ciudad; });
+  if (f.area) employees = employees.filter(function(e){ return e.area === f.area; });
+  if (f.cargo) employees = employees.filter(function(e){ return e.cargo === f.cargo; });
 
   return { success: true, data: employees };
 }
@@ -79,8 +100,9 @@ function getEmployeeById(id) {
   const dni = dniDesdeIdRoster_(id);
 
   if (dni) {
-    // Roster real (hoja 'sueldos') — fuente unica de la verdad.
-    const trabajador = leerRosterReal_().filter(function(t) { return t.dni === dni; })[0];
+    // Roster real (hoja 'sueldos') — fuente unica de la verdad. Se incluyen los
+    // cesados: su ficha e historial deben poder consultarse tras la baja.
+    const trabajador = leerRosterReal_(true).filter(function(t) { return t.dni === dni; })[0];
     if (!trabajador) {
       return { success: false, error: 'Empleado no encontrado' };
     }
@@ -247,7 +269,7 @@ function updateEmployee(data) {
         if (data.salary != null && colMap.salary >= 0) sheet.getRange(i + 1, colMap.salary + 1).setValue(data.salary);
         // phone, department, status: la hoja sueldos no los tiene -> se ignoran con gracia.
 
-        const trabajador = leerRosterReal_().filter(function(t) { return t.dni === dni; })[0];
+        const trabajador = leerRosterReal_(true).filter(function(t) { return t.dni === dni; })[0];
         invalidarCacheTrabajadores_();
         return { success: true, data: trabajadorRosterAEmployee_(trabajador), message: 'Empleado actualizado' };
       }

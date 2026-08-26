@@ -56,7 +56,8 @@
 - No hay servidor propio: el "backend" es un Web App de Google Apps Script y la "base de datos" es un Spreadsheet (`15ajUr5KqGgs99bsCcp9LnxRaD9mbIWjZArLetk7v4hA`).
 - El archivo `appscript.js` vive en el repo pero se **copia manualmente** al editor de Apps Script y se redespliega como nueva versión.
 - Zona horaria fija del backend: **America/Lima (UTC-5)** — todos los timestamps se normalizan con `Utilities.formatDate(..., 'America/Lima', ...)`.
-- La hoja **`sueldos` es la fuente única de verdad del roster** de trabajadores (13 actuales). Dashboard, Empleados y Asistencia leen de ahí vía `leerRosterReal_()`.
+- La hoja **`sueldos` es la fuente única de verdad del roster** de trabajadores. Dashboard, Empleados y Asistencia leen de ahí vía `leerRosterReal_()`.
+- **Bajas de personal:** la columna `fecha_fin` de `sueldos` marca el último día laborado (vacío = activo). La fila **nunca se borra** — el historial de asistencias, incidencias y planillas cerradas debe seguir siendo auditable. `leerRosterReal_()` excluye a los cesados salvo que se le pase `true`.
 
 ---
 
@@ -154,6 +155,7 @@ Todo se opera desde `PlanillaPage` (`/admin/planilla`) y todas requieren token:
 |-----------|----------------|-----------------|
 | `getConfigPlanilla()` / `updateConfigPlanilla()` | `getConfigPlanilla` / `updateConfigPlanilla` | `config_planilla` |
 | `getSueldos()` / `updateSueldo()` / `crearTrabajador()` | `getSueldos` / `updateSueldo` / `crearTrabajador` | `sueldos` |
+| `darDeBajaTrabajador(dni, fecha_fin)` / `reactivarTrabajador(dni)` | `darDeBajaTrabajador` / `reactivarTrabajador` | `sueldos` (columna `fecha_fin`) + borra incidencias **pendientes** posteriores al cese |
 | `getIncidencias()` / `revisarIncidencia()` | `getIncidencias` / `revisarIncidencia` | `incidencias`, `planilla_log` (auditoría) |
 | `sincronizarIncidencias(desde, hasta)` | `sincronizarIncidencias` | Lee `asistencias_v2` + `sueldos` → escribe `incidencias`, `bolsa_horas`, consulta `autorizaciones_5pm` |
 | `autorizarSalida5pm()` / `getAutorizaciones5pm()` | `autorizarSalida5pm` / `getAutorizaciones5pm` | `autorizaciones_5pm` |
@@ -161,6 +163,8 @@ Todo se opera desde `PlanillaPage` (`/admin/planilla`) y todas requieren token:
 | `getFeriados()` / `agregarFeriado()` / `eliminarFeriado()` / `sembrarFeriadosPeru2026()` | `getFeriados` (auth) / resto (admin) | `feriados` |
 
 Los feriados/no laborables se gestionan desde `FeriadosPanel` en `/admin/planilla`: `sincronizarIncidencias` no genera falta ni omisión en esas fechas y el informe de asistencias las excluye de las faltas.
+
+Las bajas se registran con el botón **"Dar de baja"** del detalle de cada trabajador en `SueldosTable`. Efecto: `getTrabajadores` (kiosko) lo excluye, `verificarEmpleado` lo rechaza con mensaje explícito, `sincronizarIncidencias` no computa días posteriores a `fecha_fin`, el dashboard deja de contarlo y `getSueldos` lo sigue devolviendo con `activo:false` para que la planilla del mes en curso y los meses cerrados no pierdan su fila.
 
 Los cálculos de descuentos (valor día, valor minuto) se hacen en el frontend con `src/utils/planilla.ts` a partir de la config y las incidencias.
 

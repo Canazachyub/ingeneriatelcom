@@ -14,15 +14,20 @@ function verificarEmpleado(dni) {
 
   // Roster real (hoja 'sueldos') — fuente unica de la verdad. La hoja legado
   // 'empleados' esta vacia y rechazaba a los 13 trabajadores reales.
-  const roster = leerRosterReal_();
+  // Se leen tambien los cesados para poder dar un mensaje claro en vez de
+  // "DNI no encontrado", que haria pensar en un error del sistema.
+  const roster = leerRosterReal_(true);
   const trabajador = roster.find(function (t) { return t.dni === dni; });
 
   if (!trabajador) {
     return { success: false, error: 'DNI no encontrado en el sistema' };
   }
 
-  // El roster real no maneja 'estado' (todos activos); id sintetico igual
-  // al usado en getEmployees ('SUE-<dni>') para no romper el shape.
+  if (!trabajador.activo) {
+    return { success: false, error: 'Trabajador cesado el ' + trabajador.fecha_fin + '. Comuniquese con administracion.' };
+  }
+
+  // Id sintetico igual al usado en getEmployees ('SUE-<dni>') para no romper el shape.
   const id = 'SUE-' + trabajador.dni;
 
   // Verificar si ya marco hoy

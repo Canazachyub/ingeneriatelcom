@@ -94,6 +94,8 @@ var ROUTES = {
   getSueldos: { nivel: 'admin', handler: function () { return getSueldos(); } },
   updateSueldo: { nivel: 'admin', handler: function (ctx) { return updateSueldo(ctx.data); } },
   crearTrabajador: { nivel: 'admin', handler: function (ctx) { return crearTrabajador(ctx.data); } },
+  darDeBajaTrabajador: { nivel: 'admin', handler: function (ctx) { return darDeBajaTrabajador(ctx.data); } },
+  reactivarTrabajador: { nivel: 'admin', handler: function (ctx) { return reactivarTrabajador(ctx.data); } },
   getIncidencias: { nivel: 'admin', handler: function (ctx) { return getIncidencias(ctx.data); } },
   revisarIncidencia: { nivel: 'admin', handler: function (ctx) { return revisarIncidencia(ctx.data); } },
   sincronizarIncidencias: { nivel: 'admin', handler: function (ctx) { return sincronizarIncidencias(ctx.data); } },

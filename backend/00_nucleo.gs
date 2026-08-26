@@ -134,6 +134,23 @@ function rowToObject(headers, row) {
   return obj;
 }
 
+// Normaliza una celda de fecha a 'yyyy-MM-dd' (Sheets devuelve Date en las
+// columnas con formato fecha y string en las de texto). Devuelve '' si esta
+// vacia. Las comparaciones de calendario del sistema son lexicograficas sobre
+// este formato, asi que todo lector debe pasar por aqui.
+function fechaISO_(value) {
+  if (!value && value !== 0) return '';
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, 'America/Lima', 'yyyy-MM-dd');
+  }
+  return String(value).slice(0, 10);
+}
+
+// Fecha de hoy en America/Lima ('yyyy-MM-dd').
+function hoyISO_() {
+  return Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
+}
+
 // ============================================
 // CONCURRENCIA — LockService en escrituras
 // ============================================
