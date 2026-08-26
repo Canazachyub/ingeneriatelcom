@@ -961,9 +961,12 @@ class AppScriptApi {
     return this.request('updateSueldo', 'POST', { dni, sueldo })
   }
 
-  // Lista pública para el kiosko (sin sueldos ni correos)
-  async getTrabajadores(): Promise<ApiResponse<{ dni: string; nombre: string; cargo: string; sede?: string; registro_simple?: boolean }[]>> {
-    return this.request('getTrabajadores', 'GET', {}, 25000)
+  /** Lista pública para el kiosko (sin sueldos ni correos). Por defecto solo
+   *  trabajadores ACTIVOS: un cesado no debe poder marcar. Pasar
+   *  incluirCesados en el panel de asistencias, donde hay que poder filtrar
+   *  su historial y registrarles marcas manuales de días que sí laboraron. */
+  async getTrabajadores(incluirCesados = false): Promise<ApiResponse<{ dni: string; nombre: string; cargo: string; sede?: string; registro_simple?: boolean; activo?: boolean; fecha_fin?: string }[]>> {
+    return this.request('getTrabajadores', 'GET', incluirCesados ? { incluirCesados: true } : {}, 25000)
   }
 
   async crearTrabajador(data: {

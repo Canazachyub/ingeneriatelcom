@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-08-26T14:27:52.563Z con tools/build-backend.mjs
+// Generado: 2026-08-26T15:25:03.903Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -432,7 +432,7 @@ var ROUTES = {
   obtenerAsistenciasHoy: { nivel: 'auth', handler: function () { return obtenerAsistenciasHoy(); } },
 
   // === ASISTENCIA V2 (kiosko con foto + GPS) ===
-  getTrabajadores: { nivel: 'publico', handler: function () { return getTrabajadores(); } },
+  getTrabajadores: { nivel: 'publico', handler: function (ctx) { return getTrabajadores(ctx.data); } },
   registrarAsistenciaFoto: { nivel: 'publico', handler: function (ctx) { return registrarAsistenciaFoto(ctx.data); } },
   subirJustificacion: { nivel: 'publico', handler: function (ctx) { return subirJustificacion(ctx.data); } },
   getAsistenciasV2: { nivel: 'auth', handler: function (ctx) { return getAsistenciasV2(ctx.data); } },
@@ -3563,6 +3563,28 @@ function getOrCreateAsistenciaSheet_(ss, nombre, headers) {
   return sheet;
 }
 
+// Busca un DNI en el roster del kiosko. CRITICO: se llama en el camino
+// caliente del registro (rafaga de las 07:30), asi que NO puede abrir el
+// Spreadsheet en cada marca — reutiliza getTrabajadores(), que responde desde
+// CacheService (10 min). Pasar incluirCesados=true para el roster completo.
+//
+// Devuelve { estado: 'ok' | 'no_encontrado' | 'indisponible', trabajador }.
+// 'indisponible' = no se pudo leer el roster; quien llama decide si bloquea.
+function buscarEnRosterKiosko_(dni, incluirCesados) {
+  try {
+    var res = getTrabajadores(incluirCesados ? { incluirCesados: true } : undefined);
+    if (!res || !res.success || !res.data) return { estado: 'indisponible' };
+    for (var i = 0; i < res.data.length; i++) {
+      if (String(res.data[i].dni) === String(dni)) {
+        return { estado: 'ok', trabajador: res.data[i] };
+      }
+    }
+    return { estado: 'no_encontrado' };
+  } catch (e) {
+    return { estado: 'indisponible' };
+  }
+}
+
 function registrarAsistenciaFoto(data) {
   var dni = String(data.dni || '');
   var evento = data.evento || '';
@@ -3571,6 +3593,23 @@ function registrarAsistenciaFoto(data) {
   if (!/^\d{8}$/.test(dni)) return { success: false, error: 'DNI invalido' };
   if (EVENTOS_ASISTENCIA_V2.indexOf(evento) === -1 && !esCampo) return { success: false, error: 'Evento invalido' };
   if (!data.fileContent) return { success: false, error: 'La foto es obligatoria' };
+
+  // Validacion contra el roster ACTIVO. Esta action es publica y hasta ahora
+  // aceptaba cualquier dni/nombre/cargo que enviara el cliente: la unica
+  // barrera contra una marca de personal cesado era que el kiosko no lo
+  // listara, algo puramente visual (una pestana abierta desde antes de la
+  // baja seguia marcando). Va ANTES de subir la foto para no gastar la
+  // subida a Drive en una marca que se va a rechazar.
+  var enRoster = buscarEnRosterKiosko_(dni);
+  if (enRoster.estado === 'no_encontrado') {
+    return { success: false, error: 'DNI no habilitado para marcar. Comuniquese con administracion.' };
+  }
+  // Si el roster NO se pudo leer, la marca se acepta igual: perder la
+  // asistencia de un trabajador presente es peor que aceptar una marca de mas
+  // (queda auditable en la hoja). Nunca convertir una falla de lectura en un
+  // bloqueo masivo en plena rafaga de ingreso.
+  var nombre = enRoster.trabajador ? String(enRoster.trabajador.nombre || '') : String(data.nombre || '');
+  var cargo = enRoster.trabajador ? String(enRoster.trabajador.cargo || '') : String(data.cargo || '');
 
   // Validar archivo (tamano/tipo) antes de cualquier escritura o subida a Drive
   var errorArchivo = validarArchivoSubido_(data.fileContent, data.mimeType, 'imagen');
@@ -3631,8 +3670,8 @@ function registrarAsistenciaFoto(data) {
     sheet.appendRow([
       Utilities.getUuid(),
       dni,
-      data.nombre || '',
-      data.cargo || '',
+      nombre,  // del roster, no del cliente
+      cargo,   // del roster, no del cliente
       evento,
       fecha,
       hora,
@@ -3665,6 +3704,12 @@ function subirJustificacion(data) {
   var ahora = new Date();
   var fecha = Utilities.formatDate(ahora, 'America/Lima', 'yyyy-MM-dd');
 
+  // nombre/cargo desde el roster (cache) y no desde el cliente. NO se bloquea
+  // a los cesados: pueden necesitar sustentar una ausencia anterior a su baja.
+  var enRosterJust = buscarEnRosterKiosko_(dni, true);
+  var nombreJust = enRosterJust.trabajador ? String(enRosterJust.trabajador.nombre || '') : String(data.nombre || '');
+  var cargoJust = enRosterJust.trabajador ? String(enRosterJust.trabajador.cargo || '') : String(data.cargo || '');
+
   // Subir el adjunto a Drive FUERA del lock (mismo motivo que en
   // registrarAsistenciaFoto: la subida tarda y no debe bloquear a otros).
   var archivoUrl = '';
@@ -3691,8 +3736,8 @@ function subirJustificacion(data) {
     sheet.appendRow([
       Utilities.getUuid(),
       dni,
-      data.nombre || '',
-      data.cargo || '',
+      nombreJust,
+      cargoJust,
       data.motivo,
       data.descripcion || '',
       archivoUrl,
@@ -3724,11 +3769,21 @@ function registrarAsistenciaManual(data) {
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) return { success: false, error: 'Hora invalida (HH:mm)' };
   if (!nota) return { success: false, error: 'La observacion es obligatoria (auditoria del registro manual)' };
 
-  // nombre/cargo siempre desde el roster real, nunca desde el cliente
-  var roster = leerRosterReal_();
+  // nombre/cargo siempre desde el roster real, nunca desde el cliente.
+  // Se incluyen los CESADOS a proposito: el admin tiene que poder registrar
+  // la marca que falto en un dia que el trabajador SI laboro, aunque su baja
+  // ya este registrada (ese es justo el caso de uso de esta funcion). El
+  // control no es "esta activo" sino "la fecha cae dentro del vinculo".
+  var roster = leerRosterReal_(true);
   var trab = null;
   for (var k = 0; k < roster.length; k++) { if (roster[k].dni === dni) { trab = roster[k]; break; } }
   if (!trab) return { success: false, error: 'DNI no encontrado en el roster' };
+  if (trab.fecha_inicio && fecha < trab.fecha_inicio) {
+    return { success: false, error: 'La fecha es anterior al ingreso del trabajador (' + trab.fecha_inicio + ')' };
+  }
+  if (trab.fecha_fin && fecha > trab.fecha_fin) {
+    return { success: false, error: 'La fecha es posterior al cese del trabajador (' + trab.fecha_fin + ')' };
+  }
 
   // timestamp UTC coherente con las marcas del kiosko (hora America/Lima)
   var ts = new Date(fecha + 'T' + hora + ':00-05:00');
@@ -4069,30 +4124,45 @@ function getSueldos() {
 // v2: la lista dejo de incluir cesados — la clave cambia para no servir el
 // cache viejo (con los cesados dentro) durante los 10 min posteriores al deploy.
 var CACHE_KEY_TRABAJADORES = 'kiosk_trabajadores_v2';
+// Roster completo (con cesados) para el panel de asistencias: sin el, un
+// cesado desaparece del filtro y del modal de registro manual, y el admin
+// no puede corregir marcas de dias que ese trabajador SI laboro.
+var CACHE_KEY_TRABAJADORES_TODOS = 'kiosk_trabajadores_todos_v2';
 var CACHE_TTL_TRABAJADORES = 600; // 10 min (max practico de CacheService)
 
 function invalidarCacheTrabajadores_() {
   try {
-    CacheService.getScriptCache().remove(CACHE_KEY_TRABAJADORES);
+    CacheService.getScriptCache().removeAll([CACHE_KEY_TRABAJADORES, CACHE_KEY_TRABAJADORES_TODOS]);
   } catch (e) { /* si el cache falla, expira solo en 10 min */ }
 }
 
-function getTrabajadores() {
+function getTrabajadores(data) {
+  var incluirCesados = !!(data && (data.incluirCesados === true || data.incluirCesados === 'true'));
+  var cacheKey = incluirCesados ? CACHE_KEY_TRABAJADORES_TODOS : CACHE_KEY_TRABAJADORES;
+
   try {
-    var cached = CacheService.getScriptCache().get(CACHE_KEY_TRABAJADORES);
+    var cached = CacheService.getScriptCache().get(cacheKey);
     if (cached) return { success: true, data: JSON.parse(cached) };
   } catch (e) { /* cache no disponible: seguir contra Sheets */ }
 
   var res = getSueldos();
   if (!res.success) return res;
   var lista = res.data
-    .filter(function(t) { return t.activo; })
+    .filter(function(t) { return incluirCesados || t.activo; })
     .map(function(t) {
-      return { dni: t.dni, nombre: t.nombre, cargo: t.cargo, sede: t.sede || '', registro_simple: !t.email };
+      return {
+        dni: t.dni,
+        nombre: t.nombre,
+        cargo: t.cargo,
+        sede: t.sede || '',
+        registro_simple: !t.email,
+        activo: t.activo,
+        fecha_fin: t.fecha_fin || ''
+      };
     });
 
   try {
-    CacheService.getScriptCache().put(CACHE_KEY_TRABAJADORES, JSON.stringify(lista), CACHE_TTL_TRABAJADORES);
+    CacheService.getScriptCache().put(cacheKey, JSON.stringify(lista), CACHE_TTL_TRABAJADORES);
   } catch (e) { /* no critico */ }
 
   return { success: true, data: lista };

@@ -423,4 +423,22 @@ Datos tomados del contrato `02_Contrato_VARGAS_PINTO_71227060_MEJORADO.pdf` (CP-
 
 ---
 
+## 13. Endurecimiento del registro de asistencia (26/08/2026)
+
+Auditoría del camino de registro tras introducir las bajas. Tres fallos, uno de ellos introducido ese mismo día:
+
+| # | Fallo | Corrección |
+|---|-------|-----------|
+| 1 | **`registrarAsistenciaFoto` no validaba NADA contra el roster.** Es una action pública que aceptaba cualquier `dni`/`nombre`/`cargo` enviado por el cliente. La única barrera contra la marca de un cesado era que el kiosko no lo listara — protección puramente visual: una pestaña abierta desde antes de la baja seguía marcando, y el nombre guardado en la hoja era el que mandaba el cliente | Valida contra el roster **activo** y toma `nombre`/`cargo` de ahí, nunca del cliente. La comprobación va **antes** de subir la foto para no gastar la subida a Drive en una marca que se rechaza |
+| 2 | **`registrarAsistenciaManual` rechazaba a los cesados** (regresión del cambio de bajas: usaba `leerRosterReal_()`, que ya los excluía). El admin no podía registrar la marca faltante de un día que el trabajador **sí** laboró — justo el caso de uso de esa función | Usa `leerRosterReal_(true)` y valida que la fecha caiga dentro del vínculo: rechaza solo si es anterior al ingreso o posterior al cese |
+| 3 | **`AttendancePage` perdía a los cesados** en el filtro por trabajador y en el modal de registro manual, porque consume `getTrabajadores` | `getTrabajadores(incluirCesados)` con clave de caché propia. El kiosko sigue recibiendo solo activos; el panel pide el roster completo y marca `(cesado)` en los desplegables |
+
+**Coste en la ráfaga de las 07:30 — cero.** La validación del punto 1 reutiliza `getTrabajadores()`, que responde desde `CacheService` (10 min) y ya está caliente porque el propio kiosko carga esa lista al abrirse. No se abre el Spreadsheet por marca.
+
+**Fail-open deliberado:** si el roster no se puede leer, la marca se **acepta** igual (con el nombre del cliente). Perder la asistencia de un trabajador presente es peor que aceptar una marca de más, que además queda auditable en la hoja. Una falla de lectura nunca debe convertirse en un bloqueo masivo en plena hora de ingreso.
+
+`subirJustificacion` también toma nombre/cargo del roster, pero **no** bloquea a los cesados: pueden necesitar sustentar una ausencia anterior a su baja.
+
+---
+
 © 2026 Ingeniería Telcom EIRL — Documento de auditoría interna (Fase 0).

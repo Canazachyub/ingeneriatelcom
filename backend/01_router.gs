@@ -81,7 +81,7 @@ var ROUTES = {
   obtenerAsistenciasHoy: { nivel: 'auth', handler: function () { return obtenerAsistenciasHoy(); } },
 
   // === ASISTENCIA V2 (kiosko con foto + GPS) ===
-  getTrabajadores: { nivel: 'publico', handler: function () { return getTrabajadores(); } },
+  getTrabajadores: { nivel: 'publico', handler: function (ctx) { return getTrabajadores(ctx.data); } },
   registrarAsistenciaFoto: { nivel: 'publico', handler: function (ctx) { return registrarAsistenciaFoto(ctx.data); } },
   subirJustificacion: { nivel: 'publico', handler: function (ctx) { return subirJustificacion(ctx.data); } },
   getAsistenciasV2: { nivel: 'auth', handler: function (ctx) { return getAsistenciasV2(ctx.data); } },

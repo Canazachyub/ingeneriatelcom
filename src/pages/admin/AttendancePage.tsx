@@ -105,8 +105,11 @@ export default function AttendancePage() {
 
   // Roster de trabajadores (hoja 'sueldos' vía endpoint público, sin montos).
   // Fuente única de verdad: altas/bajas del panel de Planilla se reflejan sin redeploy.
+  // Se piden CON cesados: su historial de marcas sigue existiendo y hay que
+  // poder filtrarlo, y el registro manual debe permitir corregir días que sí
+  // laboraron antes de la baja. El kiosko en cambio solo recibe los activos.
   useEffect(() => {
-    api.getTrabajadores().then((res) => {
+    api.getTrabajadores(true).then((res) => {
       if (res.success && res.data) {
         setTrabajadores(res.data)
       } else {
@@ -391,7 +394,9 @@ export default function AttendancePage() {
           >
             <option value="">Todos los trabajadores</option>
             {trabajadores.map((t) => (
-              <option key={t.dni} value={t.dni}>{t.nombre}</option>
+              <option key={t.dni} value={t.dni}>
+                {t.nombre}{t.activo === false ? ' (cesado)' : ''}
+              </option>
             ))}
           </select>
           {tab === 'registros' && (
@@ -777,7 +782,10 @@ export default function AttendancePage() {
                 >
                   <option value="">Selecciona trabajador…</option>
                   {trabajadores.map((t) => (
-                    <option key={t.dni} value={t.dni}>{t.nombre} — {t.cargo}</option>
+                    <option key={t.dni} value={t.dni}>
+                      {t.nombre} — {t.cargo}
+                      {t.activo === false ? ` (cesado ${t.fecha_fin})` : ''}
+                    </option>
                   ))}
                 </select>
 

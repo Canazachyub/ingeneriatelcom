@@ -210,30 +210,45 @@ function getSueldos() {
 // v2: la lista dejo de incluir cesados — la clave cambia para no servir el
 // cache viejo (con los cesados dentro) durante los 10 min posteriores al deploy.
 var CACHE_KEY_TRABAJADORES = 'kiosk_trabajadores_v2';
+// Roster completo (con cesados) para el panel de asistencias: sin el, un
+// cesado desaparece del filtro y del modal de registro manual, y el admin
+// no puede corregir marcas de dias que ese trabajador SI laboro.
+var CACHE_KEY_TRABAJADORES_TODOS = 'kiosk_trabajadores_todos_v2';
 var CACHE_TTL_TRABAJADORES = 600; // 10 min (max practico de CacheService)
 
 function invalidarCacheTrabajadores_() {
   try {
-    CacheService.getScriptCache().remove(CACHE_KEY_TRABAJADORES);
+    CacheService.getScriptCache().removeAll([CACHE_KEY_TRABAJADORES, CACHE_KEY_TRABAJADORES_TODOS]);
   } catch (e) { /* si el cache falla, expira solo en 10 min */ }
 }
 
-function getTrabajadores() {
+function getTrabajadores(data) {
+  var incluirCesados = !!(data && (data.incluirCesados === true || data.incluirCesados === 'true'));
+  var cacheKey = incluirCesados ? CACHE_KEY_TRABAJADORES_TODOS : CACHE_KEY_TRABAJADORES;
+
   try {
-    var cached = CacheService.getScriptCache().get(CACHE_KEY_TRABAJADORES);
+    var cached = CacheService.getScriptCache().get(cacheKey);
     if (cached) return { success: true, data: JSON.parse(cached) };
   } catch (e) { /* cache no disponible: seguir contra Sheets */ }
 
   var res = getSueldos();
   if (!res.success) return res;
   var lista = res.data
-    .filter(function(t) { return t.activo; })
+    .filter(function(t) { return incluirCesados || t.activo; })
     .map(function(t) {
-      return { dni: t.dni, nombre: t.nombre, cargo: t.cargo, sede: t.sede || '', registro_simple: !t.email };
+      return {
+        dni: t.dni,
+        nombre: t.nombre,
+        cargo: t.cargo,
+        sede: t.sede || '',
+        registro_simple: !t.email,
+        activo: t.activo,
+        fecha_fin: t.fecha_fin || ''
+      };
     });
 
   try {
-    CacheService.getScriptCache().put(CACHE_KEY_TRABAJADORES, JSON.stringify(lista), CACHE_TTL_TRABAJADORES);
+    CacheService.getScriptCache().put(cacheKey, JSON.stringify(lista), CACHE_TTL_TRABAJADORES);
   } catch (e) { /* no critico */ }
 
   return { success: true, data: lista };

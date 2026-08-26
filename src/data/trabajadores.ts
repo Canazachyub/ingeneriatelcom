@@ -11,6 +11,10 @@ export interface TrabajadorFijo {
   // true = trabajador de campo (sin correo): registro simple Ingreso/Salida,
   // fuera del modelo de descuentos. false/undefined = oficina (4 eventos).
   registro_simple?: boolean
+  // Cesados: solo llegan si se pide el roster completo (panel de asistencias).
+  // El kiosko nunca los recibe.
+  activo?: boolean
+  fecha_fin?: string
 }
 
 export const buscarTrabajador = (dni: string, lista: TrabajadorFijo[]): TrabajadorFijo | undefined =>
