@@ -420,6 +420,72 @@ function buscarEnRosterKiosko_(dni, incluirCesados) {
   }
 }
 
+// ── Anti-duplicado de coste constante ───────────────────────
+// Antes, cada marca barria TODA la hoja asistencias_v2 dentro del lock. La
+// hoja crece ~1,100 filas al mes, asi que el tiempo que cada marca retenia el
+// lock crecia con el historico — y a las 07:30 doce personas hacen cola por
+// ese mismo lock. Ahora hay dos capas:
+//   1) Indice del dia en CacheService: acierto = rechazo sin tocar la hoja.
+//   2) Lectura del tramo final de la hoja, que se amplia SOLO si no alcanza a
+//      cubrir la fecha buscada (nunca se responde desde un tramo insuficiente).
+var CACHE_TTL_DUP_ = 21600;          // 6 h — cubre de sobra una jornada
+var FILAS_TRAMO_ASISTENCIA_ = 600;   // ~12 dias de marcas
+var FILAS_TRAMO_CARRERA_ = 60;       // ventana para detectar marcas simultaneas
+
+function claveDup_(dni, evento) { return String(dni) + '|' + String(evento); }
+function cacheKeyDia_(fecha) { return 'asisdia:' + fecha; }
+
+function leerIndiceDia_(fecha) {
+  try {
+    var raw = CacheService.getScriptCache().get(cacheKeyDia_(fecha));
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function marcarEnIndiceDia_(fecha, dni, evento) {
+  try {
+    var idx = leerIndiceDia_(fecha) || {};
+    idx[claveDup_(dni, evento)] = 1;
+    CacheService.getScriptCache().put(cacheKeyDia_(fecha), JSON.stringify(idx), CACHE_TTL_DUP_);
+  } catch (e) { /* no critico: la hoja sigue siendo la autoridad */ }
+}
+
+// Busca (dni, evento, fecha) leyendo solo el tramo final de la hoja. Si la
+// fila mas antigua del tramo sigue siendo >= la fecha buscada, el tramo no
+// alcanza a cubrir ese dia y se amplia; asi la respuesta negativa siempre se
+// da sobre un rango que SI contiene el dia completo.
+// sinAmpliar = mirar SOLO el tramo pedido, sin crecer. Se usa para la ventana
+// de carrera dentro del lock: alli basta con lo escrito en los ultimos
+// segundos, y ampliar seria justo lo que se quiere evitar (con 48 marcas
+// diarias, un tramo corto es todo "de hoy" y dispararia la ampliacion).
+function existeMarcaEnHoja_(sheet, dni, evento, fecha, filasIniciales, sinAmpliar) {
+  var maxFilas = filasIniciales || FILAS_TRAMO_ASISTENCIA_;
+  for (var intento = 0; intento < 4; intento++) {
+    var t = leerTramoFinal_(sheet, maxFilas);
+    if (!t.rows.length) return false;
+    var cDni = t.headers.indexOf('dni');
+    var cEvento = t.headers.indexOf('evento');
+    var cFecha = t.headers.indexOf('fecha');
+    if (cDni < 0 || cEvento < 0 || cFecha < 0) return false;
+
+    var masAntigua = null;
+    for (var i = 0; i < t.rows.length; i++) {
+      // Sheets auto-convierte 'yyyy-MM-dd' a Date al appendRow: normalizar
+      // antes de comparar o el anti-duplicado nunca matchea.
+      var f = fechaISO_(t.rows[i][cFecha]);
+      if (f && (masAntigua === null || f < masAntigua)) masAntigua = f;
+      if (String(t.rows[i][cDni]) === String(dni) &&
+          String(t.rows[i][cEvento]) === String(evento) && f === fecha) {
+        return true;
+      }
+    }
+    // El tramo abarca toda la hoja, o ya llega mas atras que la fecha buscada.
+    if (sinAmpliar || t.completa || (masAntigua && masAntigua < fecha)) return false;
+    maxFilas *= 4;
+  }
+  return false;
+}
+
 function registrarAsistenciaFoto(data) {
   var dni = String(data.dni || '');
   var evento = data.evento || '';
@@ -458,6 +524,23 @@ function registrarAsistenciaFoto(data) {
   var fecha = Utilities.formatDate(ahora, 'America/Lima', 'yyyy-MM-dd');
   var hora = Utilities.formatDate(ahora, 'America/Lima', 'HH:mm:ss');
 
+  // PRE-CHEQUEO de duplicado, antes de subir la foto y FUERA del lock.
+  // Antes la subida ocurria primero, asi que cada intento repetido dejaba un
+  // archivo huerfano en Drive — y el kiosko reintenta hasta 3 veces, o sea 3
+  // fotos basura por duplicado, consumiendo cuota en plena rafaga.
+  var ssPre = SpreadsheetApp.openById(SHEET_ID);
+  var sheetPre = getOrCreateAsistenciaSheet_(ssPre, 'asistencias_v2', HEADERS_ASISTENCIAS_V2);
+  if (!esCampo) {
+    var idxDia = leerIndiceDia_(fecha);
+    var yaMarco = (idxDia && idxDia[claveDup_(dni, evento)])
+      ? true
+      : existeMarcaEnHoja_(sheetPre, dni, evento, fecha);
+    if (yaMarco) {
+      marcarEnIndiceDia_(fecha, dni, evento);
+      return { success: false, error: 'Ya registraste este evento hoy' };
+    }
+  }
+
   // Subir foto a Drive FUERA del lock: la subida tarda varios segundos y
   // mantener el lock global durante la subida hacia esperar (y fallar con
   // "Sistema ocupado") a los demas trabajadores que marcan a la misma hora.
@@ -476,30 +559,20 @@ function registrarAsistenciaFoto(data) {
     return { success: false, error: 'Error al guardar la foto: ' + e.message };
   }
 
-  // Lock solo para la verificacion anti-duplicado + appendRow (<1s)
+  // Lock solo para la ventana de carrera + appendRow (<1s).
+  // El pre-chequeo de arriba ya descarto los duplicados reales; aqui solo
+  // queda cubrir el caso de dos marcas simultaneas del mismo evento que
+  // pasaron ambas ese pre-chequeo. Para eso basta mirar las ultimas filas,
+  // no la hoja entera: solo importa lo escrito en los ultimos segundos.
   return withLock_(function () {
-    var ss = SpreadsheetApp.openById(SHEET_ID);
-    var sheet = getOrCreateAsistenciaSheet_(ss, 'asistencias_v2', HEADERS_ASISTENCIAS_V2);
+    // Se reutiliza el handle abierto en el pre-chequeo: openById tarda ~1 s y
+    // este es el camino caliente. Las lecturas van al documento vivo igual.
+    var sheet = sheetPre;
 
     // Evitar doble registro del mismo evento en el mismo dia (SOLO oficina).
     // Los eventos de campo permiten varios turnos por dia.
-    if (!esCampo) {
-      var rows = sheet.getDataRange().getValues();
-      var headers = rows[0];
-      var dniCol = headers.indexOf('dni');
-      var eventoCol = headers.indexOf('evento');
-      var fechaCol = headers.indexOf('fecha');
-      for (var i = 1; i < rows.length; i++) {
-        // Sheets auto-convierte 'yyyy-MM-dd' a Date al appendRow: normalizar
-        // antes de comparar o el anti-duplicado nunca matchea.
-        var celdaFecha = rows[i][fechaCol];
-        var fechaFila = (celdaFecha instanceof Date)
-          ? Utilities.formatDate(celdaFecha, 'America/Lima', 'yyyy-MM-dd')
-          : String(celdaFecha);
-        if (String(rows[i][dniCol]) === dni && rows[i][eventoCol] === evento && fechaFila === fecha) {
-          return { success: false, error: 'Ya registraste este evento hoy' };
-        }
-      }
+    if (!esCampo && existeMarcaEnHoja_(sheet, dni, evento, fecha, FILAS_TRAMO_CARRERA_, true)) {
+      return { success: false, error: 'Ya registraste este evento hoy' };
     }
 
     sheet.appendRow([
@@ -516,6 +589,10 @@ function registrarAsistenciaFoto(data) {
       fotoUrl,
       ahora.toISOString()
     ]);
+
+    // Sembrar el indice del dia: el proximo intento del mismo evento se
+    // rechaza sin leer la hoja ni subir foto.
+    if (!esCampo) marcarEnIndiceDia_(fecha, dni, evento);
 
     return { success: true, data: { evento: evento, fecha: fecha, hora: hora, foto_url: fotoUrl } };
   });
@@ -634,22 +711,11 @@ function registrarAsistenciaManual(data) {
       sheet.getRange(1, HEADERS_ASISTENCIAS_V2.length + 1).setValue('nota').setFontWeight('bold');
     }
 
-    // Anti-duplicado igual que el kiosko (solo eventos de oficina)
-    if (!esCampo) {
-      var rows = sheet.getDataRange().getValues();
-      var headers = rows[0];
-      var dniCol = headers.indexOf('dni');
-      var eventoCol = headers.indexOf('evento');
-      var fechaCol = headers.indexOf('fecha');
-      for (var i = 1; i < rows.length; i++) {
-        var celdaFecha = rows[i][fechaCol];
-        var fechaFila = (celdaFecha instanceof Date)
-          ? Utilities.formatDate(celdaFecha, 'America/Lima', 'yyyy-MM-dd')
-          : String(celdaFecha);
-        if (String(rows[i][dniCol]) === dni && rows[i][eventoCol] === evento && fechaFila === fecha) {
-          return { success: false, error: 'Ese evento ya esta registrado para ese trabajador ese dia' };
-        }
-      }
+    // Anti-duplicado igual que el kiosko (solo eventos de oficina). Aqui SI se
+    // permite ampliar el tramo: el registro manual suele corregir un dia
+    // pasado, que puede quedar lejos del final de la hoja.
+    if (!esCampo && existeMarcaEnHoja_(sheet, dni, evento, fecha)) {
+      return { success: false, error: 'Ese evento ya esta registrado para ese trabajador ese dia' };
     }
 
     sheet.appendRow([
@@ -665,6 +731,9 @@ function registrarAsistenciaManual(data) {
       ts.toISOString(),
       nota
     ]);
+
+    // Sembrar el indice para que el kiosko no acepte luego el mismo evento.
+    if (!esCampo) marcarEnIndiceDia_(fecha, dni, evento);
 
     return { success: true, data: { evento: evento, fecha: fecha, hora: hora, nombre: trab.nombre } };
   });

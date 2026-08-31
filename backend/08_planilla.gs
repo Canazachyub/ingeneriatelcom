@@ -793,11 +793,17 @@ function sincronizarIncidencias(data) {
   var minSalidaAutorizada = horaAMinutosPlanilla_(cfg.salida_autorizada);
 
   var creadas = 0;
+  // Las filas se acumulan y se escriben de una sola vez al final. Antes era un
+  // appendRow por incidencia: sincronizar un mes con varias faltas disparaba
+  // decenas de escrituras sueltas, lento y con riesgo de agotar cuota justo en
+  // el cierre de planilla. Ver PLAN.md R6.
+  var pendientesInc = [];
+  var pendientesBolsa = [];
   var nuevaFila = function(dni, nombre, fecha, tipo, evento, minutos, grave) {
     var key = dni + '|' + fecha + '|' + tipo + '|' + (evento || '');
     if (existentes[key]) return;
     existentes[key] = true;
-    incSheet.appendRow([
+    pendientesInc.push([
       Utilities.getUuid(), dni, nombre, fecha, tipo, evento || '',
       minutos === null ? '' : minutos, grave ? 'TRUE' : 'FALSE',
       'pendiente', '', '', '', '', new Date().toISOString()
@@ -868,7 +874,7 @@ function sincronizarIncidencias(data) {
             var keyBolsa = t.dni + '|' + fecha;
             if (!bolsaExistente[keyBolsa]) {
               bolsaExistente[keyBolsa] = true;
-              bolsaSheet.appendRow([
+              pendientesBolsa.push([
                 Utilities.getUuid(), t.dni, fecha, 'salida_5pm',
                 Math.round((faltanteSt / 60) * 100) / 100,
                 'Salida autorizada ' + horaSt, 'sistema', new Date().toISOString()
@@ -891,6 +897,17 @@ function sincronizarIncidencias(data) {
         }
       }
     });
+  }
+
+  // Volcado de los lotes acumulados. Va ANTES de la auto-expiracion, que
+  // vuelve a leer la hoja de incidencias y debe ver ya las recien creadas.
+  if (pendientesInc.length) {
+    incSheet.getRange(incSheet.getLastRow() + 1, 1, pendientesInc.length, HEADERS_INCIDENCIAS.length)
+      .setValues(pendientesInc);
+  }
+  if (pendientesBolsa.length) {
+    bolsaSheet.getRange(bolsaSheet.getLastRow() + 1, 1, pendientesBolsa.length, HEADERS_BOLSA.length)
+      .setValues(pendientesBolsa);
   }
 
   // AUTO-EXPIRACION: pendientes cuyo plazo de sustento vencio pasan a

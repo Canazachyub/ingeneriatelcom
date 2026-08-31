@@ -66,6 +66,13 @@ export default function AsistenciaPage() {
   const [camaraError, setCamaraError] = useState('')
   const [fotoPreview, setFotoPreview] = useState<string | null>(null)
 
+  // El GPS dejó de ser un bloqueo duro: antes, sin ubicación el botón
+  // Registrar quedaba deshabilitado y el trabajador simplemente NO podía
+  // marcar (GPS apagado, sin señal dentro del local, permiso denegado).
+  // Ahora puede continuar de forma deliberada y la marca queda registrada
+  // sin coordenadas, que el panel muestra como "sin GPS".
+  const [sinGpsConfirmado, setSinGpsConfirmado] = useState(false)
+
   // Justificación
   const [motivo, setMotivo] = useState(MOTIVOS_JUSTIFICACION[0])
   const [descripcion, setDescripcion] = useState('')
@@ -214,6 +221,8 @@ export default function AsistenciaPage() {
   const handleSeleccionEvento = (evento: EventoRegistro) => {
     setEventoSel(evento)
     setFotoPreview(null)
+    setMensaje('')
+    setSinGpsConfirmado(false)
     setViewState('camara')
     getLocation()
     iniciarCamara()
@@ -221,8 +230,12 @@ export default function AsistenciaPage() {
 
   const handleRegistrar = async () => {
     if (!trabajador || !eventoSel || !fotoPreview) return
-    if (!location) {
-      setMensaje('Se requiere GPS activo para registrar. Habilita la ubicación.')
+    // Sin ubicación se permite marcar, pero de forma deliberada: la primera
+    // pulsación reintenta el GPS y avisa; solo la segunda registra sin él.
+    if (!location && !sinGpsConfirmado) {
+      getLocation()
+      setSinGpsConfirmado(true)
+      setMensaje('No se pudo obtener tu ubicación. Pulsa Registrar otra vez para continuar sin GPS: la marca quedará señalada como tal.')
       return
     }
     setIsLoading(true)
@@ -231,31 +244,44 @@ export default function AsistenciaPage() {
       nombre: trabajador.nombre,
       cargo: trabajador.cargo,
       evento: eventoSel,
-      gps_lat: location.lat,
-      gps_lng: location.lng,
-      gps_accuracy: location.accuracy,
+      // Sin ubicación se omiten: el backend guarda celdas vacías y el panel
+      // distingue la marca como "sin GPS".
+      ...(location
+        ? { gps_lat: location.lat, gps_lng: location.lng, gps_accuracy: location.accuracy }
+        : {}),
       fileContent: fotoPreview.split(',')[1],
       mimeType: 'image/jpeg',
     }
     try {
+      const yaRegistrado = (r: typeof res) =>
+        !r.success && !!r.error && r.error.indexOf('Ya registraste este evento hoy') !== -1
+
       let res = await api.registrarAsistenciaFoto(payload)
-      // Reintentos ante CUALQUIER fallo transitorio (red caida, timeout,
-      // "Sistema ocupado"). Caso clave: si el intento anterior SI escribio
-      // en la hoja pero la respuesta se perdio en el camino, el reintento
-      // responde "Ya registraste este evento hoy" — eso confirma el registro
-      // y se muestra como exito (la hora exacta quedo guardada en el servidor).
-      for (let intento = 1; !res.success && intento < 3; intento++) {
-        await sleep(2500 * intento)
-        res = await api.registrarAsistenciaFoto(payload)
-        if (!res.success && res.error && res.error.indexOf('Ya registraste este evento hoy') !== -1) {
-          res = {
-            success: true,
-            data: {
-              evento: eventoSel,
-              fecha: '',
-              hora: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
-              foto_url: '',
-            },
+
+      // Un duplicado en la PRIMERA respuesta es real: el trabajador ya marcó
+      // ese evento hoy y debe saberlo. Antes se reintentaba igual y el
+      // duplicado acababa convertido en un "registrado" falso — además de
+      // disparar dos subidas de foto inútiles a Drive.
+      if (!yaRegistrado(res)) {
+        // Reintentos ante CUALQUIER fallo transitorio (red caída, timeout,
+        // "Sistema ocupado").
+        for (let intento = 1; !res.success && intento < 3; intento++) {
+          await sleep(2500 * intento)
+          res = await api.registrarAsistenciaFoto(payload)
+          // Aquí sí: si el intento anterior SÍ escribió en la hoja pero la
+          // respuesta se perdió en el camino, el reintento responde "ya
+          // registraste" — eso confirma que quedó guardado, y se muestra
+          // como éxito (la hora exacta la tiene el servidor).
+          if (yaRegistrado(res)) {
+            res = {
+              success: true,
+              data: {
+                evento: eventoSel,
+                fecha: '',
+                hora: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
+                foto_url: '',
+              },
+            }
           }
         }
       }
@@ -342,6 +368,7 @@ export default function AsistenciaPage() {
     setMotivo(MOTIVOS_JUSTIFICACION[0])
     setDescripcion('')
     setArchivo(null)
+    setSinGpsConfirmado(false)
   }, [detenerCamara])
 
   // Info de display del evento seleccionado (sirve para oficina y campo).
@@ -633,14 +660,16 @@ export default function AsistenciaPage() {
                   {location.lat.toFixed(5)}, {location.lng.toFixed(5)} · ±{Math.round(location.accuracy)}m
                 </p>
               ) : (
-                <p className="text-center text-xs text-rose-400/80 mb-3">
+                <p className="text-center text-xs text-amber-400/90 mb-3">
                   <FaExclamationTriangle className="inline mr-1" />
-                  GPS requerido — habilita la ubicación
+                  {sinGpsConfirmado
+                    ? 'Se registrará sin GPS y quedará señalado'
+                    : 'Sin ubicación — puedes registrar igual'}
                   <button
                     onClick={getLocation}
                     className="ml-2 inline-flex items-center min-h-[44px] px-2 text-cyan-400 underline align-middle"
                   >
-                    Reintentar
+                    Reintentar GPS
                   </button>
                 </p>
               )}
@@ -671,11 +700,15 @@ export default function AsistenciaPage() {
                   </button>
                   <button
                     onClick={handleRegistrar}
-                    disabled={isLoading || !location}
-                    className="py-4 rounded-2xl bg-emerald-500 text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 disabled:opacity-40"
+                    disabled={isLoading}
+                    className={`py-4 rounded-2xl text-white font-bold flex items-center justify-center gap-2 shadow-lg disabled:opacity-40 ${
+                      !location && sinGpsConfirmado
+                        ? 'bg-amber-500 shadow-amber-500/30'
+                        : 'bg-emerald-500 shadow-emerald-500/30'
+                    }`}
                   >
                     {isLoading ? <FaSpinner className="animate-spin" /> : <FaCheckCircle />}
-                    Registrar
+                    {!location && sinGpsConfirmado ? 'Registrar sin GPS' : 'Registrar'}
                   </button>
                 </div>
               )}

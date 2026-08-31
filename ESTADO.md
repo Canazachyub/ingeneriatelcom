@@ -441,4 +441,43 @@ Auditoría del camino de registro tras introducir las bajas. Tres fallos, uno de
 
 ---
 
+## 14. Blindaje del subsistema de asistencia (31/08/2026)
+
+Ejecución de [PLAN.md](PLAN.md), enfoque B. La app **funcionaba**; esto elimina lo que la degradaba con el tiempo o la bloqueaba ante un imprevisto.
+
+| # | Riesgo | Corrección |
+|---|--------|-----------|
+| R1 | **El anti-duplicado barría toda la hoja dentro del lock, en cada marca.** `asistencias_v2` crece ~1,100 filas/mes, así que el tiempo que cada marca retenía el lock crecía con el histórico — con doce personas en cola a las 07:30. Los "Sistema ocupado" del 12–13/08 iban a volver solos | Dos capas: índice del día en `CacheService` (acierto = rechazo sin tocar la hoja) y `leerTramoFinal_` acotado, que se amplía **solo** si el tramo no alcanza a cubrir la fecha buscada. Dentro del lock queda una ventana de 60 filas: solo importa lo escrito en los últimos segundos |
+| R2 | **La foto se subía antes del anti-duplicado**: cada intento repetido dejaba un archivo huérfano, y con los 3 reintentos del kiosko un duplicado generaba 3 fotos basura | Pre-chequeo de duplicado antes de subir y fuera del lock. La verificación autoritativa sigue dentro del lock y la subida sigue fuera de él |
+| R3 | **El GPS bloqueaba el marcado**: sin ubicación el botón Registrar quedaba deshabilitado. GPS apagado, sin señal dentro del local o permiso denegado = no se podía marcar | Degradable con auditoría: se reintenta la ubicación y, si falla, la segunda pulsación registra sin GPS. El panel lo resalta en ámbar, distinto del gris de un registro manual |
+| R4 | **El reintento convertía un duplicado legítimo en éxito falso**: la conversión no cubría la primera respuesta, así que quien ya había marcado recibía "registrado" | Solo se interpreta como éxito tras un reintento — el caso para el que se diseñó: el servidor escribió pero la respuesta se perdió |
+| R5 | **Pages llevaba 5 días sin publicar** (`status: errored` tras la caída de Actions del 26/08; los builds quedaron en `failure`/`cancelled` y nadie los relanzó) | Relanzado. El dominio ya sirve el bundle correcto |
+| R6 | `sincronizarIncidencias` escribía `appendRow` por incidencia | Acumulación en memoria y volcado con `setValues`, antes de la auto-expiración (que vuelve a leer la hoja) |
+
+**Medición de R1** (simulación con 2 meses de datos reales, 48 marcas/día):
+
+| | Antes | Ahora |
+|---|---|---|
+| Filas leídas por marca | 1,536 y subiendo | 600, constante |
+| Filas leídas **dentro del lock** | 1,536 y subiendo | 60 |
+| Proyección a 12 meses | ~12,700 | 600 |
+
+Un registro manual de un día antiguo amplía el tramo automáticamente (2 lecturas) y lo encuentra igual.
+
+**Cambio de política, no solo de código:** el GPS pasa de obligatorio a preferente-pero-no-bloqueante, con rastro auditable. Si la exigencia viene del contrato con ELSE, se revierte y en su lugar se mejora solo el mensaje.
+
+### Fuera de alcance (consciente)
+
+- Partir `AttendancePage.tsx` (851 líneas): mantenibilidad, no robustez; mezclarlo con cambios de concurrencia impediría aislar la causa si algo falla.
+- `TOKEN_SECRET` sigue por debajo de 32 caracteres — no se puede tocar desde el repo.
+- Correo duplicado entre Marroquín y Vargas Pinto: pendiente de decisión.
+
+### ⚠️ Checklist de deploy
+
+1. `npm run build:backend` → pegar `appscript.js` → `ejecutarTestSalud` → **0 FAIL** → Nueva versión.
+2. El frontend es compatible con el backend anterior (omitir el GPS ya se traducía a celda vacía), así que el orden no es crítico esta vez.
+3. Prueba de humo: marcar desde 2–3 dispositivos, y uno con la ubicación denegada a propósito para ver el flujo "Registrar sin GPS".
+
+---
+
 © 2026 Ingeniería Telcom EIRL — Documento de auditoría interna (Fase 0).

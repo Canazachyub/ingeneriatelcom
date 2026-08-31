@@ -143,6 +143,50 @@ function ejecutarTestSalud() {
     ok();
   } catch (e) { fail('Carpeta Drive inaccesible: ' + e.message); }
 
+  // 9. Anti-duplicado de coste constante (ver PLAN.md R1)
+  try {
+    var ssA = SpreadsheetApp.openById(SHEET_ID);
+    var hojaAsis = ssA.getSheetByName('asistencias_v2');
+    if (!hojaAsis) {
+      warn('Hoja asistencias_v2 no existe todavia');
+    } else {
+      var filasAsis = Math.max(0, hojaAsis.getLastRow() - 1);
+      // El tramo acotado debe seguir cubriendo con holgura una jornada. Con
+      // ~48 marcas diarias, 600 filas son ~12 dias: sobra. Este aviso salta si
+      // el volumen diario crecio tanto que conviene revisar el margen.
+      if (filasAsis > 0) {
+        var t = leerTramoFinal_(hojaAsis, FILAS_TRAMO_ASISTENCIA_);
+        var cf = t.headers.indexOf('fecha');
+        var masAntiguaTramo = null;
+        for (var z = 0; z < t.rows.length; z++) {
+          var fz = fechaISO_(t.rows[z][cf]);
+          if (fz && (masAntiguaTramo === null || fz < masAntiguaTramo)) masAntiguaTramo = fz;
+        }
+        if (!t.completa && masAntiguaTramo && masAntiguaTramo >= hoyISO_()) {
+          warn('El tramo de ' + FILAS_TRAMO_ASISTENCIA_ + ' filas no cubre un dia completo — subir FILAS_TRAMO_ASISTENCIA_');
+        } else {
+          ok();
+        }
+      } else {
+        ok();
+      }
+      // Aviso informativo de volumen: ya no degrada el marcado, pero conviene
+      // saber cuando la hoja se vuelve grande para el panel y los informes.
+      if (filasAsis > 20000) warn('asistencias_v2 supera 20,000 filas (' + filasAsis + ') — evaluar archivar por ano');
+    }
+  } catch (e) { fail('Verificacion del anti-duplicado acotado fallo: ' + e.message); }
+
+  // 10. CacheService operativo (via rapida del anti-duplicado)
+  try {
+    var pruebaKey = 'salud:cache';
+    CacheService.getScriptCache().put(pruebaKey, '1', 30);
+    if (CacheService.getScriptCache().get(pruebaKey) === '1') ok();
+    else warn('CacheService no devuelve lo que guarda — el anti-duplicado caera al tramo acotado (sigue siendo correcto, solo mas lento)');
+    CacheService.getScriptCache().remove(pruebaKey);
+  } catch (e) {
+    warn('CacheService no disponible: ' + e.message + ' — el anti-duplicado seguira funcionando por lectura acotada');
+  }
+
   var resultado = {
     ok: fails.length === 0,
     checksOk: oks,

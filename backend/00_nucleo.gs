@@ -151,6 +151,33 @@ function hoyISO_() {
   return Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
 }
 
+// Lee la cabecera mas el TRAMO FINAL de una hoja (las ultimas maxFilas de
+// datos), en vez de la hoja completa.
+//
+// Las hojas de bitacora (asistencias_v2, incidencias) se escriben siempre con
+// appendRow, asi que lo reciente esta al final. Consultar "lo de hoy" con
+// getDataRange() hacia que el coste de CADA marca creciera con el historico
+// —y ese barrido ocurria dentro del lock global, con doce personas haciendo
+// cola a las 07:30. Ver PLAN.md R1.
+//
+// Devuelve { headers, rows, completa }. 'completa' indica que el tramo abarca
+// TODAS las filas de datos, es decir que no hay nada mas atras que mirar.
+function leerTramoFinal_(sheet, maxFilas) {
+  var ultimaFila = sheet.getLastRow();
+  var ultimaCol = sheet.getLastColumn();
+  if (ultimaFila < 1 || ultimaCol < 1) {
+    return { headers: [], rows: [], completa: true };
+  }
+  var headers = sheet.getRange(1, 1, 1, ultimaCol).getValues()[0];
+  var totalDatos = ultimaFila - 1; // sin contar la cabecera
+  if (totalDatos <= 0) return { headers: headers, rows: [], completa: true };
+
+  var n = Math.min(maxFilas, totalDatos);
+  var desde = ultimaFila - n + 1;
+  var rows = sheet.getRange(desde, 1, n, ultimaCol).getValues();
+  return { headers: headers, rows: rows, completa: (n === totalDatos) };
+}
+
 // ============================================
 // CONCURRENCIA — LockService en escrituras
 // ============================================

@@ -530,6 +530,17 @@ export default function AttendancePage() {
                                 <FaMapMarkerAlt className="text-[10px]" />
                                 Ver mapa
                               </a>
+                            ) : r.foto_url ? (
+                              // Marca hecha en el kiosko pero sin ubicación: el
+                              // trabajador continuó deliberadamente sin GPS. Se
+                              // resalta porque es una excepción auditable, a
+                              // diferencia del registro manual (que nunca trae GPS).
+                              <span
+                                className="inline-flex items-center gap-1 text-xs text-amber-400/90 font-medium"
+                                title="Marcó desde el kiosko sin ubicación disponible"
+                              >
+                                <FaExclamationTriangle className="text-[10px]" /> Sin GPS
+                              </span>
                             ) : (
                               <span className="text-gray-600 text-xs">Sin GPS</span>
                             )}
