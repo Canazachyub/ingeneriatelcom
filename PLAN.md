@@ -77,14 +77,16 @@ Un duplicado deja de subir foto. En una carrera entre dos marcas simultáneas de
 - **Archivos:** `backend/07_asistencia.gs`.
 - **Aceptación:** un intento duplicado responde sin crear archivo en Drive.
 
-### Paso 4 — GPS degradable con auditoría (R3)
+### Paso 4 — ~~GPS degradable~~ → **GPS obligatorio reforzado** (R3)
 
-El GPS deja de bloquear. Se reintenta la localización; si falla de forma definitiva, el trabajador puede marcar y el registro queda **explícitamente señalado como sin GPS**, visible en el panel.
+> **Decisión del dueño, 31/08/2026:** se propuso volver el GPS degradable y **se rechazó**. Una marca sin ubicación no es evidencia válida de presencia. Revertido.
 
-> **Cambio de política, no solo de código.** Hoy el GPS es obligatorio de facto. Esto lo vuelve preferente-pero-no-bloqueante y deja rastro auditable. Si la exigencia viene del contrato con ELSE, se revierte y en su lugar se mejora solo el mensaje de error.
+En su lugar se refuerza la obligatoriedad **en las dos capas**: el kiosko sigue exigiendo ubicación (con mejor mensaje y botón de reintento), y el backend **rechaza** una marca sin coordenadas. Antes la regla vivía solo en el cliente y `registrarAsistenciaFoto` es una action pública.
 
-- **Archivos:** `src/pages/AsistenciaPage.tsx`, `src/pages/admin/AttendancePage.tsx`.
-- **Aceptación:** con el permiso de ubicación denegado se puede marcar, y el registro aparece con distintivo "sin GPS" en el panel.
+La válvula de escape cuando el GPS falla es *Registrar manual* desde el panel, que exige observación y deja constancia de quién autorizó.
+
+- **Archivos:** `src/pages/AsistenciaPage.tsx`, `src/pages/admin/AttendancePage.tsx`, `backend/07_asistencia.gs`.
+- **Aceptación:** sin ubicación no se puede marcar ni desde el kiosko ni llamando la API directamente.
 
 ### Paso 5 — Reintento honesto (R4)
 
@@ -135,7 +137,7 @@ Verificación contra producción, sin escribir en la hoja:
 - [ ] `ejecutarTestSalud` en 0 FAIL
 - [ ] Marca legítima aceptada; duplicado, cesado y DNI inventado rechazados
 - [ ] Un duplicado no genera archivo en Drive
-- [ ] Se puede marcar sin GPS y el registro queda señalado
+- [ ] Sin GPS **no** se puede marcar, ni desde el kiosko ni por API
 - [ ] Ráfaga concurrente sin "Sistema ocupado"
 
 ---

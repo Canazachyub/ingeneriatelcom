@@ -449,7 +449,7 @@ Ejecución de [PLAN.md](PLAN.md), enfoque B. La app **funcionaba**; esto elimina
 |---|--------|-----------|
 | R1 | **El anti-duplicado barría toda la hoja dentro del lock, en cada marca.** `asistencias_v2` crece ~1,100 filas/mes, así que el tiempo que cada marca retenía el lock crecía con el histórico — con doce personas en cola a las 07:30. Los "Sistema ocupado" del 12–13/08 iban a volver solos | Dos capas: índice del día en `CacheService` (acierto = rechazo sin tocar la hoja) y `leerTramoFinal_` acotado, que se amplía **solo** si el tramo no alcanza a cubrir la fecha buscada. Dentro del lock queda una ventana de 60 filas: solo importa lo escrito en los últimos segundos |
 | R2 | **La foto se subía antes del anti-duplicado**: cada intento repetido dejaba un archivo huérfano, y con los 3 reintentos del kiosko un duplicado generaba 3 fotos basura | Pre-chequeo de duplicado antes de subir y fuera del lock. La verificación autoritativa sigue dentro del lock y la subida sigue fuera de él |
-| R3 | **El GPS bloqueaba el marcado**: sin ubicación el botón Registrar quedaba deshabilitado. GPS apagado, sin señal dentro del local o permiso denegado = no se podía marcar | Degradable con auditoría: se reintenta la ubicación y, si falla, la segunda pulsación registra sin GPS. El panel lo resalta en ámbar, distinto del gris de un registro manual |
+| R3 | **El GPS bloqueaba el marcado**: sin ubicación el botón Registrar quedaba deshabilitado | **Se propuso volverlo degradable y el dueño lo rechazó: el GPS es obligatorio** (31/08/2026). Se revirtió y se reforzó en su lugar — ver abajo |
 | R4 | **El reintento convertía un duplicado legítimo en éxito falso**: la conversión no cubría la primera respuesta, así que quien ya había marcado recibía "registrado" | Solo se interpreta como éxito tras un reintento — el caso para el que se diseñó: el servidor escribió pero la respuesta se perdió |
 | R5 | **Pages llevaba 5 días sin publicar** (`status: errored` tras la caída de Actions del 26/08; los builds quedaron en `failure`/`cancelled` y nadie los relanzó) | Relanzado. El dominio ya sirve el bundle correcto |
 | R6 | `sincronizarIncidencias` escribía `appendRow` por incidencia | Acumulación en memoria y volcado con `setValues`, antes de la auto-expiración (que vuelve a leer la hoja) |
@@ -464,7 +464,16 @@ Ejecución de [PLAN.md](PLAN.md), enfoque B. La app **funcionaba**; esto elimina
 
 Un registro manual de un día antiguo amplía el tramo automáticamente (2 lecturas) y lo encuentra igual.
 
-**Cambio de política, no solo de código:** el GPS pasa de obligatorio a preferente-pero-no-bloqueante, con rastro auditable. Si la exigencia viene del contrato con ELSE, se revierte y en su lugar se mejora solo el mensaje.
+### El GPS es obligatorio — decisión del dueño (31/08/2026)
+
+Propuse volverlo degradable (marcar sin ubicación dejando rastro) y **se rechazó**: una marca sin GPS no es evidencia válida de presencia. Revertido, y además **reforzado en las dos capas**:
+
+- **Kiosko**: el botón Registrar vuelve a exigir ubicación, con aviso en rojo y botón "Reintentar GPS". El mensaje ahora dice qué hacer si no se consigue.
+- **Backend**: `registrarAsistenciaFoto` **rechaza** una marca sin `gps_lat`/`gps_lng`. Antes la obligatoriedad vivía solo en el kiosko, y esta action es pública — la misma lección del roster: una regla que solo existe en el cliente no es una regla, basta una pestaña vieja o una llamada directa para saltársela.
+
+**Válvula de escape cuando el GPS falla de verdad:** el trabajador avisa al Coordinador y la marca se hace con *Registrar manual* desde `/admin/asistencias`, que exige observación obligatoria y deja constancia de quién la autorizó. Es más trabajo que marcar solo, y esa fricción es intencional.
+
+**Efecto secundario en el panel:** con GPS obligatorio, una marca de kiosko con foto pero sin coordenadas ya no debería existir. Ese caso pasa a mostrarse en **rojo como anomalía** — o es un registro anterior a la regla, o alguien llamó la API sin pasar por el kiosko.
 
 ### Fuera de alcance (consciente)
 

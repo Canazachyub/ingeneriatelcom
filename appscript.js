@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-08-31T06:07:36.521Z con tools/build-backend.mjs
+// Generado: 2026-08-31T07:22:22.437Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -3686,6 +3686,19 @@ function registrarAsistenciaFoto(data) {
   if (!/^\d{8}$/.test(dni)) return { success: false, error: 'DNI invalido' };
   if (EVENTOS_ASISTENCIA_V2.indexOf(evento) === -1 && !esCampo) return { success: false, error: 'Evento invalido' };
   if (!data.fileContent) return { success: false, error: 'La foto es obligatoria' };
+
+  // GPS OBLIGATORIO (politica de la empresa, confirmada 31/08/2026): una marca
+  // sin ubicacion no es evidencia valida de presencia. Se valida tambien AQUI y
+  // no solo en el kiosko porque esta action es publica: una regla que vive solo
+  // en el cliente no es una regla — misma leccion que el roster, donde bastaba
+  // una pestana abierta desde antes para saltarse el filtro de la pantalla.
+  // La valvula de escape cuando el GPS realmente falla es registrarAsistencia-
+  // Manual desde el panel, que exige observacion y deja constancia de quien lo
+  // autorizo.
+  if (data.gps_lat === undefined || data.gps_lat === null || data.gps_lat === '' ||
+      data.gps_lng === undefined || data.gps_lng === null || data.gps_lng === '') {
+    return { success: false, error: 'Se requiere ubicacion GPS para registrar. Activa la ubicacion e intenta de nuevo.' };
+  }
 
   // Validacion contra el roster ACTIVO. Esta action es publica y hasta ahora
   // aceptaba cualquier dni/nombre/cargo que enviara el cliente: la unica

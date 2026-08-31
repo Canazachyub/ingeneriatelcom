@@ -531,13 +531,13 @@ export default function AttendancePage() {
                                 Ver mapa
                               </a>
                             ) : r.foto_url ? (
-                              // Marca hecha en el kiosko pero sin ubicación: el
-                              // trabajador continuó deliberadamente sin GPS. Se
-                              // resalta porque es una excepción auditable, a
-                              // diferencia del registro manual (que nunca trae GPS).
+                              // ANOMALÍA: el GPS es obligatorio, así que una marca
+                              // con foto pero sin coordenadas no debería existir.
+                              // Si aparece, o es un registro anterior a esa regla o
+                              // alguien llamó la API sin pasar por el kiosko.
                               <span
-                                className="inline-flex items-center gap-1 text-xs text-amber-400/90 font-medium"
-                                title="Marcó desde el kiosko sin ubicación disponible"
+                                className="inline-flex items-center gap-1 text-xs text-rose-400 font-medium"
+                                title="Anomalía: marca de kiosko sin ubicación. El GPS es obligatorio — revisar este registro."
                               >
                                 <FaExclamationTriangle className="text-[10px]" /> Sin GPS
                               </span>
