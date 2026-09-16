@@ -485,7 +485,81 @@ Propuse volverlo degradable (marcar sin ubicación dejando rastro) y **se rechaz
 
 1. `npm run build:backend` → pegar `appscript.js` → `ejecutarTestSalud` → **0 FAIL** → Nueva versión.
 2. El frontend es compatible con el backend anterior (omitir el GPS ya se traducía a celda vacía), así que el orden no es crítico esta vez.
-3. Prueba de humo: marcar desde 2–3 dispositivos, y uno con la ubicación denegada a propósito para ver el flujo "Registrar sin GPS".
+3. Prueba de humo: marcar desde 2–3 dispositivos, y uno con la ubicación denegada a propósito para comprobar que aparece el aviso "GPS requerido" y el botón Registrar queda bloqueado.
+
+---
+
+## 15. Lista de trabajadores del kiosko: carga lenta en la ráfaga (16/09/2026)
+
+**Síntoma:** a las 07:30 la lista de trabajadores tardaba mucho o no llegaba: spinner de "Cargando lista" largo, o el error "No se pudo cargar la lista". En una medición llegó a pasar de 30 s. Encaja con los problemas del 12–13/08.
+
+**Causa (backend, `getTrabajadores`):**
+
+1. La caché duraba **10 minutos**. La primera apertura del kiosko a las 07:30 la encontraba siempre vacía, porque nadie había pedido la lista desde la tarde anterior.
+2. Con la caché vacía, `getSueldos()` + `leerConfigPlanilla_()` **abrían el Spreadsheet dos veces seguidas**: picos de ~10 s.
+3. Kiosko y panel usaban **dos claves de caché distintas**, así que cada una se enfriaba por su lado.
+4. Sin protección contra la estampida: doce teléfonos abriendo a la vez encontraban la caché vacía y leían la hoja doce veces.
+5. Alta o baja desde el panel solo **borraba** la caché: el siguiente teléfono pagaba la lectura completa.
+
+**Causa (kiosko):** la lista se pedía en cada apertura y, si no llegaba, **no había nada con qué trabajar**, aunque el teléfono la hubiera recibido completa el día anterior.
+
+### Corrección — backend (`08_planilla.gs`)
+
+Una sola lista (con cesados; el filtro de activos se aplica al responder) resuelta en tres niveles:
+
+| Nivel | Dónde | Vida | Coste |
+|---|---|---|---|
+| 1 | `CacheService` | 6 h (máximo permitido) | ninguno |
+| 2 | Instantánea en `PropertiesService` | durable; se usa si tiene menos de 24 h y repone el nivel 1 | ninguno (sin abrir la hoja) |
+| 3 | Hoja `sueldos` | — | **una** apertura (antes dos); guarda los niveles 1 y 2 |
+
+- **Último recurso:** si la hoja no responde, se sirve la instantánea aunque tenga más de 24 h. Si no hay ninguna, el error es explícito. `registrarAsistenciaFoto` sigue en modo *fail-open*.
+- **`activo` se recalcula en cada respuesta** con la fecha de hoy. Una lista guardada ayer nunca deja marcar a quien cesó hoy.
+- **Alta o baja desde el panel reconstruye la lista** (`SpreadsheetApp.flush()` y relectura) en vez de borrarla.
+- **Nunca se guarda una lista vacía**, y la instantánea solo se guarda si cabe en 8.5 KB (límite de Properties: 9 KB por valor).
+- **`precalentarRosterKiosko()`** es una función pública pensada para un **activador de tiempo cada 30 min**. No está en el router.
+  - El activador se configura **a mano** desde el editor. Crearlo por código exigiría el scope de `ScriptApp`: una autorización nueva que, si queda pendiente, deja caída la Web App entera.
+- **Test de salud, check 11:** avisa si no hay instantánea, si tiene más de 45 min (el activador no corre) o si su número de trabajadores no coincide con la hoja (alguien editó `sueldos` a mano).
+
+> **Si se edita la hoja `sueldos` a mano**, ejecutar `precalentarRosterKiosko` después. Si no, el kiosko verá la lista anterior hasta el siguiente disparo del activador (máx. 30 min).
+
+### Corrección — kiosko (`AsistenciaPage.tsx`, `appScriptApi.ts`)
+
+- **Lista guardada en el teléfono** (`localStorage`, clave `kiosk_trabajadores_v1`), con el esquema *stale-while-revalidate*: el teclado funciona al instante con la lista guardada y la actualización llega en segundo plano.
+  - Si el servidor no responde, aparece un aviso ámbar: "Conexión lenta — usando la lista guardada. Puedes marcar igual".
+- **Un DNI que no está en la lista guardada no se rechaza enseguida**: si hay una actualización en curso, se espera a que llegue (el caso de un ingreso reciente).
+- **Al volver a la pestaña** tras más de 5 min, la lista se refresca.
+- **Timeout de `getTrabajadores`: 25 s → 15 s.** Con la lista guardada, esperar más no aporta nada, y los reintentos siguen activos.
+- **`getToken`/`setToken` protegidos con try/catch.** Con el almacenamiento bloqueado (Safari con cookies bloqueadas, algunos modos privados), `localStorage` lanza una excepción, y como `getToken()` se llama en **cada** petición, el kiosko no podía cargar nada. El fallo era anterior a este cambio.
+- La lista guardada **no concede nada por sí misma**: el backend vuelve a validar el DNI contra el roster en cada marca.
+
+### Verificación
+
+- **Backend:** el `appscript.js` real, cargado en Node con los servicios de Google simulados. **28/28**. Casos cubiertos: caché fría con 1 apertura; caché caliente con 0 aperturas en 20 lecturas; caché desalojada, servida desde la instantánea; 13 h de noche sin abrir la hoja; instantánea de más de 24 h, que relee la hoja; cese aplicado a una lista de ayer; hoja caída; hoja vacía; alta que reconstruye; activador.
+- **Kiosko:** build local en Chrome headless, con `getTrabajadores` simulado y la escritura siempre interceptada. **20/20**. Casos cubiertos:
+  - primera visita;
+  - servidor a 20 s: menú en 1.5 s;
+  - servidor caído con lista guardada;
+  - ingreso reciente que no estaba en la lista guardada;
+  - sin lista y servidor lento;
+  - DNI inexistente;
+  - sin lista y servidor caído: error con Reintentar;
+  - almacenamiento bloqueado.
+- **Flujo completo** (foto + GPS + registro interceptado) sin regresiones: éxito; duplicado mostrado como error; red caída con reintento que termina en éxito; sin GPS, Registrar bloqueado.
+
+### ⚠️ Checklist de deploy
+
+1. Fuera de horario de marcación. Comprobar la hora de Lima con PowerShell: en este equipo, `TZ=America/Lima date` de Git Bash devuelve UTC.
+2. `npm run build:backend` → pegar `appscript.js` → `ejecutarTestSalud` → **0 FAIL** → Nueva versión.
+   - El check 11 dará WARN hasta completar los pasos 3 y 4.
+3. Ejecutar `precalentarRosterKiosko` una vez desde el editor.
+4. **Activadores → Añadir activador** → función `precalentarRosterKiosko` → *Según tiempo* → *Temporizador por minutos* → **cada 30 minutos**.
+5. Volver a ejecutar `ejecutarTestSalud`: el check 11 debe quedar OK.
+6. El orden entre frontend y backend no es crítico: la API no cambia de forma.
+
+### Fuera de alcance (consciente)
+
+- La lista pública del kiosko expone `fecha_fin`, que en un trabajador activo puede ser una fecha de cese futura. Ya era así antes de este cambio. Quitarla exige revisar quién la consume en el cliente.
 
 ---
 

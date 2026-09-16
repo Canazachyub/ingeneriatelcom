@@ -219,18 +219,24 @@ class AppScriptApi {
     this.errorListener?.(message, action)
   }
 
+  // localStorage puede lanzar (Safari con cookies bloqueadas, modo privado):
+  // sin try/catch, getToken() tumbaria TODAS las peticiones, kiosko incluido.
   setToken(token: string | null) {
     this.token = token
-    if (token) {
-      localStorage.setItem('auth_token', token)
-    } else {
-      localStorage.removeItem('auth_token')
-    }
+    try {
+      if (token) {
+        localStorage.setItem('auth_token', token)
+      } else {
+        localStorage.removeItem('auth_token')
+      }
+    } catch { /* sesion solo en memoria */ }
   }
 
   getToken(): string | null {
     if (!this.token) {
-      this.token = localStorage.getItem('auth_token')
+      try {
+        this.token = localStorage.getItem('auth_token')
+      } catch { /* sin almacenamiento: sin token guardado */ }
     }
     return this.token
   }
@@ -966,7 +972,10 @@ class AppScriptApi {
    *  incluirCesados en el panel de asistencias, donde hay que poder filtrar
    *  su historial y registrarles marcas manuales de días que sí laboraron. */
   async getTrabajadores(incluirCesados = false): Promise<ApiResponse<{ dni: string; nombre: string; cargo: string; sede?: string; registro_simple?: boolean; activo?: boolean; fecha_fin?: string }[]>> {
-    return this.request('getTrabajadores', 'GET', incluirCesados ? { incluirCesados: true } : {}, 25000)
+    // 15 s por intento: con el roster precalentado responde en 2-3 s; esperar
+    // 25 s a una conexión colgada solo retrasaba el reintento. El kiosko,
+    // además, ya muestra la lista guardada mientras tanto.
+    return this.request('getTrabajadores', 'GET', incluirCesados ? { incluirCesados: true } : {}, 15000)
   }
 
   async crearTrabajador(data: {

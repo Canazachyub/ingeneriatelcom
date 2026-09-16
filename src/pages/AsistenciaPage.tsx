@@ -38,6 +38,33 @@ type ViewState = 'input' | 'menu' | 'camara' | 'justificacion' | 'success' | 'er
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// ── Lista de trabajadores guardada en el teléfono ────────────
+// A las 07:30 muchos abren el kiosko a la vez y el backend podía tardar
+// 10-30 s en responder: el trabajador veía el spinner o "No se pudo cargar la
+// lista". Ahora se muestra al instante la última lista conocida y se actualiza
+// por detrás. No abre ninguna puerta: el servidor vuelve a validar el DNI y el
+// cese en cada marca. Contiene lo mismo que ya expone el endpoint público
+// (DNI, nombre y cargo de los activos), sin sueldos ni correos.
+const CLAVE_LISTA_LOCAL = 'kiosk_trabajadores_v1'
+const REFRESCO_AL_VOLVER_MS = 5 * 60 * 1000
+
+const leerListaLocal = (): TrabajadorFijo[] => {
+  try {
+    const raw = localStorage.getItem(CLAVE_LISTA_LOCAL)
+    if (!raw) return []
+    const { lista } = JSON.parse(raw)
+    return Array.isArray(lista) ? lista : []
+  } catch {
+    return [] // modo privado o almacenamiento bloqueado: se sigue sin lista guardada
+  }
+}
+
+const guardarListaLocal = (lista: TrabajadorFijo[]) => {
+  try {
+    localStorage.setItem(CLAVE_LISTA_LOCAL, JSON.stringify({ guardado: Date.now(), lista }))
+  } catch { /* no crítico */ }
+}
+
 const MOTIVOS_JUSTIFICACION = [
   'Tardanza',
   'Inasistencia',
@@ -75,41 +102,74 @@ export default function AsistenciaPage() {
 
   // Lista de trabajadores desde el backend (hoja sueldos, sin montos).
   // Los nuevos trabajadores creados en el panel aparecen aquí sin redeploy.
-  const [listaTrabajadores, setListaTrabajadores] = useState<TrabajadorFijo[]>([])
-  const [cargandoLista, setCargandoLista] = useState(true)
+  // Arranca con la lista guardada en el teléfono: el teclado se usa al instante.
+  const [listaTrabajadores, setListaTrabajadores] = useState<TrabajadorFijo[]>(leerListaLocal)
+  const listaRef = useRef<TrabajadorFijo[]>(listaTrabajadores)
+  const [cargandoLista, setCargandoLista] = useState(listaTrabajadores.length === 0)
   const [errorLista, setErrorLista] = useState(false)
+  // La actualización falló pero hay lista guardada: se puede marcar igual.
+  const [usandoGuardada, setUsandoGuardada] = useState(false)
+  const [verificando, setVerificando] = useState(false)
+  // Actualización en curso: si un DNI no está en la lista guardada (ingreso
+  // reciente), se espera a que termine antes de decir "no registrado".
+  const refrescoRef = useRef<Promise<TrabajadorFijo[] | null> | null>(null)
+  const ultimoRefrescoRef = useRef(0)
 
-  const cargarTrabajadores = useCallback(() => {
-    setCargandoLista(true)
+  const cargarTrabajadores = useCallback((): Promise<TrabajadorFijo[] | null> => {
+    const hayLista = listaRef.current.length > 0
+    if (!hayLista) setCargandoLista(true)
     setErrorLista(false)
+    ultimoRefrescoRef.current = Date.now()
     // Reintentos con espera creciente: a la hora de ingreso varios trabajadores
     // abren el kiosko a la vez y el backend (Apps Script) puede responder un
     // error transitorio. Solo si los 5 intentos fallan se muestra error.
     const ESPERAS = [1500, 3000, 5000, 8000]
-    const intentar = async (intento: number): Promise<boolean> => {
+    const intentar = async (intento: number): Promise<TrabajadorFijo[] | null> => {
       try {
         const res = await api.getTrabajadores()
-        if (res.success && res.data && res.data.length > 0) {
-          setListaTrabajadores(res.data)
-          return true
-        }
+        if (res.success && res.data && res.data.length > 0) return res.data
       } catch { /* se reintenta abajo */ }
       if (intento < ESPERAS.length) {
         await sleep(ESPERAS[intento])
         return intentar(intento + 1)
       }
-      return false
+      return null
     }
-    intentar(0).then((ok) => {
-      if (!ok) setErrorLista(true)
+    const promesa = intentar(0).then((lista) => {
+      if (lista) {
+        listaRef.current = lista
+        setListaTrabajadores(lista)
+        guardarListaLocal(lista)
+        setUsandoGuardada(false)
+      } else if (listaRef.current.length > 0) {
+        setUsandoGuardada(true)
+      } else {
+        setErrorLista(true)
+      }
       setCargandoLista(false)
+      return lista
     })
+    refrescoRef.current = promesa
+    return promesa
   }, [])
 
   useEffect(() => {
     getLocation()
     cargarTrabajadores()
   }, [getLocation, cargarTrabajadores])
+
+  // Kiosko abierto por horas: al volver a la pantalla, actualizar la lista si
+  // pasó un rato (un alta o baja reciente se ve sin recargar la página).
+  useEffect(() => {
+    const alVolver = () => {
+      if (document.visibilityState === 'visible' &&
+          Date.now() - ultimoRefrescoRef.current > REFRESCO_AL_VOLVER_MS) {
+        cargarTrabajadores()
+      }
+    }
+    document.addEventListener('visibilitychange', alVolver)
+    return () => document.removeEventListener('visibilitychange', alVolver)
+  }, [cargarTrabajadores])
 
   // Countdown de reinicio en success/error
   useEffect(() => {
@@ -192,14 +252,23 @@ export default function AsistenciaPage() {
     }
   }
 
-  const handleVerificarDni = () => {
-    if (dni.length !== 8) return
-    if (errorLista || cargandoLista) {
+  const handleVerificarDni = async () => {
+    if (dni.length !== 8 || verificando) return
+    let t = buscarTrabajador(dni, listaRef.current)
+    // Sin lista todavía, o DNI ausente de la lista guardada (puede ser un
+    // ingreso reciente): esperar la actualización en curso antes de responder,
+    // en vez de mostrar un error mientras la lista aún está llegando.
+    if (!t && refrescoRef.current) {
+      setVerificando(true)
+      const nueva = await refrescoRef.current
+      setVerificando(false)
+      if (nueva) t = buscarTrabajador(dni, nueva)
+    }
+    if (!t && listaRef.current.length === 0) {
       setMensaje('No se pudo cargar la lista de trabajadores. Verifica tu conexión e intenta de nuevo.')
       setViewState('error')
       return
     }
-    const t = buscarTrabajador(dni, listaTrabajadores)
     if (t) {
       setTrabajador(t)
       // Campo (sin correo): sin evento sugerido, el trabajador elige Ingreso/Salida.
@@ -461,12 +530,17 @@ export default function AsistenciaPage() {
                   Cargando lista de trabajadores...
                 </p>
               )}
+              {usandoGuardada && (
+                <p className="text-center text-xs text-amber-400/80 mb-4">
+                  Conexión lenta — usando la lista guardada. Puedes marcar igual.
+                </p>
+              )}
 
               <TecladoNumerico
                 onKeyPress={handleKeyPress}
                 onSubmit={handleVerificarDni}
-                disabled={dni.length !== 8}
-                isLoading={false}
+                disabled={dni.length !== 8 || verificando}
+                isLoading={verificando}
               />
             </motion.div>
           )}

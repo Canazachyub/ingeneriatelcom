@@ -401,7 +401,8 @@ function getOrCreateAsistenciaSheet_(ss, nombre, headers) {
 // Busca un DNI en el roster del kiosko. CRITICO: se llama en el camino
 // caliente del registro (rafaga de las 07:30), asi que NO puede abrir el
 // Spreadsheet en cada marca — reutiliza getTrabajadores(), que responde desde
-// CacheService (10 min). Pasar incluirCesados=true para el roster completo.
+// cache o desde la instantanea durable (ver obtenerRosterKiosko_ en
+// 08_planilla.gs). Pasar incluirCesados=true para el roster completo.
 //
 // Devuelve { estado: 'ok' | 'no_encontrado' | 'indisponible', trabajador }.
 // 'indisponible' = no se pudo leer el roster; quien llama decide si bloquea.

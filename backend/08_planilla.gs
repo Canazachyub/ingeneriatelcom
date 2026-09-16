@@ -200,57 +200,162 @@ function getSueldos() {
   return { success: true, data: result };
 }
 
+// ── Roster del kiosko: lectura rapida en la rafaga de ingreso ──────────
 // Lista publica para el kiosko de asistencia: SIN sueldos ni correos.
 // registro_simple = trabajador de campo (sin correo): flujo Ingreso/Salida simple.
-// Solo trabajadores ACTIVOS: un cesado no debe poder marcar ni figurar en la
-// pantalla del kiosko (su historial si se conserva en la hoja).
-// Cacheada 10 min: a la hora de ingreso muchos trabajadores abren el kiosko a
-// la vez; responder desde CacheService evita abrir el Spreadsheet en cada
-// request (cada openById tarda ~1s y bajo rafaga alguna peticion falla).
-// v2: la lista dejo de incluir cesados — la clave cambia para no servir el
-// cache viejo (con los cesados dentro) durante los 10 min posteriores al deploy.
-var CACHE_KEY_TRABAJADORES = 'kiosk_trabajadores_v2';
-// Roster completo (con cesados) para el panel de asistencias: sin el, un
-// cesado desaparece del filtro y del modal de registro manual, y el admin
-// no puede corregir marcas de dias que ese trabajador SI laboro.
-var CACHE_KEY_TRABAJADORES_TODOS = 'kiosk_trabajadores_todos_v2';
-var CACHE_TTL_TRABAJADORES = 600; // 10 min (max practico de CacheService)
+//
+// PROBLEMA (16/09/2026): a las 07:30 la lista tardaba 10-30 s o no cargaba.
+// Tres causas que se sumaban:
+//   1) Cache de 10 min: de noche siempre expiraba, asi que la primera rafaga
+//      del dia llegaba SIEMPRE en frio (el maximo de CacheService son 6 h).
+//   2) Un fallo de cache abria la hoja DOS veces: getSueldos() leia primero
+//      config_planilla solo para calcular la RMV, dato que el kiosko ni usa.
+//   3) Dos claves separadas (con y sin cesados) para la misma lista.
+// Y en frio, todos los que abrian el kiosko a la vez pagaban la lectura lenta
+// al mismo tiempo.
+//
+// SOLUCION: tres niveles, del mas rapido al mas lento.
+//   1) CacheService, 6 h (maximo permitido).
+//   2) Instantanea durable en PropertiesService: sobrevive a los desalojos
+//      de cache y a la noche. Ya se usa PropertiesService en el proyecto, asi
+//      que NO pide permisos nuevos (un permiso nuevo sin autorizar tumbaria el
+//      Web App completo).
+//   3) La hoja sueldos, UNA sola apertura y sin leer config_planilla.
+// Se guarda UNA lista completa (con cesados); 'activo' se recalcula en cada
+// lectura a partir de fecha_fin, asi una lista vieja nunca deja marcar a
+// alguien cesado ayer.
+// Frescura: toda alta/baja/edicion desde el panel RECONSTRUYE la lista (antes
+// solo la borraba y la siguiente apertura del kiosko pagaba la lectura lenta),
+// y el activador precalentarRosterKiosko la refresca cada 30 min. Si se edita
+// la hoja sueldos A MANO, ejecutar precalentarRosterKiosko desde el editor.
+var ROSTER_KIOSKO_VERSION = 'v3';
+var CACHE_KEY_ROSTER_KIOSKO = 'kiosk_roster_' + ROSTER_KIOSKO_VERSION;
+var PROP_ROSTER_KIOSKO = 'kiosk_roster_snapshot';
+var ROSTER_CACHE_TTL = 21600;                 // 6 h: maximo de CacheService
+var ROSTER_SNAPSHOT_MAX_MS = 24 * 3600 * 1000; // instantanea valida 24 h
+var ROSTER_PROP_MAX_BYTES = 8500;              // limite de PropertiesService: 9 KB por valor
 
+// Lee la hoja sueldos UNA vez y arma la lista completa, sin montos ni correos.
+function construirRosterKiosko_() {
+  return leerRosterReal_(true).map(function (t) {
+    return {
+      dni: t.dni,
+      nombre: t.nombre,
+      cargo: t.cargo,
+      sede: t.sede || '',
+      registro_simple: t.es_campo,
+      fecha_fin: t.fecha_fin || ''
+    };
+  });
+}
+
+// 'activo' depende de la fecha de hoy, no de cuando se guardo la lista.
+function conEstadoActivo_(lista) {
+  var hoy = hoyISO_();
+  return lista.map(function (t) {
+    var copia = {};
+    for (var k in t) copia[k] = t[k];
+    copia.activo = !t.fecha_fin || t.fecha_fin >= hoy; // el dia del cese aun se trabaja
+    return copia;
+  });
+}
+
+function guardarRosterKiosko_(lista) {
+  if (!lista || !lista.length) return; // nunca fijar una lista vacia
+  var json = JSON.stringify(lista);
+  try { CacheService.getScriptCache().put(CACHE_KEY_ROSTER_KIOSKO, json, ROSTER_CACHE_TTL); } catch (e) { /* no critico */ }
+  var snapshot = JSON.stringify({ version: ROSTER_KIOSKO_VERSION, generado: new Date().getTime(), lista: lista });
+  if (snapshot.length > ROSTER_PROP_MAX_BYTES) {
+    Logger.log('Roster del kiosko demasiado grande para PropertiesService (' + snapshot.length + ' bytes): solo cache');
+    return;
+  }
+  try { PropertiesService.getScriptProperties().setProperty(PROP_ROSTER_KIOSKO, snapshot); } catch (e) { /* no critico */ }
+}
+
+function leerSnapshotRosterKiosko_() {
+  try {
+    var raw = PropertiesService.getScriptProperties().getProperty(PROP_ROSTER_KIOSKO);
+    if (!raw) return null;
+    var snap = JSON.parse(raw);
+    return (snap && snap.version === ROSTER_KIOSKO_VERSION && snap.lista && snap.lista.length) ? snap : null;
+  } catch (e) { return null; }
+}
+
+// Devuelve la lista completa (con cesados), con 'activo' al dia.
+function obtenerRosterKiosko_() {
+  // 1) Cache
+  try {
+    var cached = CacheService.getScriptCache().get(CACHE_KEY_ROSTER_KIOSKO);
+    if (cached) return conEstadoActivo_(JSON.parse(cached));
+  } catch (e) { /* seguir al siguiente nivel */ }
+
+  // 2) Instantanea durable, si es reciente: repone la cache sin abrir la hoja
+  var snap = leerSnapshotRosterKiosko_();
+  if (snap && (new Date().getTime() - snap.generado) < ROSTER_SNAPSHOT_MAX_MS) {
+    try { CacheService.getScriptCache().put(CACHE_KEY_ROSTER_KIOSKO, JSON.stringify(snap.lista), ROSTER_CACHE_TTL); } catch (e) { /* no critico */ }
+    return conEstadoActivo_(snap.lista);
+  }
+
+  // 3) Hoja sueldos
+  try {
+    var lista = construirRosterKiosko_();
+    if (lista.length) {
+      guardarRosterKiosko_(lista);
+      return conEstadoActivo_(lista);
+    }
+  } catch (e) {
+    Logger.log('No se pudo leer la hoja sueldos para el kiosko: ' + e.message);
+  }
+
+  // Ultimo recurso: la hoja no respondio. Una instantanea vieja es mejor que
+  // dejar a todos sin marcar; 'activo' igual se recalcula con la fecha de hoy
+  // y el registro vuelve a validar el DNI en el servidor.
+  if (snap) return conEstadoActivo_(snap.lista);
+  throw new Error('No se pudo cargar la lista de trabajadores');
+}
+
+// Reconstruye cache e instantanea desde la hoja. flush() primero para que la
+// lectura vea lo que la misma ejecucion acaba de escribir.
+function refrescarRosterKiosko_() {
+  SpreadsheetApp.flush();
+  var lista = construirRosterKiosko_();
+  guardarRosterKiosko_(lista);
+  return lista;
+}
+
+// Llamado tras toda alta, baja o edicion de personal. Antes solo BORRABA la
+// cache y el siguiente trabajador pagaba la lectura lenta; ahora la reconstruye
+// en el acto (quien escribe es el admin, fuera de la rafaga).
 function invalidarCacheTrabajadores_() {
   try {
-    CacheService.getScriptCache().removeAll([CACHE_KEY_TRABAJADORES, CACHE_KEY_TRABAJADORES_TODOS]);
-  } catch (e) { /* si el cache falla, expira solo en 10 min */ }
+    refrescarRosterKiosko_();
+  } catch (e) {
+    // Si la reconstruccion falla, al menos no dejar una lista vieja servida.
+    try { CacheService.getScriptCache().remove(CACHE_KEY_ROSTER_KIOSKO); } catch (e2) { /* */ }
+    try { PropertiesService.getScriptProperties().deleteProperty(PROP_ROSTER_KIOSKO); } catch (e3) { /* */ }
+  }
+}
+
+// ACTIVADOR: configurarlo UNA VEZ desde el editor de Apps Script
+//   Activadores (icono de reloj) > Anadir activador > precalentarRosterKiosko
+//   > Seleccionado por tiempo > Temporizador por minutos > Cada 30 minutos.
+// Mantiene la lista siempre caliente: la rafaga de las 07:30 y la de las
+// 14:00 nunca encuentran la cache fria. Tambien ejecutarlo a mano despues de
+// editar la hoja sueldos directamente. No esta expuesto en el router.
+function precalentarRosterKiosko() {
+  var t0 = new Date().getTime();
+  var lista = refrescarRosterKiosko_();
+  Logger.log('Roster del kiosko precalentado: ' + lista.length + ' trabajadores en ' + (new Date().getTime() - t0) + ' ms');
+  return lista.length;
 }
 
 function getTrabajadores(data) {
   var incluirCesados = !!(data && (data.incluirCesados === true || data.incluirCesados === 'true'));
-  var cacheKey = incluirCesados ? CACHE_KEY_TRABAJADORES_TODOS : CACHE_KEY_TRABAJADORES;
-
-  try {
-    var cached = CacheService.getScriptCache().get(cacheKey);
-    if (cached) return { success: true, data: JSON.parse(cached) };
-  } catch (e) { /* cache no disponible: seguir contra Sheets */ }
-
-  var res = getSueldos();
-  if (!res.success) return res;
-  var lista = res.data
-    .filter(function(t) { return incluirCesados || t.activo; })
-    .map(function(t) {
-      return {
-        dni: t.dni,
-        nombre: t.nombre,
-        cargo: t.cargo,
-        sede: t.sede || '',
-        registro_simple: !t.email,
-        activo: t.activo,
-        fecha_fin: t.fecha_fin || ''
-      };
-    });
-
-  try {
-    CacheService.getScriptCache().put(cacheKey, JSON.stringify(lista), CACHE_TTL_TRABAJADORES);
-  } catch (e) { /* no critico */ }
-
+  var lista = obtenerRosterKiosko_();
+  // Solo trabajadores ACTIVOS en el kiosko: un cesado no debe poder marcar ni
+  // figurar en la pantalla (su historial si se conserva). El panel de
+  // asistencias pide la lista completa para poder filtrar a los cesados.
+  if (!incluirCesados) lista = lista.filter(function (t) { return t.activo; });
   return { success: true, data: lista };
 }
 

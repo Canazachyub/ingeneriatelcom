@@ -187,6 +187,29 @@ function ejecutarTestSalud() {
     warn('CacheService no disponible: ' + e.message + ' — el anti-duplicado seguira funcionando por lectura acotada');
   }
 
+  // 11. Roster del kiosko precalentado (ver obtenerRosterKiosko_ en 08_planilla).
+  // Solo lectura: se inspecciona la instantanea, no se regenera.
+  try {
+    var snapK = leerSnapshotRosterKiosko_();
+    if (!snapK) {
+      warn('No hay instantanea del roster del kiosko: ejecutar precalentarRosterKiosko y configurar su activador (cada 30 min)');
+    } else {
+      var edadMin = Math.round((new Date().getTime() - snapK.generado) / 60000);
+      // Con el activador cada 30 min la instantanea nunca pasa de ~30 min.
+      if (edadMin > 45) {
+        warn('Instantanea del roster del kiosko con ' + edadMin + ' min: el activador precalentarRosterKiosko no parece estar corriendo — la rafaga de las 07:30 puede encontrar la cache fria');
+      } else {
+        ok();
+      }
+      var enHoja = leerRosterReal_(true).length;
+      if (snapK.lista.length !== enHoja) {
+        warn('La instantanea del kiosko tiene ' + snapK.lista.length + ' trabajadores y la hoja ' + enHoja + ' — ejecutar precalentarRosterKiosko (¿se edito la hoja sueldos a mano?)');
+      } else {
+        ok();
+      }
+    }
+  } catch (e) { fail('Verificacion del roster del kiosko fallo: ' + e.message); }
+
   var resultado = {
     ok: fails.length === 0,
     checksOk: oks,
