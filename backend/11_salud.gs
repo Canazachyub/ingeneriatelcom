@@ -192,12 +192,13 @@ function ejecutarTestSalud() {
   try {
     var snapK = leerSnapshotRosterKiosko_();
     if (!snapK) {
-      warn('No hay instantanea del roster del kiosko: ejecutar precalentarRosterKiosko y configurar su activador (cada 30 min)');
+      warn('No hay instantanea del roster del kiosko: ejecutar precalentarRosterKiosko y configurar su activador diario (6 a 7 a.m.)');
     } else {
       var edadMin = Math.round((new Date().getTime() - snapK.generado) / 60000);
-      // Con el activador cada 30 min la instantanea nunca pasa de ~30 min.
-      if (edadMin > 45) {
-        warn('Instantanea del roster del kiosko con ' + edadMin + ' min: el activador precalentarRosterKiosko no parece estar corriendo — la rafaga de las 07:30 puede encontrar la cache fria');
+      // Con el activador diario la instantanea nunca pasa de ~25 h (Google
+      // elige el minuto dentro de la hora configurada).
+      if (edadMin > 25 * 60) {
+        warn('Instantanea del roster del kiosko con ' + Math.round(edadMin / 60) + ' h: el activador diario precalentarRosterKiosko no parece estar corriendo — la rafaga de las 07:30 puede encontrar la cache fria');
       } else {
         ok();
       }

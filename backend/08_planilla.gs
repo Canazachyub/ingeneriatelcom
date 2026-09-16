@@ -226,8 +226,9 @@ function getSueldos() {
 // alguien cesado ayer.
 // Frescura: toda alta/baja/edicion desde el panel RECONSTRUYE la lista (antes
 // solo la borraba y la siguiente apertura del kiosko pagaba la lectura lenta),
-// y el activador precalentarRosterKiosko la refresca cada 30 min. Si se edita
-// la hoja sueldos A MANO, ejecutar precalentarRosterKiosko desde el editor.
+// y el activador diario precalentarRosterKiosko la refresca antes de la rafaga
+// de las 07:30. Si se edita la hoja sueldos A MANO, ejecutar
+// precalentarRosterKiosko desde el editor (si no, el cambio tarda hasta un dia).
 var ROSTER_KIOSKO_VERSION = 'v3';
 var CACHE_KEY_ROSTER_KIOSKO = 'kiosk_roster_' + ROSTER_KIOSKO_VERSION;
 var PROP_ROSTER_KIOSKO = 'kiosk_roster_snapshot';
@@ -338,10 +339,14 @@ function invalidarCacheTrabajadores_() {
 
 // ACTIVADOR: configurarlo UNA VEZ desde el editor de Apps Script
 //   Activadores (icono de reloj) > Anadir activador > precalentarRosterKiosko
-//   > Seleccionado por tiempo > Temporizador por minutos > Cada 30 minutos.
-// Mantiene la lista siempre caliente: la rafaga de las 07:30 y la de las
-// 14:00 nunca encuentran la cache fria. Tambien ejecutarlo a mano despues de
-// editar la hoja sueldos directamente. No esta expuesto en el router.
+//   > Basado en tiempo > Temporizador diario > De 6 a 7 a.m.
+// Diario y no mas seguido (decision del dueno, 16/09/2026): la instantanea
+// dura 24 h (ROSTER_SNAPSHOT_MAX_MS), asi que un disparo antes de las 07:30
+// cubre la rafaga de la manana y la de las 14:00 sin abrir la hoja. Google
+// elige el minuto dentro de esa hora; si la instantanea vence un rato antes
+// del disparo, la lectura de la hoja cae fuera de la rafaga. Tambien
+// ejecutarlo a mano despues de editar la hoja sueldos directamente.
+// No esta expuesto en el router.
 function precalentarRosterKiosko() {
   var t0 = new Date().getTime();
   var lista = refrescarRosterKiosko_();

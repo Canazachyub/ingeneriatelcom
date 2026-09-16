@@ -517,11 +517,12 @@ Una sola lista (con cesados; el filtro de activos se aplica al responder) resuel
 - **`activo` se recalcula en cada respuesta** con la fecha de hoy. Una lista guardada ayer nunca deja marcar a quien cesó hoy.
 - **Alta o baja desde el panel reconstruye la lista** (`SpreadsheetApp.flush()` y relectura) en vez de borrarla.
 - **Nunca se guarda una lista vacía**, y la instantánea solo se guarda si cabe en 8.5 KB (límite de Properties: 9 KB por valor).
-- **`precalentarRosterKiosko()`** es una función pública pensada para un **activador de tiempo cada 30 min**. No está en el router.
+- **`precalentarRosterKiosko()`** es una función pública pensada para un **activador diario entre las 6 y las 7 a.m.** No está en el router.
+  - **Frecuencia diaria por decisión del dueño (16/09/2026).** Se propuso cada 30 min y se descartó el semanal, porque la instantánea caduca a las 24 h y un disparo semanal solo cubriría un día de cada siete. Con un disparo diario antes de las 07:30, la instantánea sigue vigente para las ráfagas de las 07:30 y las 14:00.
   - El activador se configura **a mano** desde el editor. Crearlo por código exigiría el scope de `ScriptApp`: una autorización nueva que, si queda pendiente, deja caída la Web App entera.
-- **Test de salud, check 11:** avisa si no hay instantánea, si tiene más de 45 min (el activador no corre) o si su número de trabajadores no coincide con la hoja (alguien editó `sueldos` a mano).
+- **Test de salud, check 11:** avisa si no hay instantánea, si tiene más de 25 h (el activador diario no corre) o si su número de trabajadores no coincide con la hoja (alguien editó `sueldos` a mano).
 
-> **Si se edita la hoja `sueldos` a mano**, ejecutar `precalentarRosterKiosko` después. Si no, el kiosko verá la lista anterior hasta el siguiente disparo del activador (máx. 30 min).
+> **Si se edita la hoja `sueldos` a mano**, ejecutar `precalentarRosterKiosko` después. Si no, el kiosko verá la lista anterior hasta el siguiente disparo del activador (hasta un día).
 
 ### Corrección — kiosko (`AsistenciaPage.tsx`, `appScriptApi.ts`)
 
@@ -553,7 +554,7 @@ Una sola lista (con cesados; el filtro de activos se aplica al responder) resuel
 2. `npm run build:backend` → pegar `appscript.js` → `ejecutarTestSalud` → **0 FAIL** → Nueva versión.
    - El check 11 dará WARN hasta completar los pasos 3 y 4.
 3. Ejecutar `precalentarRosterKiosko` una vez desde el editor.
-4. **Activadores → Añadir activador** → función `precalentarRosterKiosko` → *Según tiempo* → *Temporizador por minutos* → **cada 30 minutos**.
+4. **Activadores → Añadir activador** → función `precalentarRosterKiosko` → *Basado en tiempo* → *Temporizador diario* → **de 6 a 7 a.m.**
 5. Volver a ejecutar `ejecutarTestSalud`: el check 11 debe quedar OK.
 6. El orden entre frontend y backend no es crítico: la API no cambia de forma.
 
