@@ -20,9 +20,10 @@ import {
   FaSignInAlt,
   FaSignOutAlt,
   FaWhatsapp,
+  FaClock,
 } from 'react-icons/fa'
 import { Link } from 'react-router-dom'
-import { api } from '../api/appScriptApi'
+import { api, ApiResponse } from '../api/appScriptApi'
 import { useGeolocation } from '../hooks/useGeolocation'
 import {
   buscarTrabajador,
@@ -34,9 +35,36 @@ import {
   sugerirEvento,
 } from '../data/trabajadores'
 
-type ViewState = 'input' | 'menu' | 'camara' | 'justificacion' | 'success' | 'error'
+// ya_registrado  → el evento ya estaba guardado hoy (NO es un error).
+// sin_confirmar → no llegó respuesta del servidor: la marca pudo guardarse.
+// conectando    → sin lista de trabajadores todavía; se sigue intentando.
+type ViewState =
+  | 'input' | 'menu' | 'camara' | 'justificacion'
+  | 'success' | 'error' | 'ya_registrado' | 'sin_confirmar' | 'conectando'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// '07:28:13' → '7:28 am'. Si no reconoce el formato, lo devuelve tal cual.
+const formatearHora = (hora?: string): string => {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hora || '')
+  if (!m) return hora || ''
+  const h = Number(m[1])
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 ? 'pm' : 'am'}`
+}
+
+type RespuestaRegistro = ApiResponse<{ evento: string; fecha: string; hora: string; foto_url: string }>
+
+// El backend responde "ya registrado" cuando el evento ya está guardado hoy.
+// Se reconoce por código (backend nuevo) o por el texto (backend anterior).
+const esYaRegistrado = (r: RespuestaRegistro) =>
+  !r.success && (r.codigo === 'YA_REGISTRADO' ||
+    (!!r.error && r.error.indexOf('Ya registraste este evento hoy') !== -1))
+
+// Fallos pasajeros en los que conviene reintentar: sin respuesta del servidor,
+// lock ocupado en plena ráfaga o un tropiezo de Drive al guardar la foto.
+// Un rechazo de negocio (DNI no habilitado, sin GPS...) no mejora reintentando.
+const esFalloPasajero = (r: RespuestaRegistro) =>
+  !r.success && (!!r.transporte || /ocupado|guardar la foto/i.test(r.error || ''))
 
 // ── Lista de trabajadores guardada en el teléfono ────────────
 // A las 07:30 muchos abren el kiosko a la vez y el backend podía tardar
@@ -84,6 +112,8 @@ export default function AsistenciaPage() {
   const [horaRegistro, setHoraRegistro] = useState('')
   const [countdown, setCountdown] = useState(6)
   const [successTipo, setSuccessTipo] = useState<'asistencia' | 'justificacion'>('asistencia')
+  // Texto de avance mientras se envía la marca (la subida puede tardar).
+  const [progreso, setProgreso] = useState('')
 
   // Cámara
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -173,7 +203,7 @@ export default function AsistenciaPage() {
 
   // Countdown de reinicio en success/error
   useEffect(() => {
-    if (viewState === 'success' || viewState === 'error') {
+    if (viewState === 'success' || viewState === 'error' || viewState === 'ya_registrado') {
       const timer = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
@@ -265,10 +295,16 @@ export default function AsistenciaPage() {
       if (nueva) t = buscarTrabajador(dni, nueva)
     }
     if (!t && listaRef.current.length === 0) {
-      setMensaje('No se pudo cargar la lista de trabajadores. Verifica tu conexión e intenta de nuevo.')
-      setViewState('error')
+      // Sin lista todavía (primer uso en este teléfono y el servidor saturado).
+      // Antes esto era una pantalla roja de error; ahora se sigue intentando
+      // solo y se continúa en cuanto llega la lista.
+      setViewState('conectando')
       return
     }
+    abrirMenuTrabajador(t)
+  }
+
+  const abrirMenuTrabajador = (t: TrabajadorFijo | undefined) => {
     if (t) {
       setTrabajador(t)
       // Campo (sin correo): sin evento sugerido, el trabajador elige Ingreso/Salida.
@@ -279,6 +315,26 @@ export default function AsistenciaPage() {
       setViewState('error')
     }
   }
+
+  // Vista "conectando": reintentar la lista sin límite hasta que llegue o el
+  // trabajador cancele; al llegar, se sigue con el DNI ya digitado.
+  useEffect(() => {
+    if (viewState !== 'conectando') return
+    let activo = true
+    ;(async () => {
+      while (activo) {
+        const lista = await cargarTrabajadores()
+        if (!activo) return
+        if (lista) {
+          abrirMenuTrabajador(buscarTrabajador(dni, lista))
+          return
+        }
+        await sleep(3000)
+      }
+    })()
+    return () => { activo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewState])
 
   const handleSeleccionEvento = (evento: EventoRegistro) => {
     setEventoSel(evento)
@@ -301,6 +357,15 @@ export default function AsistenciaPage() {
       return
     }
     setIsLoading(true)
+    setMensaje('')
+    setProgreso('Enviando tu registro...')
+    // La subida de la foto puede tardar bajo la ráfaga de las 07:30. Sin
+    // explicación, un spinner largo hacía que el trabajador saliera y volviera
+    // a marcar; ahora se le dice qué pasa y que no cierre la pantalla.
+    const avisoLento = setTimeout(
+      () => setProgreso('La señal está lenta. Seguimos enviando tu registro, no cierres esta pantalla.'),
+      12000
+    )
     const payload = {
       dni: trabajador.dni,
       nombre: trabajador.nombre,
@@ -313,53 +378,60 @@ export default function AsistenciaPage() {
       mimeType: 'image/jpeg',
     }
     try {
-      const yaRegistrado = (r: typeof res) =>
-        !r.success && !!r.error && r.error.indexOf('Ya registraste este evento hoy') !== -1
+      let res: RespuestaRegistro = await api.registrarAsistenciaFoto(payload)
 
-      let res = await api.registrarAsistenciaFoto(payload)
+      // "Ya registrado" en la PRIMERA respuesta: el trabajador ya había marcado
+      // este evento hoy (casi siempre, un intento anterior que sí se guardó
+      // aunque la pantalla no lo confirmó). No es un error: se le confirma.
+      if (esYaRegistrado(res)) {
+        detenerCamara()
+        setHoraRegistro(formatearHora(res.data?.hora))
+        setViewState('ya_registrado')
+        return
+      }
 
-      // Un duplicado en la PRIMERA respuesta es real: el trabajador ya marcó
-      // ese evento hoy y debe saberlo. Antes se reintentaba igual y el
-      // duplicado acababa convertido en un "registrado" falso — además de
-      // disparar dos subidas de foto inútiles a Drive.
-      if (!yaRegistrado(res)) {
-        // Reintentos ante CUALQUIER fallo transitorio (red caída, timeout,
-        // "Sistema ocupado").
-        for (let intento = 1; !res.success && intento < 3; intento++) {
-          await sleep(2500 * intento)
-          res = await api.registrarAsistenciaFoto(payload)
-          // Aquí sí: si el intento anterior SÍ escribió en la hoja pero la
-          // respuesta se perdió en el camino, el reintento responde "ya
-          // registraste" — eso confirma que quedó guardado, y se muestra
-          // como éxito (la hora exacta la tiene el servidor).
-          if (yaRegistrado(res)) {
-            res = {
-              success: true,
-              data: {
-                evento: eventoSel,
-                fecha: '',
-                hora: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
-                foto_url: '',
-              },
-            }
+      for (let intento = 1; esFalloPasajero(res) && intento < 3; intento++) {
+        clearTimeout(avisoLento)
+        setProgreso(`Reintentando (${intento + 1} de 3)... Tu foto sigue guardada, no cierres esta pantalla.`)
+        await sleep(2500 * intento)
+        res = await api.registrarAsistenciaFoto(payload)
+        // En un reintento, "ya registrado" confirma que el intento anterior SÍ
+        // se guardó aunque su respuesta se perdió: es un éxito.
+        if (esYaRegistrado(res)) {
+          res = {
+            success: true,
+            data: {
+              evento: eventoSel,
+              fecha: res.data?.fecha || '',
+              hora: res.data?.hora || new Date().toTimeString().slice(0, 8),
+              foto_url: '',
+            },
           }
         }
       }
+
+      detenerCamara()
       if (res.success && res.data) {
-        detenerCamara()
-        setHoraRegistro(res.data.hora)
+        setHoraRegistro(formatearHora(res.data.hora))
         setSuccessTipo('asistencia')
         setViewState('success')
+      } else if (esFalloPasajero(res)) {
+        // Sin respuesta tras 3 intentos: la marca PUDO haberse guardado. No se
+        // muestra "Error" (el trabajador repetía todo desde cero): se conserva
+        // la foto y se ofrece comprobar, que reenvía la misma marca. En eventos
+        // de oficina no hay riesgo de duplicarla: el servidor responde "ya
+        // registrado" si existe.
+        setViewState('sin_confirmar')
       } else {
         setMensaje(res.error || 'Error al registrar asistencia')
-        detenerCamara()
         setViewState('error')
       }
     } catch {
-      setMensaje('Error de conexión. Intenta de nuevo.')
       detenerCamara()
-      setViewState('error')
+      setViewState('sin_confirmar')
     } finally {
+      clearTimeout(avisoLento)
+      setProgreso('')
       setIsLoading(false)
     }
   }
@@ -424,6 +496,7 @@ export default function AsistenciaPage() {
     setMensaje('')
     setHoraRegistro('')
     setCountdown(6)
+    setProgreso('')
     setFotoPreview(null)
     setMotivo(MOTIVOS_JUSTIFICACION[0])
     setDescripcion('')
@@ -443,6 +516,17 @@ export default function AsistenciaPage() {
     <div className="flex flex-col bg-[#060d1f]" style={{ minHeight: '100dvh' }}>
       {/* Fondo decorativo */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        {/* Rejilla táctica estática, coherente con la landing (solo CSS) */}
+        <div
+          className="absolute inset-0 opacity-[0.05]"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(0,212,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,212,255,1) 1px, transparent 1px)',
+            backgroundSize: '48px 48px',
+            maskImage: 'radial-gradient(ellipse at center, black 30%, transparent 80%)',
+            WebkitMaskImage: 'radial-gradient(ellipse at center, black 30%, transparent 80%)',
+          }}
+        />
         <div className="absolute -top-32 -left-32 w-80 h-80 rounded-full bg-blue-600/10 blur-3xl" />
         <div className="absolute top-1/2 -right-24 w-64 h-64 rounded-full bg-cyan-500/8 blur-3xl" />
         <div className="absolute -bottom-20 left-1/3 w-72 h-72 rounded-full bg-blue-800/10 blur-3xl" />
@@ -459,7 +543,7 @@ export default function AsistenciaPage() {
             <FaArrowLeft className="text-xs" />
           </Link>
           <div>
-            <p className="text-[10px] font-mono text-cyan-400/70 tracking-widest uppercase">Ingeniería Telcom</p>
+            <p className="text-[10px] font-mono text-cyan-400/70 tracking-widest uppercase">Ingeniería Telcom<span className="hidden sm:inline"> · Terminal de marcación</span></p>
             <h1 className="text-base font-display font-bold text-white leading-tight">Control de Asistencia</h1>
           </div>
         </div>
@@ -467,7 +551,13 @@ export default function AsistenciaPage() {
       </header>
 
       {/* Contenido principal */}
-      <main className="relative z-10 flex-1 flex flex-col px-4 pb-4 max-w-md w-full mx-auto">
+      <main className="relative z-10 flex-1 flex flex-col px-4 pb-4 max-w-md w-full mx-auto md:justify-center md:pb-10">
+        <div className="relative flex-1 flex flex-col md:flex-none md:min-h-[640px] md:px-7 md:py-6 md:bg-primary-950/60 md:backdrop-blur-md md:border md:border-primary-700/40">
+          {/* Esquinas tácticas del marco (solo desde md) */}
+          <span aria-hidden="true" className="hidden md:block absolute -top-px -left-px w-5 h-5 border-t-2 border-l-2 border-accent-electric/70" />
+          <span aria-hidden="true" className="hidden md:block absolute -top-px -right-px w-5 h-5 border-t-2 border-r-2 border-accent-electric/70" />
+          <span aria-hidden="true" className="hidden md:block absolute -bottom-px -left-px w-5 h-5 border-b-2 border-l-2 border-accent-electric/70" />
+          <span aria-hidden="true" className="hidden md:block absolute -bottom-px -right-px w-5 h-5 border-b-2 border-r-2 border-accent-electric/70" />
         <AnimatePresence mode="wait">
 
           {/* ── Vista: Ingreso de DNI ── */}
@@ -495,7 +585,7 @@ export default function AsistenciaPage() {
                         key={i}
                         animate={isActive ? { scale: [1, 1.05, 1] } : {}}
                         transition={{ duration: 0.3 }}
-                        className={`w-9 h-11 rounded-lg flex items-center justify-center text-lg font-bold font-mono transition-all duration-200 ${
+                        className={`w-9 h-11 rounded-md flex items-center justify-center text-lg font-bold font-mono transition-all duration-200 ${
                           char
                             ? 'bg-blue-600/30 border border-blue-500/60 text-white'
                             : isActive
@@ -740,6 +830,13 @@ export default function AsistenciaPage() {
                 <p className="text-center text-xs text-rose-400 mb-3">{mensaje}</p>
               )}
 
+              {isLoading && progreso && (
+                <div className="bg-cyan-500/10 border border-cyan-500/30 text-cyan-200 rounded-xl px-4 py-3 text-sm mb-3 flex items-start gap-2" role="status">
+                  <FaSpinner className="mt-0.5 shrink-0 animate-spin" />
+                  <span>{progreso}</span>
+                </div>
+              )}
+
               {/* Acciones */}
               {!fotoPreview ? (
                 <button
@@ -767,7 +864,7 @@ export default function AsistenciaPage() {
                     className="py-4 rounded-2xl bg-emerald-500 text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 disabled:opacity-40"
                   >
                     {isLoading ? <FaSpinner className="animate-spin" /> : <FaCheckCircle />}
-                    Registrar
+                    {isLoading ? 'Enviando...' : 'Registrar'}
                   </button>
                 </div>
               )}
@@ -925,6 +1022,143 @@ export default function AsistenciaPage() {
             </motion.div>
           )}
 
+          {/* ── Vista: Ya estaba registrado (confirmación, no error) ── */}
+          {viewState === 'ya_registrado' && (
+            <motion.div
+              key="ya_registrado"
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              className="flex flex-col flex-1 justify-center items-center text-center"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 20, delay: 0.1 }}
+                className="w-28 h-28 rounded-full bg-emerald-500/20 border-2 border-emerald-500/40 flex items-center justify-center mb-6"
+              >
+                <FaCheckCircle className="text-5xl text-emerald-400" />
+              </motion.div>
+
+              <span className="inline-block px-4 py-1 rounded-full text-xs font-bold tracking-widest mb-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                YA ESTÁS REGISTRADO
+              </span>
+
+              <h2 className="text-xl font-bold text-white mb-2">{trabajador?.nombre}</h2>
+              <p className="text-primary-200 text-sm mb-1 max-w-xs">
+                Tu <strong className="text-white">{EVENTO_LABELS[eventoSel || ''] || 'registro'}</strong> de hoy
+                ya quedó guardado{horaRegistro ? <> a las <strong className="text-white">{horaRegistro}</strong></> : null}.
+              </p>
+              <p className="text-emerald-300 text-sm font-semibold mb-6">No necesitas volver a marcar.</p>
+
+              <button
+                onClick={handleReset}
+                className="px-8 py-3 min-h-[44px] bg-emerald-500 text-white font-semibold rounded-2xl hover:bg-emerald-600 transition-colors inline-flex items-center gap-2 mb-3"
+              >
+                <FaCheckCircle /> Entendido
+              </button>
+              <button
+                onClick={() => { setFotoPreview(null); setHoraRegistro(''); setCountdown(6); setViewState('menu') }}
+                className="min-h-[44px] px-4 text-sm text-cyan-400 underline mb-6"
+              >
+                ¿Querías marcar otro evento?
+              </button>
+
+              <p className="text-xs text-primary-500">Volviendo al inicio en {countdown}s...</p>
+            </motion.div>
+          )}
+
+          {/* ── Vista: Sin confirmar (no llegó respuesta del servidor) ── */}
+          {viewState === 'sin_confirmar' && (
+            <motion.div
+              key="sin_confirmar"
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              className="flex flex-col flex-1 justify-center items-center text-center"
+            >
+              <div className="w-28 h-28 rounded-full bg-amber-400/15 border-2 border-amber-400/40 flex items-center justify-center mb-6">
+                <FaClock className="text-5xl text-amber-300" />
+              </div>
+
+              <h2 className="text-xl font-bold text-white mb-2">Falta confirmar tu registro</h2>
+              <p className="text-primary-200 text-sm mb-2 max-w-xs">
+                La señal está lenta y el servidor no respondió a tiempo.
+                <strong className="text-white"> Es posible que tu marca sí se haya guardado.</strong>
+              </p>
+              <p className="text-primary-300 text-sm mb-6 max-w-xs">
+                Pulsa <strong className="text-amber-300">Comprobar registro</strong>: usamos la misma foto
+                {trabajador?.registro_simple
+                  ? '.'
+                  : ' y, si ya quedó guardado, te lo confirmamos sin duplicarlo.'}
+              </p>
+
+              {isLoading && progreso && (
+                <p className="text-cyan-200 text-sm mb-4 max-w-xs flex items-start gap-2" role="status">
+                  <FaSpinner className="mt-0.5 shrink-0 animate-spin" />
+                  {progreso}
+                </p>
+              )}
+
+              <button
+                onClick={handleRegistrar}
+                disabled={isLoading || !fotoPreview}
+                className="px-8 py-3.5 min-h-[44px] bg-amber-400 text-slate-900 font-bold rounded-2xl hover:bg-amber-300 transition-colors inline-flex items-center gap-2 mb-3 disabled:opacity-50"
+              >
+                {isLoading ? <FaSpinner className="animate-spin" /> : <FaSyncAlt />}
+                {isLoading ? 'Comprobando...' : 'Comprobar registro'}
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={isLoading}
+                className="min-h-[44px] px-4 text-sm text-primary-400 hover:text-primary-200 mb-5 disabled:opacity-40"
+              >
+                Salir
+              </button>
+
+              <a
+                href={`https://wa.me/51984300510?text=${encodeURIComponent(
+                  `Hola, no pude confirmar mi registro de asistencia (DNI ${trabajador?.dni || dni}, ${EVENTO_LABELS[eventoSel || ''] || ''}).`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-sm font-medium hover:bg-emerald-500/25 transition-colors"
+              >
+                <FaWhatsapp className="text-lg" />
+                Si sigue sin confirmar, escríbenos: 984 300 510
+              </a>
+            </motion.div>
+          )}
+
+          {/* ── Vista: Conectando (sin lista de trabajadores aún) ── */}
+          {viewState === 'conectando' && (
+            <motion.div
+              key="conectando"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="flex flex-col flex-1 justify-center items-center text-center"
+            >
+              <div className="w-28 h-28 rounded-full bg-cyan-500/10 border-2 border-cyan-500/30 flex items-center justify-center mb-6">
+                <FaSpinner className="text-5xl text-cyan-300 animate-spin" />
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">Conectando con el sistema...</h2>
+              <p className="text-primary-200 text-sm mb-6 max-w-xs">
+                A esta hora muchos compañeros marcan a la vez. Espera unos segundos,
+                <strong className="text-white"> no cierres la pantalla</strong>: seguiremos con tu DNI {dni} en cuanto conecte.
+              </p>
+              <button
+                onClick={handleReset}
+                className="min-h-[44px] px-6 text-sm text-primary-400 hover:text-primary-200"
+              >
+                Cancelar
+              </button>
+            </motion.div>
+          )}
+
           {/* ── Vista: Error ── */}
           {viewState === 'error' && (
             <motion.div
@@ -944,7 +1178,7 @@ export default function AsistenciaPage() {
                 <FaTimesCircle className="text-5xl text-rose-400" />
               </motion.div>
 
-              <h2 className="text-xl font-bold text-white mb-2">Error</h2>
+              <h2 className="text-xl font-bold text-white mb-2">No se pudo registrar</h2>
               <p className="text-rose-400 text-sm mb-6 max-w-xs">{mensaje}</p>
 
               <button
@@ -980,6 +1214,7 @@ export default function AsistenciaPage() {
           )}
 
         </AnimatePresence>
+        </div>
       </main>
     </div>
   )
@@ -1074,7 +1309,7 @@ function TecladoNumerico({ onKeyPress, onSubmit, disabled, isLoading }: TecladoN
   ]
 
   return (
-    <div className="flex-1 flex flex-col justify-end">
+    <div className="flex-1 flex flex-col justify-end md:mt-2">
       <div className="grid grid-cols-3 gap-2.5">
         {keys.flat().map((key) => {
           const isBackspace = key === 'backspace'

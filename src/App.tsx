@@ -42,12 +42,19 @@ import { ToastProvider, useToast } from './context/ToastContext'
  * para que un fallo de red o una respuesta HTML de Apps Script nunca quede
  * silencioso (antes se tragaban como listas vacías).
  */
+// Acciones del kiosko de asistencia: la pantalla ya reintenta y explica cada
+// caso con su propio mensaje. Un toast rojo "El servidor tardó demasiado"
+// mientras el registro sigue reintentando hacía creer al trabajador que había
+// fallado (y volvía a marcar), aunque la marca sí se guardaba.
+const ACCIONES_SIN_TOAST = new Set(['registrarAsistenciaFoto', 'getTrabajadores', 'subirJustificacion'])
+
 function ApiErrorBridge() {
   const toast = useToast()
   const lastRef = useRef<{ message: string; at: number }>({ message: '', at: 0 })
 
   useEffect(() => {
-    api.onTransportError((message) => {
+    api.onTransportError((message, action) => {
+      if (ACCIONES_SIN_TOAST.has(action)) return
       // Deduplicar el mismo mensaje en ráfaga (p. ej. dashboard hace 2 llamadas en paralelo)
       const now = Date.now()
       if (lastRef.current.message === message && now - lastRef.current.at < 3000) return

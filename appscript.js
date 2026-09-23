@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-16T18:18:22.270Z con tools/build-backend.mjs
+// Generado: 2026-09-23T21:08:01.986Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -3635,10 +3635,12 @@ function leerIndiceDia_(fecha) {
   } catch (e) { return null; }
 }
 
-function marcarEnIndiceDia_(fecha, dni, evento) {
+// hora: la de la marca registrada ('HH:mm:ss'), para que el kiosko pueda
+// decirle al trabajador "ya marcaste a las 7:28" en vez de un error.
+function marcarEnIndiceDia_(fecha, dni, evento, hora) {
   try {
     var idx = leerIndiceDia_(fecha) || {};
-    idx[claveDup_(dni, evento)] = 1;
+    idx[claveDup_(dni, evento)] = (typeof hora === 'string' && hora) ? hora : 1;
     CacheService.getScriptCache().put(cacheKeyDia_(fecha), JSON.stringify(idx), CACHE_TTL_DUP_);
   } catch (e) { /* no critico: la hoja sigue siendo la autoridad */ }
 }
@@ -3647,6 +3649,8 @@ function marcarEnIndiceDia_(fecha, dni, evento) {
 // fila mas antigua del tramo sigue siendo >= la fecha buscada, el tramo no
 // alcanza a cubrir ese dia y se amplia; asi la respuesta negativa siempre se
 // da sobre un rango que SI contiene el dia completo.
+// Devuelve false si no hay marca, o la hora de la marca encontrada
+// ('HH:mm:ss', o true si no se puede derivar) — siempre truthy si existe.
 // sinAmpliar = mirar SOLO el tramo pedido, sin crecer. Se usa para la ventana
 // de carrera dentro del lock: alli basta con lo escrito en los ultimos
 // segundos, y ampliar seria justo lo que se quiere evitar (con 48 marcas
@@ -3659,6 +3663,7 @@ function existeMarcaEnHoja_(sheet, dni, evento, fecha, filasIniciales, sinAmplia
     var cDni = t.headers.indexOf('dni');
     var cEvento = t.headers.indexOf('evento');
     var cFecha = t.headers.indexOf('fecha');
+    var cTs = t.headers.indexOf('timestamp');
     if (cDni < 0 || cEvento < 0 || cFecha < 0) return false;
 
     var masAntigua = null;
@@ -3669,7 +3674,7 @@ function existeMarcaEnHoja_(sheet, dni, evento, fecha, filasIniciales, sinAmplia
       if (f && (masAntigua === null || f < masAntigua)) masAntigua = f;
       if (String(t.rows[i][cDni]) === String(dni) &&
           String(t.rows[i][cEvento]) === String(evento) && f === fecha) {
-        return true;
+        return horaDeMarca_(cTs >= 0 ? t.rows[i][cTs] : null) || true;
       }
     }
     // El tramo abarca toda la hoja, o ya llega mas atras que la fecha buscada.
@@ -3677,6 +3682,27 @@ function existeMarcaEnHoja_(sheet, dni, evento, fecha, filasIniciales, sinAmplia
     maxFilas *= 4;
   }
   return false;
+}
+
+// Hora Lima de una marca a partir de su timestamp UTC (ISO o Date).
+function horaDeMarca_(ts) {
+  var d = (ts instanceof Date) ? ts : (ts ? new Date(ts) : null);
+  if (!d || isNaN(d.getTime())) return '';
+  return Utilities.formatDate(d, 'America/Lima', 'HH:mm:ss');
+}
+
+// Respuesta de duplicado. NO es un fallo: la marca ya esta guardada. El
+// 'codigo' permite al kiosko mostrarlo como confirmacion (con la hora de la
+// marca original) en vez de una pantalla roja de error que hace que el
+// trabajador lo intente otra vez. 'error' se mantiene por compatibilidad con
+// clientes viejos que buscan ese texto.
+function respuestaYaRegistrado_(evento, fecha, hora) {
+  return {
+    success: false,
+    codigo: 'YA_REGISTRADO',
+    error: 'Ya registraste este evento hoy',
+    data: { evento: evento, fecha: fecha, hora: (typeof hora === 'string') ? hora : '' }
+  };
 }
 
 function registrarAsistenciaFoto(data) {
@@ -3739,11 +3765,11 @@ function registrarAsistenciaFoto(data) {
   if (!esCampo) {
     var idxDia = leerIndiceDia_(fecha);
     var yaMarco = (idxDia && idxDia[claveDup_(dni, evento)])
-      ? true
+      ? idxDia[claveDup_(dni, evento)]
       : existeMarcaEnHoja_(sheetPre, dni, evento, fecha);
     if (yaMarco) {
-      marcarEnIndiceDia_(fecha, dni, evento);
-      return { success: false, error: 'Ya registraste este evento hoy' };
+      marcarEnIndiceDia_(fecha, dni, evento, yaMarco);
+      return respuestaYaRegistrado_(evento, fecha, yaMarco);
     }
   }
 
@@ -3777,8 +3803,9 @@ function registrarAsistenciaFoto(data) {
 
     // Evitar doble registro del mismo evento en el mismo dia (SOLO oficina).
     // Los eventos de campo permiten varios turnos por dia.
-    if (!esCampo && existeMarcaEnHoja_(sheet, dni, evento, fecha, FILAS_TRAMO_CARRERA_, true)) {
-      return { success: false, error: 'Ya registraste este evento hoy' };
+    if (!esCampo) {
+      var marcaCarrera = existeMarcaEnHoja_(sheet, dni, evento, fecha, FILAS_TRAMO_CARRERA_, true);
+      if (marcaCarrera) return respuestaYaRegistrado_(evento, fecha, marcaCarrera);
     }
 
     sheet.appendRow([
@@ -3798,7 +3825,7 @@ function registrarAsistenciaFoto(data) {
 
     // Sembrar el indice del dia: el proximo intento del mismo evento se
     // rechaza sin leer la hoja ni subir foto.
-    if (!esCampo) marcarEnIndiceDia_(fecha, dni, evento);
+    if (!esCampo) marcarEnIndiceDia_(fecha, dni, evento, hora);
 
     return { success: true, data: { evento: evento, fecha: fecha, hora: hora, foto_url: fotoUrl } };
   });
@@ -3939,7 +3966,7 @@ function registrarAsistenciaManual(data) {
     ]);
 
     // Sembrar el indice para que el kiosko no acepte luego el mismo evento.
-    if (!esCampo) marcarEnIndiceDia_(fecha, dni, evento);
+    if (!esCampo) marcarEnIndiceDia_(fecha, dni, evento, hora + ':00');
 
     return { success: true, data: { evento: evento, fecha: fecha, hora: hora, nombre: trab.nombre } };
   });

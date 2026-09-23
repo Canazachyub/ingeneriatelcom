@@ -83,6 +83,11 @@ export interface ApiResponse<T> {
   data?: T
   error?: string
   message?: string
+  // Código de negocio opcional del backend (p. ej. 'YA_REGISTRADO').
+  codigo?: string
+  // true = la petición no obtuvo respuesta válida (sin red, timeout, HTML):
+  // el servidor pudo haber procesado la operación igualmente.
+  transporte?: boolean
 }
 
 export interface User {
@@ -298,7 +303,7 @@ class AppScriptApi {
           : `Error del servidor (HTTP ${response.status}) en la acción ${action}`
         console.error('API non-JSON response:', action, response.status, text.slice(0, 300))
         this.notifyError(message, action)
-        return { success: false, error: message }
+        return { success: false, error: message, transporte: true }
       }
     } catch (error) {
       console.error('API request failed:', action, error)
@@ -307,7 +312,7 @@ class AppScriptApi {
         ? 'El servidor tardó demasiado en responder. Intenta de nuevo.'
         : 'Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.'
       this.notifyError(message, action)
-      return { success: false, error: message }
+      return { success: false, error: message, transporte: true }
     } finally {
       if (timer) clearTimeout(timer)
     }
