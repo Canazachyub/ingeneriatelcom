@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
-import { api, User } from '../api/appScriptApi'
+import { api, User, ApiResponse } from '../api/appScriptApi'
 
 // Revalidación de sesión: throttle minimo entre verificaciones al recuperar foco
 const FOCUS_REVALIDATE_THROTTLE_MS = 60 * 1000
@@ -16,6 +16,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+// Solo se cierra sesión si el backend RECHAZÓ el token. Un fallo de transporte
+// (sin red, timeout, 404 de la URL intermedia de Apps Script) o "Servidor
+// ocupado" no dice nada sobre la validez de la sesión: expulsar al admin por
+// eso era un falso cierre de sesión en horas de carga.
+function esRechazoDeSesion(result: ApiResponse<unknown>): boolean {
+  if (result.success || result.transporte) return false
+  return !/ocupado|servidor|conexi[oó]n/i.test(result.error || '')
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -28,9 +37,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const result = await api.verifyToken()
         if (result.success && result.data?.user) {
           setUser(result.data.user)
-        } else {
+        } else if (esRechazoDeSesion(result)) {
           api.setToken(null)
         }
+        // Fallo pasajero (red, Apps Script lento): se conserva el token y la
+        // próxima revalidación decide. Antes cualquier fallo cerraba la sesión.
       }
       setIsLoading(false)
     }
@@ -54,9 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Corte de red / backend caído: no expulsar al admin, solo un internet
       // intermitente. Únicamente cerramos sesión si el backend respondió
       // explícitamente que el token no es válido.
-      const errMsg = result.error || ''
-      const esErrorDeRed = errMsg.includes('Sin conexión') || errMsg.includes('servidor')
-      if (!esErrorDeRed) {
+      if (esRechazoDeSesion(result)) {
         api.setToken(null)
         setUser(null)
       }

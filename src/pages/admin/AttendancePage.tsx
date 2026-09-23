@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   FaCalendarAlt,
   FaClock,
@@ -133,8 +133,18 @@ export default function AttendancePage() {
     }).catch(() => { /* sin feriados: el informe funciona igual */ })
   }, [])
 
+  // Error al cargar las marcas. Antes un fallo (Apps Script lento, 404 de su
+  // URL intermedia) se mostraba como "Sin marcas en este rango": el admin
+  // creía que nadie había marcado cuando el servidor sí tenía los registros.
+  const [errorCarga, setErrorCarga] = useState('')
+  // Cada cambio de filtro lanza una consulta; si una vieja y lenta responde
+  // después que la nueva, no debe pisar el resultado vigente.
+  const consultaVigente = useRef(0)
+
   const loadData = async () => {
+    const miConsulta = ++consultaVigente.current
     setIsLoading(true)
+    setErrorCarga('')
     const filtros = {
       dni: filtroDni || undefined,
       desde: desde || undefined,
@@ -145,10 +155,12 @@ export default function AttendancePage() {
       api.getAsistenciasV2(filtros),
       api.getJustificaciones({ dni: filtroDni || undefined, desde: desde || undefined, hasta: hasta || undefined }),
     ])
+    if (miConsulta !== consultaVigente.current) return // llegó tarde: la ignora
     if (asisRes.success && asisRes.data) {
       setRegistros(asisRes.data as unknown as RegistroAsistencia[])
     } else {
       setRegistros([])
+      setErrorCarga(asisRes.error || 'No se pudieron cargar las marcas')
     }
     if (justRes.success && justRes.data) {
       setJustificaciones(justRes.data as unknown as Justificacion[])
@@ -444,7 +456,23 @@ export default function AttendancePage() {
         {isLoading && <TableSkeleton rows={7} cols={7} />}
 
         {/* ── TAB: REGISTROS ── */}
-        {!isLoading && tab === 'registros' && (
+        {!isLoading && errorCarga && (
+          <EmptyState
+            icon={<FaExclamationTriangle />}
+            title="No se pudieron cargar las marcas"
+            hint={`${errorCarga}. Los registros siguen guardados en el servidor; vuelve a intentar.`}
+            action={
+              <button
+                onClick={loadData}
+                className="px-5 py-2.5 rounded-xl bg-accent-electric text-primary-950 font-semibold text-sm hover:brightness-110 transition"
+              >
+                Reintentar
+              </button>
+            }
+          />
+        )}
+
+        {!isLoading && !errorCarga && tab === 'registros' && (
           registrosOrdenados.length === 0 ? (
             <EmptyState
               icon={<FaClock />}
@@ -559,7 +587,7 @@ export default function AttendancePage() {
         )}
 
         {/* ── TAB: INFORME ── */}
-        {!isLoading && tab === 'informe' && (
+        {!isLoading && !errorCarga && tab === 'informe' && (
           <div className="space-y-4">
             {/* Resumen por trabajador */}
             <div className="bg-primary-900/60 border border-primary-800 rounded-2xl overflow-hidden">

@@ -19,12 +19,29 @@ const NOTIFICATION_EMAIL = 'energysupervision13@gmail.com';
 // (este archivo esta en un repo publico de GitHub). Configurar en el editor de Apps Script:
 // Configuracion del proyecto > Propiedades del script > TOKEN_SECRET = <valor largo aleatorio>
 // Rotar el valor invalida todos los tokens emitidos (fuerza re-login de admins).
+// Memo por ejecucion + reintentos. Bajo carga, PropertiesService a veces
+// tarda o lanza error; antes esa excepcion la tragaba parseToken_ y el router
+// respondia "No autorizado" a una sesion VALIDA — y el panel, al revalidar,
+// expulsaba al admin. Ahora se reintenta y, si aun asi falla, el router
+// responde "Servidor ocupado" (ver servidorListoParaTokens_ en 01_router.gs).
+var TOKEN_SECRET_MEMO_ = null;
+
 function getTokenSecret_() {
-  const secret = PropertiesService.getScriptProperties().getProperty('TOKEN_SECRET');
-  if (!secret) {
-    throw new Error('TOKEN_SECRET no configurado en Propiedades del Script');
+  if (TOKEN_SECRET_MEMO_) return TOKEN_SECRET_MEMO_;
+  var ultimoError = null;
+  for (var intento = 0; intento < 3; intento++) {
+    try {
+      var secret = PropertiesService.getScriptProperties().getProperty('TOKEN_SECRET');
+      if (!secret) throw new Error('TOKEN_SECRET no configurado en Propiedades del Script');
+      TOKEN_SECRET_MEMO_ = secret;
+      return secret;
+    } catch (e) {
+      ultimoError = e;
+      if (String(e.message).indexOf('no configurado') !== -1) break; // no es pasajero
+      Utilities.sleep(300 * (intento + 1));
+    }
   }
-  return secret;
+  throw ultimoError;
 }
 
 // Get or create a subfolder by name inside a parent folder

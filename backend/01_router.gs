@@ -148,6 +148,13 @@ function handleRequest_(e) {
   const token = data.token || param.token;
   let userId = null;
   if (route.nivel !== 'publico') {
+    // Si no se puede leer el secreto (Google sobrecargado), NO responder
+    // "No autorizado": el cliente lo tomaria como sesion invalida.
+    try {
+      getTokenSecret_();
+    } catch (errSecreto) {
+      return jsonResponse({ success: false, error: 'Servidor ocupado, intenta de nuevo en unos segundos' });
+    }
     userId = parseToken_(token);
     if (!userId) {
       return jsonResponse({ success: false, error: 'No autorizado' });

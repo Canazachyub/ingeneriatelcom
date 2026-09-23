@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-23T21:19:41.866Z con tools/build-backend.mjs
+// Generado: 2026-09-23T21:40:16.261Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -27,12 +27,29 @@ const NOTIFICATION_EMAIL = 'energysupervision13@gmail.com';
 // (este archivo esta en un repo publico de GitHub). Configurar en el editor de Apps Script:
 // Configuracion del proyecto > Propiedades del script > TOKEN_SECRET = <valor largo aleatorio>
 // Rotar el valor invalida todos los tokens emitidos (fuerza re-login de admins).
+// Memo por ejecucion + reintentos. Bajo carga, PropertiesService a veces
+// tarda o lanza error; antes esa excepcion la tragaba parseToken_ y el router
+// respondia "No autorizado" a una sesion VALIDA — y el panel, al revalidar,
+// expulsaba al admin. Ahora se reintenta y, si aun asi falla, el router
+// responde "Servidor ocupado" (ver servidorListoParaTokens_ en 01_router.gs).
+var TOKEN_SECRET_MEMO_ = null;
+
 function getTokenSecret_() {
-  const secret = PropertiesService.getScriptProperties().getProperty('TOKEN_SECRET');
-  if (!secret) {
-    throw new Error('TOKEN_SECRET no configurado en Propiedades del Script');
+  if (TOKEN_SECRET_MEMO_) return TOKEN_SECRET_MEMO_;
+  var ultimoError = null;
+  for (var intento = 0; intento < 3; intento++) {
+    try {
+      var secret = PropertiesService.getScriptProperties().getProperty('TOKEN_SECRET');
+      if (!secret) throw new Error('TOKEN_SECRET no configurado en Propiedades del Script');
+      TOKEN_SECRET_MEMO_ = secret;
+      return secret;
+    } catch (e) {
+      ultimoError = e;
+      if (String(e.message).indexOf('no configurado') !== -1) break; // no es pasajero
+      Utilities.sleep(300 * (intento + 1));
+    }
   }
-  return secret;
+  throw ultimoError;
 }
 
 // Get or create a subfolder by name inside a parent folder
@@ -526,6 +543,13 @@ function handleRequest_(e) {
   const token = data.token || param.token;
   let userId = null;
   if (route.nivel !== 'publico') {
+    // Si no se puede leer el secreto (Google sobrecargado), NO responder
+    // "No autorizado": el cliente lo tomaria como sesion invalida.
+    try {
+      getTokenSecret_();
+    } catch (errSecreto) {
+      return jsonResponse({ success: false, error: 'Servidor ocupado, intenta de nuevo en unos segundos' });
+    }
     userId = parseToken_(token);
     if (!userId) {
       return jsonResponse({ success: false, error: 'No autorizado' });
