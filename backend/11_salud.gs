@@ -176,6 +176,38 @@ function ejecutarTestSalud() {
     }
   } catch (e) { fail('Verificacion del anti-duplicado acotado fallo: ' + e.message); }
 
+  // 9b. "Ya registrado" devuelve la hora de la marca original (kiosko, sept
+  // 2026). Solo lectura: toma la ultima marca de oficina de la hoja y
+  // comprueba que el anti-duplicado la encuentra y responde su hora. Si esto
+  // falla, el kiosko vuelve a mostrar "ya registrado" sin hora (no rompe nada,
+  // pero indica que se desplego un backend viejo o cambio el formato).
+  try {
+    var hojaDup = SpreadsheetApp.openById(SHEET_ID).getSheetByName('asistencias_v2');
+    if (hojaDup && hojaDup.getLastRow() > 1) {
+      var td = leerTramoFinal_(hojaDup, 50);
+      var cD = td.headers.indexOf('dni'), cE = td.headers.indexOf('evento'),
+          cF = td.headers.indexOf('fecha'), cT = td.headers.indexOf('timestamp');
+      var muestra = null;
+      for (var q = td.rows.length - 1; q >= 0 && !muestra; q--) {
+        if (EVENTOS_ASISTENCIA_V2.indexOf(String(td.rows[q][cE])) !== -1 && td.rows[q][cT]) muestra = td.rows[q];
+      }
+      if (!muestra) {
+        warn('Sin marcas de oficina recientes para probar la respuesta "ya registrado"');
+      } else {
+        var fechaM = fechaISO_(muestra[cF]);
+        var hallada = existeMarcaEnHoja_(hojaDup, String(muestra[cD]), String(muestra[cE]), fechaM, 50, true);
+        var esperada = horaDeMarca_(muestra[cT]);
+        var resp = respuestaYaRegistrado_(String(muestra[cE]), fechaM, hallada);
+        if (!hallada) fail('El anti-duplicado NO encontro una marca que si existe (' + muestra[cE] + ' ' + fechaM + ')');
+        else if (hallada !== esperada) warn('Anti-duplicado encontro la marca pero la hora no coincide (' + hallada + ' vs ' + esperada + ')');
+        else if (resp.codigo !== 'YA_REGISTRADO' || resp.data.hora !== esperada) fail('respuestaYaRegistrado_ no devuelve codigo/hora');
+        else ok();
+      }
+    } else {
+      ok();
+    }
+  } catch (e) { fail('Verificacion de "ya registrado con hora" fallo: ' + e.message); }
+
   // 10. CacheService operativo (via rapida del anti-duplicado)
   try {
     var pruebaKey = 'salud:cache';

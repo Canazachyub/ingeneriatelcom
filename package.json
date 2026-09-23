@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:backend": "node tools/build-backend.mjs && node --check appscript.js",
+    "test:prod": "node tools/test-produccion.mjs",
     "optimize:images": "node tools/optimize-images.mjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
