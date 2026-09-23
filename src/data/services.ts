@@ -1,4 +1,5 @@
 import { Service } from '../types/common.types'
+import { PROYECTOS_EJECUTADOS, CLIENTES_ATENDIDOS, SATISFACCION, aniosExperiencia } from './empresa'
 
 export const services: Service[] = [
   {
@@ -27,9 +28,10 @@ export const services: Service[] = [
   },
 ]
 
+// Cifras del hero: salen de data/empresa.ts (fuente única), no se escriben aquí.
 export const statistics = [
-  { value: 27, suffix: '', label: 'Proyectos Ejecutados', icon: 'folder' },
-  { value: 15, suffix: '+', label: 'Clientes', icon: 'users' },
-  { value: 15, suffix: '+', label: 'Años de Experiencia', icon: 'clock' },
-  { value: 100, suffix: '%', label: 'Satisfacción', icon: 'star' },
+  { value: PROYECTOS_EJECUTADOS, suffix: '', label: 'Proyectos Ejecutados', icon: 'folder' },
+  { value: CLIENTES_ATENDIDOS, suffix: '+', label: 'Clientes', icon: 'users' },
+  { value: aniosExperiencia(), suffix: '', label: 'Años de Experiencia', icon: 'clock' },
+  { value: SATISFACCION, suffix: '%', label: 'Satisfacción', icon: 'star' },
 ]

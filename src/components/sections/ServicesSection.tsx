@@ -1,8 +1,10 @@
-import { useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useInView } from 'react-intersection-observer'
 import { FaCode, FaNetworkWired, FaBolt, FaHardHat } from 'react-icons/fa'
 import SectionWrapper from '../common/SectionWrapper'
+import TiltCard from '../common/TiltCard'
+import SectionHeader from '../common/SectionHeader'
+import { PROYECTOS_EJECUTADOS, aniosExperiencia } from '../../data/empresa'
 import { services } from '../../data/services'
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -20,35 +22,6 @@ const serviceImages: Record<string, string> = {
   '4': '/assets/images/operaciones/S3.webp', // Minería y Construcción → supervisión de obra
 }
 
-// Tarjeta con tilt 3D al mover el mouse (CSS puro, sin librerías).
-// En táctil o prefers-reduced-motion simplemente no se activa el listener de mouse.
-function TiltCard({ children }: { children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement | null>(null)
-
-  const onMouseMove = (e: React.MouseEvent) => {
-    const el = ref.current
-    if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const r = el.getBoundingClientRect()
-    const px = (e.clientX - r.left) / r.width - 0.5
-    const py = (e.clientY - r.top) / r.height - 0.5
-    el.style.transform = `perspective(900px) rotateY(${(px * 6).toFixed(2)}deg) rotateX(${(-py * 6).toFixed(2)}deg) translateY(-2px)`
-  }
-  const onMouseLeave = () => {
-    if (ref.current) ref.current.style.transform = ''
-  }
-
-  return (
-    <div
-      ref={ref}
-      onMouseMove={onMouseMove}
-      onMouseLeave={onMouseLeave}
-      className="h-full transition-transform duration-200 ease-out will-change-transform"
-    >
-      {children}
-    </div>
-  )
-}
-
 export default function ServicesSection() {
   const { ref, inView } = useInView({
     threshold: 0.1,
@@ -58,33 +31,12 @@ export default function ServicesSection() {
   return (
     <SectionWrapper id="servicios">
       <div ref={ref}>
-        {/* Header */}
-        <div className="text-center mb-12">
-          <motion.span
-            initial={{ opacity: 0 }}
-            animate={inView ? { opacity: 1 } : {}}
-            transition={{ duration: 0.5 }}
-            className="inline-block px-4 py-1 bg-accent-electric/10 text-accent-electric text-sm font-medium rounded-full mb-4"
-          >
-            Nuestros Servicios
-          </motion.span>
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            animate={inView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="section-title"
-          >
-            Soluciones Integrales
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={inView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="section-subtitle mx-auto"
-          >
-            Ofrecemos soluciones integrales en software, tecnología, ingeniería y construcción.
-          </motion.p>
-        </div>
+        <SectionHeader
+          id="servicios"
+          eyebrow="Servicios"
+          title="Soluciones Integrales"
+          subtitle="Software, tecnología, ingeniería eléctrica y construcción: un solo equipo para todo el ciclo del proyecto."
+        />
 
         {/* Services Grid — tarjetas con foto de operaciones y tilt 3D */}
         <div className="grid md:grid-cols-2 gap-6 mb-12">
@@ -98,7 +50,9 @@ export default function ServicesSection() {
               <TiltCard>
                 <div className="h-full group bg-primary-900/60 rounded-2xl border border-primary-800 overflow-hidden hover:border-accent-electric/40 transition-colors duration-300">
                   {serviceImages[service.id] && (
-                    <div className="relative h-44 overflow-hidden">
+                    // aspect-video = proporción real de las fotos (1400×788):
+                    // se ven completas, sin recortar cabezas ni equipos.
+                    <div className="relative aspect-video overflow-hidden">
                       <img
                         src={serviceImages[service.id]}
                         alt={service.title}
@@ -136,7 +90,7 @@ export default function ServicesSection() {
             Experiencia Comprobada
           </h3>
           <p className="text-primary-200 leading-relaxed">
-            Con 24 proyectos ejecutados exitosamente, hemos brindado soluciones de software, soporte TIC e ingeniería a empresas estatales como Electrosur, Electro Puno, Electro Sur Este y la Universidad Nacional del Altiplano. Nuestro compromiso es entregar resultados de calidad en los plazos establecidos.
+            Con {PROYECTOS_EJECUTADOS} proyectos ejecutados en {aniosExperiencia()} años, hemos brindado soluciones de software, soporte TIC e ingeniería a empresas estatales como Electrosur, Electro Puno, Electro Sur Este y la Universidad Nacional del Altiplano. Nuestro compromiso es entregar resultados de calidad en los plazos establecidos.
           </p>
         </motion.div>
       </div>

@@ -2,9 +2,13 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useInView } from 'react-intersection-observer'
 import { Link } from 'react-router-dom'
-import { FaBriefcase, FaMapMarkerAlt, FaArrowRight, FaSpinner, FaMoneyBillWave, FaExclamationTriangle } from 'react-icons/fa'
+import {
+  FaBriefcase, FaMapMarkerAlt, FaArrowRight, FaMoneyBillWave, FaExclamationTriangle,
+  FaSearch, FaLaptopHouse, FaCrosshairs,
+} from 'react-icons/fa'
 import SectionWrapper from '../common/SectionWrapper'
-import Card from '../common/Card'
+import SectionHeader from '../common/SectionHeader'
+import TiltCard from '../common/TiltCard'
 import { api } from '../../api/appScriptApi'
 
 interface Job {
@@ -39,10 +43,25 @@ const modalities: Record<string, string> = {
   'Hibrido': 'Híbrido',
 }
 
+// Chip HUD para los datos de la oferta
+function Chip({ icon, children, tono = 'neutro' }: { icon: React.ReactNode; children: React.ReactNode; tono?: 'neutro' | 'energia' }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-1 font-mono text-[11px] tracking-wide border ${
+        tono === 'energia'
+          ? 'border-accent-energy/40 bg-accent-energy/10 text-accent-energy'
+          : 'border-primary-600/50 bg-primary-900/60 text-primary-200'
+      }`}
+    >
+      {icon}
+      {children}
+    </span>
+  )
+}
+
 export default function JobsSection() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [isLoading, setIsLoading] = useState(true)
-
   const { ref, inView } = useInView({
     threshold: 0.1,
     triggerOnce: true,
@@ -100,125 +119,111 @@ export default function JobsSection() {
   return (
     <SectionWrapper id="bolsa-trabajo" dark>
       <div ref={ref}>
-        {/* Header */}
-        <div className="text-center mb-12">
-          <motion.span
-            initial={{ opacity: 0 }}
-            animate={inView ? { opacity: 1 } : {}}
-            transition={{ duration: 0.5 }}
-            className="inline-block px-4 py-1 bg-accent-energy/10 text-accent-energy text-sm font-medium rounded-full mb-4"
-          >
-            Únete a Nuestro Equipo
-          </motion.span>
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            animate={inView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="section-title"
-          >
-            Bolsa de Trabajo
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={inView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="section-subtitle mx-auto"
-          >
-            Descubre las oportunidades laborales disponibles en Ingeniería Telcom EIRL.
-          </motion.p>
-        </div>
+        <SectionHeader
+          id="bolsa-trabajo"
+          eyebrow="Únete al equipo"
+          accent="energy"
+          title="Bolsa de Trabajo"
+          subtitle="Convocatorias abiertas en Ingeniería Telcom EIRL. Elige tu misión y postula en línea."
+        />
 
-        {/* Loading State */}
+        {/* Cargando: esqueletos con la misma forma que las tarjetas */}
         {isLoading && (
-          <div className="flex justify-center py-12">
-            <FaSpinner className="animate-spin text-3xl text-accent-electric" />
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10" aria-busy="true" aria-label="Cargando convocatorias">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="panel-hud p-6 h-64 animate-pulse">
+                <div className="h-3 w-24 bg-primary-700/60 mb-4" />
+                <div className="h-5 w-3/4 bg-primary-700/60 mb-6" />
+                <div className="flex gap-2 mb-6">
+                  <div className="h-6 w-20 bg-primary-800" />
+                  <div className="h-6 w-20 bg-primary-800" />
+                </div>
+                <div className="h-3 w-full bg-primary-800 mb-2" />
+                <div className="h-3 w-2/3 bg-primary-800" />
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Jobs Grid */}
+        {/* Ofertas: tarjetas tipo "misión disponible" */}
         {!isLoading && jobs.length > 0 && (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {jobs.map((job, index) => (
-              <motion.div
-                key={job.id}
-                initial={{ opacity: 0, y: 30 }}
-                animate={inView ? { opacity: 1, y: 0 } : {}}
-                transition={{ duration: 0.5, delay: 0.3 + index * 0.1 }}
-              >
-                <Card className={`h-full flex flex-col ${job.prioridad === 'alta' ? 'border-red-500/50' : ''}`}>
-                  {/* Job Image */}
-                  {job.imagen && (
-                    <div className="w-full h-36 rounded-xl overflow-hidden mb-4 -mt-1">
-                      <img
-                        src={job.imagen}
-                        alt={job.titulo}
-                        className="w-full h-full object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                      />
-                    </div>
-                  )}
-                  {!job.imagen && (
-                    <div className={`w-full h-20 rounded-xl overflow-hidden mb-4 -mt-1 bg-gradient-to-r ${
-                      job.categoria === 'Ingenieria' ? 'from-blue-600/40 to-cyan-600/40' :
-                      job.categoria === 'TI' ? 'from-purple-600/40 to-pink-600/40' :
-                      job.categoria === 'Tecnico' ? 'from-orange-600/40 to-yellow-600/40' :
-                      'from-primary-700/60 to-primary-800/60'
-                    } flex items-center justify-center`}>
-                      <FaBriefcase className="text-3xl text-white/30" />
-                    </div>
-                  )}
-
-                  {/* Priority Badge */}
-                  {job.prioridad === 'alta' && (
-                    <span className="inline-flex items-center self-start gap-1 px-2 py-1 bg-red-500/20 text-red-400 text-xs font-semibold rounded-full mb-3">
-                      <FaExclamationTriangle className="text-xs" />
-                      URGENTE
-                    </span>
-                  )}
-
-                  {/* Category */}
-                  <span className="text-xs text-accent-electric font-medium mb-2">
-                    {categories[job.categoria] || job.categoria}
-                  </span>
-
-                  {/* Title */}
-                  <h3 className="text-lg font-display font-semibold text-white mb-3">
-                    {job.titulo}
-                  </h3>
-
-                  {/* Details */}
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center gap-2 text-sm text-primary-300">
-                      <FaMapMarkerAlt className="text-accent-electric" />
-                      <span>{job.ubicacion}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-primary-300">
-                      <FaBriefcase className="text-accent-electric" />
-                      <span>{modalities[job.modalidad] || job.modalidad}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-accent-energy font-semibold">
-                      <FaMoneyBillWave className="text-green-400" />
-                      <span>{formatSalary(job.salario_min, job.salario_max)}</span>
-                    </div>
-                  </div>
-
-                  {/* Description */}
-                  <p className="text-sm text-primary-400 mb-4 flex-grow line-clamp-2">
-                    {job.descripcion}
-                  </p>
-
-                  {/* Footer */}
-                  <div className="flex items-center justify-end pt-4 border-t border-primary-700/50">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+            {jobs.map((job, index) => {
+              const urgente = job.prioridad === 'alta'
+              return (
+                <motion.div
+                  key={job.id}
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={inView ? { opacity: 1, y: 0 } : {}}
+                  transition={{ duration: 0.5, delay: 0.2 + index * 0.1 }}
+                >
+                  <TiltCard>
                     <Link
                       to={`/bolsa-trabajo/${job.id}`}
-                      className="btn-secondary text-sm py-2 px-4"
+                      className={`panel-hud group h-full flex flex-col overflow-hidden ${urgente ? '!border-accent-energy/50' : ''}`}
                     >
-                      Postular
+                      {/* Cabecera: imagen de la oferta o banda de categoría */}
+                      <div className="relative h-32 overflow-hidden">
+                        {job.imagen ? (
+                          <img
+                            src={job.imagen}
+                            alt={job.titulo}
+                            loading="lazy"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-[radial-gradient(circle_at_30%_40%,rgba(0,212,255,0.25),transparent_60%),linear-gradient(135deg,#0f2847,#0a1628)] flex items-center justify-center">
+                            <FaCrosshairs className="text-5xl text-accent-electric/25 group-hover:rotate-90 transition-transform duration-700" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-primary-950 via-primary-950/30 to-transparent" />
+                        <div className="absolute top-3 left-3 flex items-center gap-2">
+                          <span className="font-mono text-[10px] tracking-[0.25em] px-2 py-1 bg-primary-950/80 border border-accent-electric/40 text-accent-electric">
+                            MISIÓN {String(index + 1).padStart(2, '0')}
+                          </span>
+                          {urgente && (
+                            <span className="inline-flex items-center gap-1 font-mono text-[10px] tracking-[0.2em] px-2 py-1 bg-accent-energy text-primary-950 font-bold">
+                              <FaExclamationTriangle /> URGENTE
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="p-5 pt-3 flex-1 flex flex-col">
+                        <span className="font-mono text-[11px] tracking-[0.2em] uppercase text-accent-electric/80 mb-1.5">
+                          {categories[job.categoria] || job.categoria}
+                        </span>
+                        <h3 className="text-lg font-display font-semibold text-white mb-3 leading-snug group-hover:text-accent-electric transition-colors duration-300">
+                          {job.titulo}
+                        </h3>
+
+                        <div className="flex flex-wrap gap-2 mb-4">
+                          {job.ubicacion && (
+                            <Chip icon={<FaMapMarkerAlt className="text-accent-electric" />}>{job.ubicacion}</Chip>
+                          )}
+                          <Chip icon={<FaLaptopHouse className="text-accent-electric" />}>
+                            {modalities[job.modalidad] || job.modalidad}
+                          </Chip>
+                          <Chip icon={<FaMoneyBillWave />} tono="energia">
+                            {formatSalary(job.salario_min, job.salario_max)}
+                          </Chip>
+                        </div>
+
+                        <p className="text-sm text-primary-300 mb-5 flex-grow line-clamp-2">
+                          {job.descripcion}
+                        </p>
+
+                        <span className="mt-auto inline-flex items-center justify-between pt-4 border-t border-primary-700/50 text-sm font-semibold text-accent-energy">
+                          Ver detalle y postular
+                          <FaArrowRight className="group-hover:translate-x-1 transition-transform duration-300" />
+                        </span>
+                      </div>
                     </Link>
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
+                  </TiltCard>
+                </motion.div>
+              )
+            })}
           </div>
         )}
 
@@ -226,8 +231,8 @@ export default function JobsSection() {
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.5, delay: 0.7 }}
-          className="relative rounded-2xl overflow-hidden border border-primary-700/50"
+          transition={{ duration: 0.5, delay: 0.5 }}
+          className="panel-hud relative overflow-hidden"
         >
           <img
             src="/assets/images/operaciones/B2.webp"
@@ -235,8 +240,12 @@ export default function JobsSection() {
             loading="lazy"
             className="absolute inset-0 w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-primary-950/95 via-primary-950/75 to-primary-950/40" />
-          <div className="relative z-10 px-8 py-12 md:px-12 md:py-16 max-w-xl">
+          <div className="absolute inset-0 bg-gradient-to-r from-primary-950/95 via-primary-950/80 to-primary-950/30" />
+          <div className="relative z-10 px-6 py-10 md:px-12 md:py-14 max-w-xl">
+            <p className="font-mono text-[11px] tracking-[0.3em] text-accent-energy mb-3">
+              <FaBriefcase className="inline mr-2 -mt-0.5" />
+              RECLUTAMIENTO ABIERTO
+            </p>
             <h3 className="text-2xl md:text-3xl font-display font-bold text-white mb-3">
               Tu carrera empieza en el terreno
             </h3>
@@ -244,13 +253,22 @@ export default function JobsSection() {
               Buscamos talento técnico y profesional para proyectos de energía y
               telecomunicaciones en el sur del Perú.
             </p>
-            <Link
-              to="/bolsa-trabajo"
-              className="btn-energy inline-flex items-center gap-2"
-            >
-              Ver Todas las Convocatorias
-              <FaArrowRight />
-            </Link>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Link
+                to="/bolsa-trabajo"
+                className="btn-energy btn-hud inline-flex items-center justify-center gap-2"
+              >
+                Ver todas las ofertas
+                <FaArrowRight />
+              </Link>
+              <Link
+                to="/mi-postulacion"
+                className="btn-secondary btn-hud inline-flex items-center justify-center gap-2 backdrop-blur-sm"
+              >
+                <FaSearch />
+                Consultar mi postulación
+              </Link>
+            </div>
           </div>
         </motion.div>
       </div>

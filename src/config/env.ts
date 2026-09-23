@@ -7,11 +7,11 @@ export const config = {
   contactEmail: import.meta.env.VITE_CONTACT_EMAIL || 'energysupervision13@gmail.com',
   dashboardUrl: import.meta.env.VITE_DASHBOARD_URL || 'https://canazachyub.github.io/Telcomdashboard',
   companyInfo: {
-    name: 'Ingenieria Telcom EIRL',
+    name: 'Ingeniería Telcom EIRL',
     phone: '+51 946 728 495',
     email: 'ingeneriatelcomeirl@gmail.com',
-    address: 'Mza. 550 Lote. 05 A.V. Paseo de los Heroes, Crl. Greg. Albarracin Lanchipa, Tacna, Peru',
+    address: 'Mza. 550 Lote. 05 A.V. Paseo de los Héroes, Crnl. Gregorio Albarracín Lanchipa, Tacna, Perú',
     facebook: 'https://www.facebook.com/profile.php?id=61586657451703',
-    schedule: 'Lunes a Sabado de 07:30 am - 06:00 pm',
+    schedule: 'Lunes a sábado, 07:30 a. m. – 06:00 p. m.',
   },
 }

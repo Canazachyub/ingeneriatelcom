@@ -8,11 +8,14 @@ export const mainNavigation: NavItem[] = [
     label: 'Nosotros',
     href: '#quienes-somos',
     children: [
+      // Mismo orden que la página (data/empresa.ts → SECCIONES)
       { label: 'Quiénes Somos', href: '#quienes-somos' },
       { label: 'Servicios', href: '#servicios' },
+      { label: 'Operaciones', href: '#operaciones' },
+      { label: 'Clientes', href: '#clientes' },
       { label: 'Misión y Visión', href: '#mision-vision' },
       { label: 'Código de Ética', href: '#codigo-etica' },
-      { label: 'Clientes', href: '#clientes' },
+      { label: 'Organización', href: '#estructura-organizacional' },
     ],
   },
   { label: 'Bolsa de Trabajo', href: '/bolsa-trabajo' },

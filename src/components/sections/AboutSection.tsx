@@ -1,22 +1,28 @@
 import { motion } from 'framer-motion'
 import { useInView } from 'react-intersection-observer'
-import { FaLightbulb, FaUsers, FaRocket, FaMapMarkedAlt } from 'react-icons/fa'
+import { FaMapMarkedAlt } from 'react-icons/fa'
 import SectionWrapper from '../common/SectionWrapper'
-import Card from '../common/Card'
+import TiltCard from '../common/TiltCard'
+import IconoArea, { Area } from '../common/IconoArea'
+import HudFrame from '../effects/HudFrame'
+import SectionHeader from '../common/SectionHeader'
+import { ANIO_FUNDACION, aniosExperiencia } from '../../data/empresa'
 
-const features = [
+// Ícono de línea propio por área (ver IconoArea). Reemplazan a los genéricos
+// originales (foco, personas, cohete) y a los 3D holográficos intermedios.
+const features: { icon: Area; title: string; description: string }[] = [
   {
-    icon: <FaLightbulb className="text-3xl text-accent-electric" />,
+    icon: 'software',
     title: 'Software y Tecnología',
     description: 'Desarrollamos software y soluciones tecnológicas a medida para empresas estatales y del sector privado, optimizando procesos y mejorando la eficiencia operativa.',
   },
   {
-    icon: <FaUsers className="text-3xl text-accent-electric" />,
+    icon: 'electrica',
     title: 'Ingeniería Eléctrica',
     description: 'Ejecutamos proyectos de ingeniería eléctrica con los más altos estándares de calidad, desde diseño hasta supervisión y puesta en marcha.',
   },
   {
-    icon: <FaRocket className="text-3xl text-accent-electric" />,
+    icon: 'mineria',
     title: 'Minería e Ingeniería',
     description: 'Brindamos soluciones integrales para el sector minero y proyectos de ingeniería multidisciplinaria, con enfoque en innovación y seguridad.',
   },
@@ -31,33 +37,12 @@ export default function AboutSection() {
   return (
     <SectionWrapper id="quienes-somos" dark>
       <div ref={ref}>
-        {/* Header */}
-        <div className="text-center mb-12">
-          <motion.span
-            initial={{ opacity: 0 }}
-            animate={inView ? { opacity: 1 } : {}}
-            transition={{ duration: 0.5 }}
-            className="inline-block px-4 py-1 bg-accent-electric/10 text-accent-electric text-sm font-medium rounded-full mb-4"
-          >
-            Quiénes Somos
-          </motion.span>
-          <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            animate={inView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="section-title"
-          >
-            Conoce Nuestra Empresa
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={inView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="section-subtitle mx-auto"
-          >
-            Ingeniería Telcom EIRL es una empresa peruana fundada en 2017, especializada en desarrollo de software, proyectos de ingeniería eléctrica y soluciones para el sector minero. Brindamos servicios tecnológicos integrales a empresas estatales y del sector privado.
-          </motion.p>
-        </div>
+        <SectionHeader
+          id="quienes-somos"
+          eyebrow="Quiénes somos"
+          title="Conoce Nuestra Empresa"
+          subtitle={`Ingeniería Telcom EIRL es una empresa peruana fundada en ${ANIO_FUNDACION}, especializada en desarrollo de software, ingeniería eléctrica y soluciones para el sector minero, al servicio de empresas estatales y privadas.`}
+        />
 
         {/* Description + Cobertura Nacional */}
         <motion.div
@@ -69,7 +54,7 @@ export default function AboutSection() {
           {/* Texto */}
           <div className="bg-gradient-to-r from-primary-800/30 to-primary-900/30 backdrop-blur-sm rounded-2xl p-8 border border-primary-700/50 h-full flex items-center">
             <p className="text-primary-200 text-lg leading-relaxed">
-              Con 9 años de experiencia en el mercado, nos enorgullecemos de ser aliados estratégicos de las principales empresas del sector eléctrico, minero y gubernamental del Perú. Nuestro enfoque combina innovación tecnológica con sólida experiencia en ingeniería, ofreciendo software personalizado, consultoría técnica y ejecución de proyectos que impulsan el desarrollo del país.
+              Con {aniosExperiencia()} años de experiencia en el mercado, nos enorgullecemos de ser aliados estratégicos de las principales empresas del sector eléctrico, minero y gubernamental del Perú. Nuestro enfoque combina innovación tecnológica con sólida experiencia en ingeniería, ofreciendo software personalizado, consultoría técnica y ejecución de proyectos que impulsan el desarrollo del país.
             </p>
           </div>
 
@@ -104,17 +89,19 @@ export default function AboutSection() {
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.5, delay: 0.4 + index * 0.1 }}
             >
-              <Card className="h-full text-center">
-                <div className="w-16 h-16 mx-auto mb-4 bg-primary-800 rounded-xl flex items-center justify-center">
-                  {feature.icon}
-                </div>
-                <h3 className="text-xl font-display font-semibold text-white mb-3">
-                  {feature.title}
-                </h3>
-                <p className="text-primary-300">
-                  {feature.description}
-                </p>
-              </Card>
+              <TiltCard>
+                <HudFrame className="group h-full" color="border-accent-electric/30">
+                  <div className="h-full text-center px-6 pb-7 pt-4 bg-gradient-to-b from-primary-800/40 to-primary-950/60 backdrop-blur-sm border border-primary-700/40 group-hover:border-accent-electric/40 transition-colors duration-300">
+                    <IconoArea area={feature.icon} className="mt-4 mb-5" />
+                    <h3 className="text-xl font-display font-semibold text-white mb-3 group-hover:text-accent-electric transition-colors duration-300">
+                      {feature.title}
+                    </h3>
+                    <p className="text-primary-300">
+                      {feature.description}
+                    </p>
+                  </div>
+                </HudFrame>
+              </TiltCard>
             </motion.div>
           ))}
         </div>

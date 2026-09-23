@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
   FaSearch,
   FaMapMarkerAlt,
   FaBriefcase,
-  FaArrowLeft,
   FaExclamationTriangle,
   FaMoneyBillWave,
   FaUsers,
@@ -21,6 +20,29 @@ import {
   FaEnvelope
 } from 'react-icons/fa'
 import { api } from '../api/appScriptApi'
+import PageHeader from '../components/common/PageHeader'
+import HudFrame from '../components/effects/HudFrame'
+import TiltCard from '../components/common/TiltCard'
+
+// Estilo de campos coherente con el formulario de Contacto (terminal)
+const inputHud =
+  'w-full px-4 py-2.5 min-h-[44px] bg-primary-950/70 border border-primary-700/70 text-white placeholder-primary-500 ' +
+  'focus:outline-none focus:border-accent-electric focus:shadow-[0_0_0_3px_rgba(0,212,255,0.15)] transition-all'
+
+// Chip HUD de datos de la oferta (igual que en la landing)
+function Chip({ icon, children, tono = 'neutro' }: { icon: React.ReactNode; children: React.ReactNode; tono?: 'neutro' | 'energia' | 'alerta' }) {
+  const estilos = {
+    neutro: 'border-primary-600/50 bg-primary-900/60 text-primary-200',
+    energia: 'border-accent-energy/40 bg-accent-energy/10 text-accent-energy',
+    alerta: 'border-red-500/40 bg-red-500/10 text-red-300',
+  }
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-1 font-mono text-[11px] tracking-wide border ${estilos[tono]}`}>
+      {icon}
+      {children}
+    </span>
+  )
+}
 
 interface Job {
   id: string
@@ -59,7 +81,6 @@ const modalities: Record<string, { label: string; color: string }> = {
 }
 
 export default function JobsPage() {
-  const navigate = useNavigate()
   const [jobs, setJobs] = useState<Job[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -174,90 +195,59 @@ export default function JobsPage() {
   const urgentCount = jobs.filter(j => j.prioridad === 'alta').length
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary-950 via-primary-900 to-primary-950">
-      {/* Hero Header */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-accent-electric via-blue-600 to-purple-600 pt-24 pb-16">
-        <div className="absolute inset-0 bg-black/20" />
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAxOGMtOS45NDEgMC0xOCA4LjA1OS0xOCAxOHM4LjA1OSAxOCAxOCAxOCAxOC04LjA1OSAxOC0xOC04LjA1OS0xOC0xOC0xOHptMCAzMmMtNy43MzIgMC0xNC02LjI2OC0xNC0xNHM2LjI2OC0xNCAxNC0xNCAxNCA2LjI2OCAxNCAxNC02LjI2OCAxNC0xNCAxNHoiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iLjA1Ii8+PC9nPjwvc3ZnPg==')] opacity-30" />
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <button
-              onClick={() => window.history.length <= 1 ? navigate('/') : navigate(-1)}
-              className="inline-flex items-center gap-2 text-white/80 hover:text-white transition-colors mb-2 group"
-            >
-              <FaArrowLeft className="group-hover:-translate-x-1 transition-transform" />
-              Volver
-            </button>
-
-            <nav className="flex items-center gap-2 text-sm text-primary-400 mb-6">
-              <Link to="/" className="hover:text-accent-electric transition-colors">Inicio</Link>
-              <span>/</span>
-              <span className="text-white">Bolsa de Trabajo</span>
-            </nav>
-
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-              <div>
-                <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-bold text-white mb-4 drop-shadow-lg">
-                  Bolsa de Trabajo
-                </h1>
-                <p className="text-xl text-white/90 max-w-2xl">
-                  Encuentra tu próxima oportunidad laboral en Ingeniería Telcom.
-                  Únete a nuestro equipo de profesionales.
-                </p>
-              </div>
-
-              {/* Stats */}
-              <div className="flex gap-6">
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-white">{jobs.length}</div>
-                  <div className="text-white/70 text-sm">Vacantes Activas</div>
-                </div>
-                {urgentCount > 0 && (
-                  <div className="text-center">
-                    <div className="text-4xl font-bold text-red-300">{urgentCount}</div>
-                    <div className="text-white/70 text-sm">Urgentes</div>
-                  </div>
-                )}
-              </div>
+    <div className="min-h-screen bg-primary-950">
+      <PageHeader
+        eyebrow="Únete al equipo"
+        title="Bolsa de Trabajo"
+        subtitle="Encuentra tu próxima oportunidad laboral en Ingeniería Telcom. Únete a nuestro equipo de profesionales."
+        migas={[{ label: 'Inicio', to: '/' }, { label: 'Bolsa de trabajo' }]}
+        accent="energy"
+        metrica={
+          <>
+            <div className="text-center">
+              <div className="text-4xl font-display font-bold text-white tabular-nums">{jobs.length}</div>
+              <div className="font-mono text-[10px] tracking-[0.2em] uppercase text-primary-400 mt-1">Vacantes activas</div>
             </div>
-          </motion.div>
-        </div>
-      </div>
+            {urgentCount > 0 && (
+              <div className="text-center pl-6 border-l border-primary-700/60">
+                <div className="text-4xl font-display font-bold text-accent-energy tabular-nums">{urgentCount}</div>
+                <div className="font-mono text-[10px] tracking-[0.2em] uppercase text-primary-400 mt-1">Urgentes</div>
+              </div>
+            )}
+          </>
+        }
+      />
 
-      {/* Quick Actions Bar */}
-      <div className="bg-primary-900/80 border-b border-primary-700/50 sticky top-16 z-30 backdrop-blur-sm">
+      {/* Barra de búsqueda y filtros */}
+      <div className="bg-primary-950/90 border-b border-primary-800/70 sticky top-20 z-30 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between py-4 gap-4">
-            {/* Search - Always visible */}
+          <div className="flex items-center justify-between py-4 gap-3">
             <div className="relative flex-1 max-w-md">
               <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500" />
               <input
                 type="text"
                 placeholder="Buscar puesto, ubicación..."
+                aria-label="Buscar puesto o ubicación"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-11 pr-4 py-2.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                className={`${inputHud} pl-11`}
               />
             </div>
 
-            {/* Filter Toggle & Consult Button */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all ${
+                aria-expanded={showFilters}
+                className={`btn-hud flex items-center gap-2 min-h-[44px] px-4 py-2.5 border font-mono text-xs tracking-[0.15em] uppercase transition-all ${
                   showFilters || hasActiveFilters
-                    ? 'bg-accent-electric/20 border-accent-electric text-accent-electric'
-                    : 'bg-primary-800/50 border-primary-700 text-primary-300 hover:border-primary-600'
+                    ? 'bg-accent-electric/15 border-accent-electric text-accent-electric'
+                    : 'bg-primary-900/60 border-primary-700 text-primary-300 hover:border-accent-electric/50'
                 }`}
               >
                 <FaFilter className="text-sm" />
                 <span className="hidden sm:inline">Filtros</span>
                 {hasActiveFilters && (
-                  <span className="w-5 h-5 bg-accent-electric text-white text-xs rounded-full flex items-center justify-center">
+                  <span className="w-5 h-5 bg-accent-electric text-primary-950 text-[11px] font-bold flex items-center justify-center">
                     {[searchTerm, categoryFilter, modalityFilter].filter(Boolean).length}
                   </span>
                 )}
@@ -266,15 +256,14 @@ export default function JobsPage() {
               <Link
                 to="/mi-postulacion"
                 title="¿Ya postulaste? Consulta el estado de tu postulación aquí"
-                className="flex items-center gap-2 px-4 py-2.5 bg-accent-energy/20 border border-accent-energy/50 text-accent-energy rounded-xl hover:bg-accent-energy/30 transition-all"
+                className="btn-hud flex items-center gap-2 min-h-[44px] px-4 py-2.5 bg-accent-energy/10 border border-accent-energy/50 text-accent-energy font-mono text-xs tracking-[0.15em] uppercase hover:bg-accent-energy/20 transition-all"
               >
                 <FaIdCard />
-                <span className="hidden sm:inline">Consultar Postulación</span>
+                <span className="hidden sm:inline">Consultar postulación</span>
               </Link>
             </div>
           </div>
 
-          {/* Expandable Filters */}
           <AnimatePresence>
             {showFilters && (
               <motion.div
@@ -287,7 +276,8 @@ export default function JobsPage() {
                   <select
                     value={categoryFilter}
                     onChange={(e) => setCategoryFilter(e.target.value)}
-                    className="px-4 py-2.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white focus:outline-none focus:border-accent-electric transition-all cursor-pointer"
+                    aria-label="Filtrar por categoría"
+                    className={`${inputHud} w-auto cursor-pointer`}
                   >
                     <option value="">Todas las categorías</option>
                     {Object.entries(categories).map(([key, { label }]) => (
@@ -298,7 +288,8 @@ export default function JobsPage() {
                   <select
                     value={modalityFilter}
                     onChange={(e) => setModalityFilter(e.target.value)}
-                    className="px-4 py-2.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white focus:outline-none focus:border-accent-electric transition-all cursor-pointer"
+                    aria-label="Filtrar por modalidad"
+                    className={`${inputHud} w-auto cursor-pointer`}
                   >
                     <option value="">Todas las modalidades</option>
                     {Object.entries(modalities).map(([key, { label }]) => (
@@ -309,7 +300,7 @@ export default function JobsPage() {
                   {hasActiveFilters && (
                     <button
                       onClick={clearFilters}
-                      className="flex items-center gap-2 px-4 py-2.5 text-red-400 hover:bg-red-500/10 rounded-xl transition-all"
+                      className="flex items-center gap-2 min-h-[44px] px-4 py-2.5 font-mono text-xs tracking-[0.15em] uppercase text-red-400 hover:bg-red-500/10 transition-all"
                     >
                       <FaTimes />
                       Limpiar filtros
@@ -322,56 +313,58 @@ export default function JobsPage() {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Loading State */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        {/* Cargando: esqueletos con la forma de las tarjetas */}
         {isLoading && (
-          <div className="flex flex-col items-center justify-center py-24">
-            <div className="relative">
-              <div className="w-20 h-20 border-4 border-accent-electric/20 rounded-full" />
-              <div className="w-20 h-20 border-4 border-accent-electric border-t-transparent rounded-full animate-spin absolute inset-0" />
-            </div>
-            <p className="text-primary-400 mt-6 text-lg">Cargando convocatorias...</p>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6" aria-busy="true" aria-label="Cargando convocatorias">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="panel-hud h-80 p-5 animate-pulse">
+                <div className="h-28 bg-primary-800/50 mb-4" />
+                <div className="h-3 w-24 bg-primary-700/60 mb-3" />
+                <div className="h-5 w-3/4 bg-primary-700/60 mb-4" />
+                <div className="flex gap-2">
+                  <div className="h-6 w-20 bg-primary-800/70" />
+                  <div className="h-6 w-24 bg-primary-800/70" />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Error State */}
+        {/* Error */}
         {error && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center py-16"
-          >
-            <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <FaExclamationTriangle className="text-4xl text-red-400" />
-            </div>
-            <h3 className="text-xl text-white font-semibold mb-2">Error al cargar</h3>
-            <p className="text-red-400 mb-6">{error}</p>
-            <button
-              onClick={loadJobs}
-              className="px-6 py-3 bg-accent-electric text-white rounded-xl hover:bg-accent-electric/90 transition-colors font-medium"
-            >
-              Reintentar
-            </button>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-lg mx-auto">
+            <HudFrame color="border-red-500/50">
+              <div className="panel-hud text-center px-6 py-10">
+                <div className="w-16 h-16 mx-auto mb-5 flex items-center justify-center border border-red-500/40 bg-red-500/10">
+                  <FaExclamationTriangle className="text-3xl text-red-400" />
+                </div>
+                <p className="font-mono text-[11px] tracking-[0.25em] uppercase text-red-400 mb-2">Error de enlace</p>
+                <h3 className="text-xl font-display text-white font-semibold mb-2">No pudimos cargar las convocatorias</h3>
+                <p className="text-primary-300 mb-6">{error}</p>
+                <button onClick={loadJobs} className="btn-primary btn-hud">
+                  Reintentar
+                </button>
+              </div>
+            </HudFrame>
           </motion.div>
         )}
 
-        {/* Results */}
         {!isLoading && !error && (
           <>
-            {/* Results Count */}
             <div className="flex items-center justify-between mb-6">
-              <p className="text-primary-400">
-                <span className="text-white font-semibold">{filteredJobs.length}</span> {filteredJobs.length === 1 ? 'puesto encontrado' : 'puestos encontrados'}
+              <p className="font-mono text-xs tracking-[0.2em] uppercase text-primary-400">
+                <span className="text-accent-energy font-bold">{String(filteredJobs.length).padStart(2, '0')}</span>{' '}
+                {filteredJobs.length === 1 ? 'puesto encontrado' : 'puestos encontrados'}
               </p>
             </div>
 
-            {/* Jobs Grid */}
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredJobs.map((job, index) => {
                 const categoryInfo = categories[job.categoria] || categories['Otros']
                 const modalityInfo = modalities[job.modalidad] || modalities['Presencial']
                 const daysRemaining = getDaysRemaining(job.fecha_cierre)
+                const urgente = job.prioridad === 'alta'
 
                 return (
                   <motion.div
@@ -380,144 +373,145 @@ export default function JobsPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, delay: index * 0.05 }}
                   >
-                    <Link to={`/bolsa-trabajo/${job.id}`} className="block h-full">
-                      <div className={`relative bg-gradient-to-b from-primary-800/50 to-primary-900/50 backdrop-blur-sm rounded-2xl border p-6 h-full flex flex-col transition-all duration-300 group hover:scale-[1.02] hover:shadow-xl hover:shadow-accent-electric/10 ${
-                        job.prioridad === 'alta'
-                          ? 'border-red-500/50 hover:border-red-500'
-                          : 'border-primary-700/50 hover:border-accent-electric/50'
-                      }`}>
-                        {/* Urgent Badge */}
-                        {job.prioridad === 'alta' && (
-                          <div className="absolute -top-3 -right-3">
-                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full shadow-lg animate-pulse">
-                              <FaExclamationTriangle className="text-xs" />
-                              URGENTE
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Job Image */}
-                        {job.imagen && (
-                          <div className="w-full h-44 rounded-xl overflow-hidden mb-4 -mt-1 relative">
+                    <TiltCard>
+                      <Link
+                        to={`/bolsa-trabajo/${job.id}`}
+                        className={`panel-hud group h-full flex flex-col overflow-hidden ${urgente ? '!border-accent-energy/50' : ''}`}
+                      >
+                        {/* Cabecera: imagen o banda de categoría */}
+                        <div className="relative h-36 overflow-hidden">
+                          {job.imagen ? (
                             <img
                               src={job.imagen}
                               alt={job.titulo}
-                              className="w-full h-full object-cover"
+                              loading="lazy"
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                             />
-                            <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-primary-900/80 to-transparent" />
+                          ) : (
+                            <div className="w-full h-full bg-[radial-gradient(circle_at_30%_40%,rgba(0,212,255,0.25),transparent_60%),linear-gradient(135deg,#0f2847,#0a1628)] flex items-center justify-center">
+                              <span className="text-5xl text-accent-electric/25">{categoryInfo.icon}</span>
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-primary-950 via-primary-950/30 to-transparent" />
+                          <div className="absolute top-3 left-3 flex items-center gap-2">
+                            <span className="font-mono text-[10px] tracking-[0.25em] px-2 py-1 bg-primary-950/80 border border-accent-electric/40 text-accent-electric">
+                              MISIÓN {String(index + 1).padStart(2, '0')}
+                            </span>
+                            {urgente && (
+                              <span className="inline-flex items-center gap-1 font-mono text-[10px] tracking-[0.2em] px-2 py-1 bg-accent-energy text-primary-950 font-bold">
+                                <FaExclamationTriangle /> URGENTE
+                              </span>
+                            )}
                           </div>
-                        )}
-                        {!job.imagen && (
-                          <div className={`w-full h-20 rounded-xl overflow-hidden mb-4 -mt-1 bg-gradient-to-r ${
-                            job.categoria === 'Ingenieria' ? 'from-blue-600/40 to-cyan-600/40' :
-                            job.categoria === 'TI' ? 'from-purple-600/40 to-pink-600/40' :
-                            job.categoria === 'Tecnico' ? 'from-orange-600/40 to-yellow-600/40' :
-                            'from-primary-700/60 to-primary-800/60'
-                          } flex items-center justify-center`}>
-                            <FaBriefcase className="text-3xl text-white/30" />
-                          </div>
-                        )}
+                        </div>
 
-                        {/* Category & Modality */}
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg ${categoryInfo.bgColor} ${categoryInfo.color}`}>
+                        <div className="p-5 pt-3 flex-1 flex flex-col">
+                          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] tracking-[0.2em] uppercase text-accent-electric/80 mb-1.5">
                             {categoryInfo.icon}
                             {categoryInfo.label}
                           </span>
-                          <span className={`inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-lg border ${modalityInfo.color}`}>
-                            {modalityInfo.label}
+                          <h3 className="text-lg font-display font-semibold text-white mb-3 leading-snug group-hover:text-accent-electric transition-colors duration-300">
+                            {job.titulo}
+                          </h3>
+
+                          <div className="flex flex-wrap gap-2 mb-4">
+                            {job.ubicacion && (
+                              <Chip icon={<FaMapMarkerAlt className="text-accent-electric" />}>{job.ubicacion}</Chip>
+                            )}
+                            <Chip icon={<FaBriefcase className="text-accent-electric" />}>{modalityInfo.label}</Chip>
+                            <Chip icon={<FaMoneyBillWave />} tono="energia">
+                              {formatSalary(job.salario_min, job.salario_max)}
+                            </Chip>
+                            {daysRemaining !== null && daysRemaining > 0 && (
+                              <Chip
+                                icon={<FaCalendarAlt className={daysRemaining <= 3 ? 'text-red-400' : 'text-accent-electric'} />}
+                                tono={daysRemaining <= 3 ? 'alerta' : 'neutro'}
+                              >
+                                {daysRemaining} {daysRemaining === 1 ? 'día' : 'días'} restantes
+                              </Chip>
+                            )}
+                          </div>
+
+                          <p className="text-sm text-primary-300 mb-5 flex-grow line-clamp-2">
+                            {job.descripcion}
+                          </p>
+
+                          <span className="mt-auto inline-flex items-center justify-between pt-4 border-t border-primary-700/50 text-sm font-semibold text-accent-energy">
+                            Ver detalle y postular
+                            <FaArrowRight className="group-hover:translate-x-1 transition-transform duration-300" />
                           </span>
                         </div>
-
-                        {/* Title */}
-                        <h3 className="text-xl font-display font-bold text-white mb-3 group-hover:text-accent-electric transition-colors">
-                          {job.titulo}
-                        </h3>
-
-                        {/* Details */}
-                        <div className="space-y-2.5 mb-4">
-                          <div className="flex items-center gap-2 text-sm text-primary-300">
-                            <FaMapMarkerAlt className="text-primary-500 flex-shrink-0" />
-                            <span>{job.ubicacion}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-sm font-semibold">
-                            <FaMoneyBillWave className="text-green-400 flex-shrink-0" />
-                            <span className="text-green-400">{formatSalary(job.salario_min, job.salario_max)}</span>
-                          </div>
-                          {daysRemaining !== null && daysRemaining > 0 && (
-                            <div className={`flex items-center gap-2 text-sm ${daysRemaining <= 3 ? 'text-red-400' : 'text-primary-400'}`}>
-                              <FaCalendarAlt className={daysRemaining <= 3 ? 'text-red-400' : 'text-primary-500'} />
-                              <span>{daysRemaining} {daysRemaining === 1 ? 'día' : 'días'} restantes</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Description */}
-                        <p className="text-sm text-primary-400 mb-4 flex-grow line-clamp-2">
-                          {job.descripcion}
-                        </p>
-
-                        {/* Footer */}
-                        <div className="flex items-center justify-end pt-4 border-t border-primary-700/50">
-                          <span className="flex items-center gap-1 text-accent-electric font-semibold text-sm group-hover:gap-2 transition-all">
-                            Ver más <FaArrowRight className="text-xs" />
-                          </span>
-                        </div>
-                      </div>
-                    </Link>
+                      </Link>
+                    </TiltCard>
                   </motion.div>
                 )
               })}
             </div>
 
-            {/* Empty State */}
+            {/* Estados vacíos */}
             {filteredJobs.length === 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-center py-16"
-              >
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto">
                 {jobs.length === 0 ? (
-                  /* Truly empty — no jobs at all */
-                  <>
-                    <div className="w-20 h-20 bg-primary-800/50 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <FaBriefcase className="text-4xl text-accent-electric" />
+                  /* Sin ninguna vacante publicada */
+                  <HudFrame color="border-accent-energy/50">
+                    <div className="panel-hud relative overflow-hidden text-center px-6 py-12 md:px-12">
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-0 opacity-[0.05] pointer-events-none"
+                        style={{
+                          backgroundImage:
+                            'linear-gradient(rgba(251,191,36,1) 1px, transparent 1px), linear-gradient(90deg, rgba(251,191,36,1) 1px, transparent 1px)',
+                          backgroundSize: '32px 32px',
+                        }}
+                      />
+                      <div className="relative">
+                        <div className="w-16 h-16 mx-auto mb-5 flex items-center justify-center border border-accent-energy/40 bg-accent-energy/10 text-accent-energy text-3xl" style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}>
+                          <FaBriefcase />
+                        </div>
+                        <p className="font-mono text-[11px] tracking-[0.3em] uppercase text-accent-energy mb-3">
+                          Estado · sin misiones activas
+                        </p>
+                        <h3 className="text-2xl font-display font-semibold text-white mb-3">
+                          Próximamente nuevas oportunidades
+                        </h3>
+                        <p className="text-primary-300 mb-8 max-w-md mx-auto leading-relaxed">
+                          En este momento no tenemos vacantes publicadas, pero constantemente buscamos talento.
+                          Déjanos tu información y te contactaremos cuando surja una oportunidad.
+                        </p>
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3">
+                          <a
+                            href="mailto:energysupervision13@gmail.com?subject=Postulación Espontánea&body=Hola, me interesa formar parte del equipo de Ingeniería Telcom EIRL. Adjunto mi CV."
+                            className="btn-energy btn-hud gap-2"
+                          >
+                            <FaEnvelope className="text-lg" />
+                            Enviar CV espontáneo
+                          </a>
+                          <Link to="/mi-postulacion" className="btn-secondary btn-hud gap-2">
+                            <FaIdCard />
+                            Consultar postulación
+                          </Link>
+                        </div>
+                      </div>
                     </div>
-                    <h3 className="text-xl font-display font-semibold text-white mb-3">
-                      Próximamente nuevas oportunidades
-                    </h3>
-                    <p className="text-primary-300 mb-6 max-w-md mx-auto">
-                      En este momento no tenemos vacantes publicadas, pero constantemente buscamos talento.
-                      Déjanos tu información y te contactaremos cuando surja una oportunidad.
-                    </p>
-                    <a
-                      href="mailto:energysupervision13@gmail.com?subject=Postulación Espontánea&body=Hola, me interesa formar parte del equipo de Ingeniería Telcom EIRL. Adjunto mi CV."
-                      className="inline-flex items-center gap-2 bg-accent-electric text-primary-950 px-6 py-3 rounded-lg font-semibold hover:bg-accent-electric/90 transition-colors"
-                    >
-                      <FaEnvelope className="text-lg" />
-                      Enviar CV Espontáneo
-                    </a>
-                  </>
+                  </HudFrame>
                 ) : (
-                  /* Jobs exist but filter returns 0 */
-                  <>
-                    <div className="w-20 h-20 bg-primary-800/50 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <FaSearch className="text-4xl text-primary-500" />
+                  /* Hay vacantes pero el filtro no devuelve ninguna */
+                  <div className="panel-hud text-center px-6 py-12">
+                    <div className="w-16 h-16 mx-auto mb-5 flex items-center justify-center border border-primary-600/60 bg-primary-900/60">
+                      <FaSearch className="text-3xl text-primary-400" />
                     </div>
+                    <p className="font-mono text-[11px] tracking-[0.3em] uppercase text-primary-400 mb-3">Sin coincidencias</p>
                     <h3 className="text-xl font-display font-semibold text-white mb-3">
                       No encontramos resultados para tu búsqueda
                     </h3>
                     <p className="text-primary-400 mb-6 max-w-md mx-auto">
                       Intenta con otros filtros o términos de búsqueda.
                     </p>
-                    <button
-                      onClick={clearFilters}
-                      className="px-6 py-3 bg-accent-electric text-white rounded-xl hover:bg-accent-electric/90 transition-colors font-medium"
-                    >
+                    <button onClick={clearFilters} className="btn-secondary btn-hud">
                       Limpiar filtros
                     </button>
-                  </>
+                  </div>
                 )}
               </motion.div>
             )}

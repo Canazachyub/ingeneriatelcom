@@ -4,6 +4,8 @@ import { motion } from 'framer-motion'
 import { FaBook, FaClock, FaQuestionCircle, FaExternalLinkAlt, FaGraduationCap, FaChevronRight } from 'react-icons/fa'
 import { api } from '../api/appScriptApi'
 import { Capacitacion } from '../types/capacitacion.types'
+import PageHeader from '../components/common/PageHeader'
+import TiltCard from '../components/common/TiltCard'
 
 const CATEGORIAS = ['Todas', 'Seguridad', 'Técnico', 'Administrativo', 'Salud', 'Otro']
 
@@ -33,44 +35,61 @@ export default function CapacitacionesPage() {
     : capacitaciones.filter(c => c.categoria === categoriaActiva)
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="max-w-6xl mx-auto px-4">
-        {/* Header con foto de entrenamiento (C1) */}
+    <div className="min-h-screen bg-primary-950 pb-16">
+      <PageHeader
+        eyebrow="Portal de capacitaciones"
+        title="Capacitaciones Disponibles"
+        subtitle="Rinde tu evaluación en línea. El resultado llegará a tu correo tras la revisión del administrador."
+        migas={[{ label: 'Inicio', to: '/' }, { label: 'Capacitaciones' }]}
+        metrica={
+          !loading && !error ? (
+            <div className="text-center">
+              <div className="text-4xl font-display font-bold text-white tabular-nums">{capacitaciones.length}</div>
+              <div className="font-mono text-[10px] tracking-[0.2em] uppercase text-primary-400 mt-1">Cursos disponibles</div>
+            </div>
+          ) : undefined
+        }
+      />
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
+        {/* Banda con foto de entrenamiento (C1) */}
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative rounded-2xl overflow-hidden mb-10"
+          className="panel-hud relative overflow-hidden mb-10"
         >
           <img
             src="/assets/images/operaciones/C1.webp"
             alt="Sesión de capacitación en seguridad con arnés de protección"
             className="absolute inset-0 w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-slate-900/50" />
-          <div className="relative z-10 text-center px-6 py-14">
-            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm text-blue-100 border border-white/20 px-4 py-2 rounded-full text-sm font-medium mb-4">
+          <div className="absolute inset-0 bg-gradient-to-r from-primary-950/95 via-primary-950/70 to-primary-950/30" />
+          <div className="relative z-10 px-6 py-8 md:py-10 flex items-center gap-4">
+            <div
+              className="w-12 h-12 shrink-0 flex items-center justify-center bg-accent-electric/10 border border-accent-electric/40 text-accent-electric text-xl"
+              style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}
+            >
               <FaGraduationCap />
-              Portal de Capacitaciones
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">
-              Capacitaciones Disponibles
-            </h1>
-            <p className="text-slate-200 max-w-xl mx-auto">
-              Rinde tu evaluación en línea. El resultado llegará a tu correo tras la revisión del administrador.
-            </p>
+            <div>
+              <p className="font-mono text-[11px] tracking-[0.25em] uppercase text-accent-electric mb-1">Formación del equipo</p>
+              <p className="text-white font-display font-semibold text-lg md:text-xl">Seguridad, técnica y gestión en un solo lugar</p>
+            </div>
           </div>
         </motion.div>
 
         {/* Filtros */}
-        <div className="flex flex-wrap gap-2 justify-center mb-8">
+        <div className="flex flex-wrap gap-2 justify-center mb-8" role="tablist" aria-label="Filtrar por categoría">
           {CATEGORIAS.map(cat => (
             <button
               key={cat}
+              role="tab"
+              aria-selected={categoriaActiva === cat}
               onClick={() => setCategoriaActiva(cat)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+              className={`btn-hud min-h-[40px] px-4 py-2 font-mono text-xs tracking-[0.15em] uppercase border transition-all ${
                 categoriaActiva === cat
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-300'
+                  ? 'bg-accent-electric text-primary-950 border-accent-electric font-bold'
+                  : 'bg-primary-900/60 text-primary-300 border-primary-700 hover:border-accent-electric/60 hover:text-accent-electric'
               }`}
             >
               {cat}
@@ -80,23 +99,25 @@ export default function CapacitacionesPage() {
 
         {/* Estado */}
         {loading && (
-          <div className="text-center py-16 text-gray-400">
-            <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-3" />
-            Cargando capacitaciones...
+          <div className="text-center py-16">
+            <div className="animate-spin w-10 h-10 border-2 border-accent-electric border-t-transparent rounded-full mx-auto mb-4" />
+            <p className="font-mono text-xs tracking-[0.3em] uppercase text-primary-400">Cargando capacitaciones...</p>
           </div>
         )}
 
         {error && (
-          <div className="text-center py-16 text-red-500">
-            <FaBook className="text-4xl mx-auto mb-3 opacity-50" />
-            <p>{error}</p>
+          <div className="panel-hud max-w-lg mx-auto text-center px-6 py-10">
+            <FaBook className="text-4xl mx-auto mb-3 text-red-400/70" />
+            <p className="font-mono text-[11px] tracking-[0.3em] uppercase text-red-400 mb-2">Error de enlace</p>
+            <p className="text-primary-200">{error}</p>
           </div>
         )}
 
         {!loading && !error && filtradas.length === 0 && (
-          <div className="text-center py-16 text-gray-400">
-            <FaGraduationCap className="text-5xl mx-auto mb-3 opacity-30" />
-            <p className="text-lg">No hay capacitaciones disponibles en esta categoría</p>
+          <div className="panel-hud max-w-lg mx-auto text-center px-6 py-10">
+            <FaGraduationCap className="text-5xl mx-auto mb-3 text-primary-500" />
+            <p className="font-mono text-[11px] tracking-[0.3em] uppercase text-primary-400 mb-2">Sin resultados</p>
+            <p className="text-primary-200">No hay capacitaciones disponibles en esta categoría</p>
           </div>
         )}
 
@@ -108,59 +129,67 @@ export default function CapacitacionesPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow flex flex-col"
             >
-              {/* Tira de color por categoría */}
-              <div className={`h-1.5 ${getCategoriaColor(cap.categoria)}`} />
-              <div className="p-6 flex flex-col flex-1">
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                    {cap.categoria || 'General'}
-                  </span>
-                </div>
-                <h3 className="font-bold text-gray-900 text-lg leading-snug mb-2">{cap.titulo}</h3>
-                <p className="text-gray-500 text-sm leading-relaxed flex-1 mb-4 line-clamp-3">
-                  {cap.descripcion}
-                </p>
+              <TiltCard>
+                <div className="panel-hud group h-full overflow-hidden flex flex-col">
+                  {/* Tira de color por categoría */}
+                  <div className={`h-1 ${getCategoriaColor(cap.categoria)}`} />
+                  <div className="p-6 flex flex-col flex-1">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <span className="font-mono text-[10px] tracking-[0.25em] uppercase px-2 py-1 border border-accent-electric/40 bg-accent-electric/10 text-accent-electric">
+                        {cap.categoria || 'General'}
+                      </span>
+                      <span className="font-mono text-[10px] tracking-[0.25em] text-primary-500">
+                        CURSO {String(i + 1).padStart(2, '0')}
+                      </span>
+                    </div>
+                    <h3 className="font-display font-semibold text-white text-lg leading-snug mb-2 group-hover:text-accent-electric transition-colors">
+                      {cap.titulo}
+                    </h3>
+                    <p className="text-primary-300 text-sm leading-relaxed flex-1 mb-4 line-clamp-3">
+                      {cap.descripcion}
+                    </p>
 
-                {/* Metadatos */}
-                <div className="flex flex-wrap gap-3 text-xs text-gray-500 mb-5">
-                  <span className="flex items-center gap-1">
-                    <FaQuestionCircle className="text-blue-400" />
-                    {cap.num_preguntas} preguntas
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <FaClock className="text-blue-400" />
-                    {cap.tiempo_limite_min} min
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <FaBook className="text-blue-400" />
-                    Nota min: {cap.nota_minima}
-                  </span>
-                </div>
+                    {/* Metadatos */}
+                    <div className="flex flex-wrap gap-2 mb-5">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 font-mono text-[11px] border border-primary-600/50 bg-primary-900/60 text-primary-200">
+                        <FaQuestionCircle className="text-accent-electric" />
+                        {cap.num_preguntas} preguntas
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 font-mono text-[11px] border border-primary-600/50 bg-primary-900/60 text-primary-200">
+                        <FaClock className="text-accent-electric" />
+                        {cap.tiempo_limite_min} min
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 font-mono text-[11px] border border-accent-energy/40 bg-accent-energy/10 text-accent-energy">
+                        <FaBook />
+                        Nota mín.: {cap.nota_minima}
+                      </span>
+                    </div>
 
-                {/* Acciones */}
-                <div className="flex gap-2 mt-auto">
-                  {cap.material_url && (
-                    <a
-                      href={cap.material_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 text-center text-sm text-blue-600 border border-blue-200 rounded-xl py-2 hover:bg-blue-50 transition-colors flex items-center justify-center gap-1"
-                    >
-                      <FaExternalLinkAlt className="text-xs" />
-                      Material
-                    </a>
-                  )}
-                  <button
-                    onClick={() => navigate(`/evaluacion/${cap.id}`)}
-                    className="flex-1 flex items-center justify-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl py-2 transition-colors"
-                  >
-                    Rendir Evaluación
-                    <FaChevronRight className="text-xs" />
-                  </button>
+                    {/* Acciones */}
+                    <div className="flex gap-2 mt-auto">
+                      {cap.material_url && (
+                        <a
+                          href={cap.material_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn-secondary btn-hud flex-1 !px-3 !py-2.5 text-sm gap-1.5"
+                        >
+                          <FaExternalLinkAlt className="text-xs" />
+                          Material
+                        </a>
+                      )}
+                      <button
+                        onClick={() => navigate(`/evaluacion/${cap.id}`)}
+                        className="btn-primary btn-hud flex-1 !px-3 !py-2.5 text-sm gap-1.5"
+                      >
+                        Rendir evaluación
+                        <FaChevronRight className="text-xs" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </TiltCard>
             </motion.div>
           ))}
         </div>
@@ -172,10 +201,10 @@ export default function CapacitacionesPage() {
 function getCategoriaColor(categoria: string): string {
   const map: Record<string, string> = {
     'Seguridad': 'bg-red-400',
-    'Técnico': 'bg-blue-500',
-    'Administrativo': 'bg-purple-400',
-    'Salud': 'bg-green-400',
-    'Otro': 'bg-gray-400',
+    'Técnico': 'bg-accent-electric',
+    'Administrativo': 'bg-primary-400',
+    'Salud': 'bg-accent-success',
+    'Otro': 'bg-primary-500',
   }
-  return map[categoria] || 'bg-blue-500'
+  return map[categoria] || 'bg-accent-electric'
 }

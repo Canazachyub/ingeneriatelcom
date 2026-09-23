@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useScroll, useSpring } from 'framer-motion'
 import { HiMenu, HiX, HiChevronDown, HiExternalLink } from 'react-icons/hi'
 import { FaLock } from 'react-icons/fa'
 import { mainNavigation, NavItem } from '../../data/navigation'
+import { useSeccionActiva } from '../../hooks/useSeccionActiva'
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
@@ -13,6 +14,20 @@ export default function Navbar() {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const location = useLocation()
+  const enLanding = location.pathname === '/'
+  // Sección visible (scroll-spy): antes "Inicio" quedaba siempre marcado en la
+  // landing y "Contacto" también, porque ambos solo miraban la ruta "/".
+  const seccionActual = useSeccionActiva(enLanding)
+  const { scrollYProgress } = useScroll()
+  const progreso = useSpring(scrollYProgress, { stiffness: 200, damping: 30 })
+
+  // ¿El ítem (o alguno de sus hijos) apunta a la sección/ruta actual?
+  const estaActivo = (item: NavItem): boolean => {
+    if (item.children?.length) return item.children.some(estaActivo)
+    if (item.href.startsWith('/')) return location.pathname === item.href
+    if (item.href.startsWith('#') && item.href.length > 1) return enLanding && seccionActual === item.href.slice(1)
+    return false
+  }
 
   useEffect(() => {
     const handleScroll = () => {
@@ -74,7 +89,9 @@ export default function Navbar() {
         <div key={item.label} className="relative" ref={dropdownRef}>
           <button
             onClick={() => setOpenDropdown(isOpen ? null : item.label)}
-            className="flex items-center gap-1 px-4 py-2 text-sm font-medium text-primary-200 hover:text-accent-electric transition-colors duration-200"
+            className={`flex items-center gap-1 px-4 py-2 text-sm font-medium hover:text-accent-electric transition-colors duration-200 ${
+              estaActivo(item) ? 'text-accent-electric' : 'text-primary-200'
+            }`}
           >
             {item.label === 'Portal Empleados' && (
               <FaLock className="w-3 h-3 text-accent-energy" />
@@ -92,7 +109,7 @@ export default function Navbar() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
-                className="absolute top-full left-0 mt-1 w-48 bg-primary-900/95 backdrop-blur-md rounded-lg border border-primary-700 shadow-xl overflow-hidden"
+                className="absolute top-full left-0 mt-1 w-56 bg-primary-900/95 backdrop-blur-md rounded-lg border border-primary-700 shadow-xl overflow-hidden"
               >
                 {item.children!.map((child) => (
                   <a
@@ -102,8 +119,11 @@ export default function Navbar() {
                       e.preventDefault()
                       handleNavClick(child.href, child.isExternal)
                     }}
-                    className="block px-4 py-3 text-sm text-primary-200 hover:text-accent-electric hover:bg-primary-800/50 transition-colors duration-200"
+                    className={`flex items-center gap-2 px-4 py-3 text-sm hover:text-accent-electric hover:bg-primary-800/50 transition-colors duration-200 ${
+                      estaActivo(child) ? 'text-accent-electric bg-primary-800/40' : 'text-primary-200'
+                    }`}
                   >
+                    <span className={`w-1 h-1 rounded-full ${estaActivo(child) ? 'bg-accent-electric' : 'bg-primary-600'}`} />
                     {child.label}
                   </a>
                 ))}
@@ -129,9 +149,7 @@ export default function Navbar() {
       )
     }
 
-    const isActive = item.href.startsWith('/')
-      ? location.pathname === item.href
-      : location.pathname === '/'
+    const isActive = estaActivo(item)
 
     return (
       <a
@@ -223,9 +241,7 @@ export default function Navbar() {
       )
     }
 
-    const isActive = item.href.startsWith('/')
-      ? location.pathname === item.href
-      : location.pathname === '/'
+    const isActive = estaActivo(item)
 
     return (
       <a
@@ -263,7 +279,7 @@ export default function Navbar() {
             onClick={() => handleNavClick('#inicio')}
           >
             <img
-              src="/assets/images/logo/logo-horizontal.png"
+              src="/assets/images/logo/logo-horizontal-transparente.webp"
               alt="Ingenieria Telcom EIRL"
               className="h-12 md:h-14 w-auto object-contain group-hover:opacity-90 transition-opacity duration-300"
             />
@@ -284,6 +300,13 @@ export default function Navbar() {
           </button>
         </div>
       </div>
+
+      {/* Progreso de lectura de la página */}
+      <motion.div
+        aria-hidden="true"
+        style={{ scaleX: progreso }}
+        className="absolute bottom-0 left-0 right-0 h-[2px] origin-left bg-gradient-to-r from-primary-500 via-accent-electric to-accent-energy"
+      />
 
       {/* Mobile Menu */}
       <AnimatePresence>

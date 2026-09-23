@@ -98,6 +98,106 @@
   .animate-stagger > *:nth-child(6) { animation-delay: 0.6s; }
 }
 
+/* ── HUD de mando (landing) ─────────────────────────────── */
+
+/* Panel base de la landing: vidrio oscuro, borde tenue, esquina superior
+   derecha cortada. Usar en lugar de tarjetas redondeadas genéricas para que
+   todas las secciones hablen el mismo idioma visual. */
+.panel-hud {
+  position: relative;
+  background: linear-gradient(180deg, rgba(15, 40, 71, 0.55) 0%, rgba(10, 22, 40, 0.75) 100%);
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+  backdrop-filter: blur(6px);
+  transition: border-color 0.3s, background 0.3s;
+}
+.panel-hud::before {
+  /* filo cian en la esquina cortada */
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 26px;
+  height: 26px;
+  background: linear-gradient(225deg, rgba(0, 212, 255, 0.9) 0 2px, transparent 2px);
+  pointer-events: none;
+}
+.panel-hud:hover {
+  border-color: rgba(0, 212, 255, 0.4);
+}
+
+/* Botón con esquinas cortadas, como los paneles de una consola táctica */
+.btn-hud {
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+  border-radius: 0;
+}
+
+/* Línea de escaneo que baja por el hero */
+.hud-scanline {
+  top: -6rem;
+  background: linear-gradient(to bottom, transparent, rgba(0, 212, 255, 0.06) 60%, rgba(0, 212, 255, 0.18) 98%, transparent);
+  animation: hudScan 7s linear infinite;
+}
+@keyframes hudScan {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(calc(100vh + 6rem)); }
+}
+
+/* Barrido de radar */
+.hud-radar {
+  background: conic-gradient(from 0deg, rgba(0, 212, 255, 0.55), transparent 25%);
+  animation: hudRadar 3s linear infinite;
+}
+@keyframes hudRadar {
+  to { transform: rotate(360deg); }
+}
+
+/* Interferencia breve y periódica en el título (no continua: cansaría) */
+.hud-glitch {
+  position: relative;
+}
+.hud-glitch::before,
+.hud-glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  opacity: 0;
+  pointer-events: none;
+}
+.hud-glitch::before {
+  animation: hudGlitchA 6s infinite steps(1);
+  text-shadow: -2px 0 rgba(251, 191, 36, 0.7);
+}
+.hud-glitch::after {
+  animation: hudGlitchB 6s infinite steps(1);
+  text-shadow: 2px 0 rgba(0, 212, 255, 0.8);
+}
+@keyframes hudGlitchA {
+  0%, 91%, 100% { opacity: 0; transform: none; clip-path: none; }
+  92% { opacity: 1; transform: translate(-3px, 1px); clip-path: inset(10% 0 55% 0); }
+  94% { opacity: 1; transform: translate(3px, -1px); clip-path: inset(60% 0 8% 0); }
+  96% { opacity: 0; }
+}
+@keyframes hudGlitchB {
+  0%, 92%, 100% { opacity: 0; transform: none; clip-path: none; }
+  93% { opacity: 1; transform: translate(3px, 0); clip-path: inset(40% 0 30% 0); }
+  95% { opacity: 1; transform: translate(-2px, 1px); clip-path: inset(5% 0 75% 0); }
+  97% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-scanline,
+  .hud-radar,
+  .hud-glitch::before,
+  .hud-glitch::after {
+    animation: none;
+  }
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
@@ -120,4 +220,78 @@
 ::selection {
   background: rgba(0, 212, 255, 0.3);
   color: white;
+}
+
+/* Galería de operaciones: tarjeta "en mira" (la del frente) */
+.galeria-tarjeta > div {
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.galeria-tarjeta[data-activa='1'] > div {
+  border-color: rgba(0, 212, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 212, 255, 0.4), 0 0 36px rgba(0, 212, 255, 0.45);
+}
+/* Retícula de mira: 4 esquinas en L alrededor de la tarjeta en mira */
+.galeria-tarjeta::after {
+  --c: rgba(0, 212, 255, 0.95);
+  content: '';
+  position: absolute;
+  inset: -10px;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(1.08);
+  transition: opacity 0.3s, transform 0.3s;
+  background:
+    linear-gradient(var(--c), var(--c)) top left / 22px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) top left / 2px 22px no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / 22px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / 2px 22px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / 22px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / 2px 22px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / 22px 2px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / 2px 22px no-repeat;
+}
+.galeria-tarjeta[data-activa='1']::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+
+/* ── Organigrama: pulso Gerencia → áreas ─────────────────────
+   Ciclo de 4 s: la Gerencia destella (0-18%), el pulso recorre cada rama
+   (0-55%) y el área se enciende al llegar (55-85%). Todas las ramas duran lo
+   mismo, así los pulsos llegan juntos. */
+.org-pulso {
+  stroke-dasharray: 9 300;
+  stroke-dashoffset: 9;
+  opacity: 0;
+  filter: drop-shadow(0 0 4px rgba(0, 212, 255, 0.9));
+}
+.org-activo .org-pulso {
+  animation: orgPulso 4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes orgPulso {
+  0% { stroke-dashoffset: 9; opacity: 0; }
+  4% { opacity: 1; }
+  55% { stroke-dashoffset: -91; opacity: 1; }
+  58%, 100% { stroke-dashoffset: -91; opacity: 0; }
+}
+.org-activo .org-nodo {
+  animation: orgLlegada 4s linear infinite;
+}
+@keyframes orgLlegada {
+  0%, 53% { filter: none; }
+  60% { filter: drop-shadow(0 0 14px rgba(0, 212, 255, 0.5)) brightness(1.12); }
+  85%, 100% { filter: none; }
+}
+.org-activo .org-raiz {
+  animation: orgEmite 4s linear infinite;
+}
+@keyframes orgEmite {
+  0% { filter: drop-shadow(0 0 16px rgba(251, 191, 36, 0.45)) brightness(1.08); }
+  18%, 100% { filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .org-activo .org-pulso,
+  .org-activo .org-nodo,
+  .org-activo .org-raiz { animation: none; }
 }

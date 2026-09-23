@@ -14,7 +14,7 @@ export default function Footer() {
           <div className="lg:col-span-1">
             <Link to="/" className="inline-block mb-4">
               <img
-                src="/assets/images/logo/logo-square.png"
+                src="/assets/images/logo/logo-square-transparente.webp"
                 alt="Ingenieria Telcom EIRL"
                 className="h-16 w-auto object-contain"
               />

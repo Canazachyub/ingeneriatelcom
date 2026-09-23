@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useInView } from 'react-intersection-observer'
 import { FaHandPointer } from 'react-icons/fa'
+import SectionHeader from '../common/SectionHeader'
 
 // ─── Galería helicoidal 3D "Nuestras Operaciones" ────────────────────────────
 // Tarjetas con fotos reales de campo girando en una hélice 3D arrastrable,
@@ -32,6 +33,9 @@ const FADE_FIN = 330         // |y| donde la tarjeta ya es invisible (antes del 
 const VELOCIDAD_AUTO = 0.07  // grados por frame en reposo
 const CARD_W = 260
 const CARD_H = 170
+const ANCHO_DISENO = 1100    // ancho para el que están pensadas las medidas de arriba
+const INCLINACION_MAX = 9    // grados que el mouse inclina la hélice
+const TIMON_MAX = 0.35       // grados/frame que el mouse suma o resta al auto-giro
 
 // Galería infinita en tornillo (doble hélice): cada foto existe en las DOS
 // hebras (desfasadas 180° de giro). Al rotar, las tarjetas SUBEN en espiral;
@@ -55,7 +59,13 @@ function usePrefersReducedMotion() {
 
 function GaleriaHelicoidal() {
   const contRef = useRef<HTMLDivElement | null>(null)
+  const helixRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef<(HTMLDivElement | null)[]>([])
+  // Mouse sobre la galería (-0.5..0.5), suavizado en cada frame
+  const mouse = useRef({ x: 0, y: 0, sx: 0, sy: 0, dentro: false })
+  // Escala para pantallas angostas: en un celular la hélice de 1100 px se
+  // salía por los lados; ahora se reduce entera manteniendo la proporción.
+  const escala = useRef(1)
   const rotacion = useRef(0)
   const velocidad = useRef(VELOCIDAD_AUTO)
   const arrastrando = useRef(false)
@@ -69,11 +79,28 @@ function GaleriaHelicoidal() {
     const pasoAngular = 360 / FOTOS.length // 30° por tarjeta de cada hebra
 
     const pintar = () => {
-      // Inercia: al soltar el drag la velocidad decae suavemente hacia el auto-giro
+      const m = mouse.current
+      const objX = m.dentro ? m.x : 0
+      const objY = m.dentro ? m.y : 0
+      m.sx += (objX - m.sx) * 0.06
+      m.sy += (objY - m.sy) * 0.06
+
+      // El mouse hace de timón: a la derecha acelera el giro, a la izquierda
+      // lo invierte. Al soltar el drag la velocidad vuelve a ese objetivo.
+      const objetivo = VELOCIDAD_AUTO + m.sx * 2 * TIMON_MAX
       if (!arrastrando.current) {
         rotacion.current += velocidad.current
-        velocidad.current += (VELOCIDAD_AUTO - velocidad.current) * 0.04
+        velocidad.current += (objetivo - velocidad.current) * 0.04
       }
+
+      if (helixRef.current) {
+        helixRef.current.style.transform =
+          `scale(${escala.current.toFixed(3)}) rotateX(${(-m.sy * 2 * INCLINACION_MAX).toFixed(2)}deg) ` +
+          `rotateZ(${(m.sx * 4).toFixed(2)}deg)`
+      }
+
+      let frente = -1
+      let mejorFrente = Infinity
 
       TARJETAS.forEach((t, k) => {
         const el = itemRefs.current[k]
@@ -98,7 +125,14 @@ function GaleriaHelicoidal() {
         const opacidad = factorBorde * (1 - profundidad * 0.55)
         if (opacidad < 0.02) {
           el.style.visibility = 'hidden'
+          el.dataset.activa = '0'
           return
+        }
+        // Tarjeta "en mira": la más cercana al centro de la pantalla y al frente
+        const distCentro = Math.hypot(x, y) + profundidad * 800
+        if (factorBorde > 0.9 && distCentro < mejorFrente) {
+          mejorFrente = distCentro
+          frente = k
         }
         el.style.visibility = 'visible'
         el.style.transform =
@@ -109,12 +143,40 @@ function GaleriaHelicoidal() {
         el.style.zIndex = String(Math.round((1 - profundidad) * 100))
       })
 
+      TARJETAS.forEach((_, k) => {
+        const el = itemRefs.current[k]
+        if (el) el.dataset.activa = k === frente ? '1' : '0'
+      })
+
       rafId.current = requestAnimationFrame(pintar)
     }
 
     rafId.current = requestAnimationFrame(pintar)
     return () => cancelAnimationFrame(rafId.current)
   }, [inView])
+
+  useEffect(() => {
+    const el = contRef.current
+    if (!el) return
+    const ajustar = () => {
+      // En celular no se baja de 0.62: más chica, la foto del frente no se distingue
+      escala.current = Math.min(1, Math.max(0.62, el.clientWidth / 900))
+    }
+    ajustar()
+    const ro = new ResizeObserver(ajustar)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Posición del mouse (solo mouse: en táctil el dedo ya arrastra la hélice)
+  const onMouseMove = (e: React.MouseEvent) => {
+    const r = contRef.current?.getBoundingClientRect()
+    if (!r) return
+    mouse.current.x = (e.clientX - r.left) / r.width - 0.5
+    mouse.current.y = (e.clientY - r.top) / r.height - 0.5
+    mouse.current.dentro = true
+  }
+  const onMouseLeave = () => { mouse.current.dentro = false }
 
   // Drag con pointer events (mouse y táctil)
   const onPointerDown = (e: React.PointerEvent) => {
@@ -144,12 +206,15 @@ function GaleriaHelicoidal() {
       onPointerUp={soltar}
       onPointerLeave={soltar}
       onPointerCancel={soltar}
+      onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
       className="relative mx-auto select-none cursor-grab active:cursor-grabbing touch-pan-y"
-      style={{ height: ALTO_VENTANA, maxWidth: 1100, perspective: '1400px' }}
+      style={{ height: `min(${ALTO_VENTANA}px, 108vw)`, maxWidth: ANCHO_DISENO, perspective: '1400px' }}
       role="region"
       aria-label="Galería 3D de operaciones — arrastra horizontalmente para girar"
     >
       <div
+        ref={helixRef}
         className="absolute left-1/2 top-1/2"
         style={{ transformStyle: 'preserve-3d' }}
       >
@@ -157,10 +222,10 @@ function GaleriaHelicoidal() {
           <div
             key={`${t.foto.src}-${t.fase}`}
             ref={(el) => { itemRefs.current[k] = el }}
-            className="absolute left-0 top-0 will-change-transform"
+            className="galeria-tarjeta absolute left-0 top-0 will-change-transform"
             style={{ width: CARD_W, height: CARD_H }}
           >
-            <div className="w-full h-full rounded-2xl overflow-hidden border border-primary-700/60 shadow-2xl shadow-black/50 bg-primary-900">
+            <div className="relative w-full h-full rounded-2xl overflow-hidden border border-primary-700/60 shadow-2xl shadow-black/50 bg-primary-900">
               <img
                 src={t.foto.src}
                 alt={t.fase === 0 ? t.foto.alt : ''}
@@ -202,27 +267,22 @@ export default function OperacionesSection() {
   return (
     <section id="operaciones" className="relative py-24 bg-primary-950 overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-4">
-          <span className="inline-block px-4 py-1.5 text-xs font-semibold tracking-widest uppercase text-accent-electric bg-accent-electric/10 border border-accent-electric/20 rounded-full mb-4">
-            Trabajo real en terreno
-          </span>
-          <h2 className="text-3xl md:text-5xl font-display font-bold text-white">
-            Nuestras Operaciones
-          </h2>
-          <p className="mt-4 text-primary-300 max-w-2xl mx-auto">
-            Ingeniería eléctrica, telecomunicaciones y supervisión de obras en el sur del Perú —
-            del altiplano de Puno al desierto de Tacna.
-          </p>
-        </div>
+        <SectionHeader
+          id="operaciones"
+          eyebrow="Trabajo real en terreno"
+          title="Nuestras Operaciones"
+          subtitle="Ingeniería eléctrica, telecomunicaciones y supervisión de obras en el sur del Perú, del altiplano de Puno al desierto de Tacna."
+        />
 
         {reducedMotion ? (
           <GaleriaEstatica />
         ) : (
           <>
             <GaleriaHelicoidal />
-            <p className="text-center text-primary-500 text-sm -mt-6 flex items-center justify-center gap-2">
+            <p className="text-center text-primary-500 text-sm mt-4 flex items-center justify-center gap-2">
               <FaHandPointer className="text-accent-electric/70" />
-              Arrastra para girar la galería
+              <span className="hidden md:inline">Mueve el mouse para dirigirla o arrastra para girarla</span>
+              <span className="md:hidden">Desliza para girar la galería</span>
             </p>
           </>
         )}

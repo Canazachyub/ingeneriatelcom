@@ -35,6 +35,12 @@ import {
 import Button from '../components/common/Button'
 import { api } from '../api/appScriptApi'
 
+// Campos estilo terminal, coherentes con el formulario de Contacto
+const inputHud =
+  'w-full px-4 py-3.5 bg-primary-950/70 border border-primary-700/70 text-white placeholder-primary-500 ' +
+  'focus:outline-none focus:border-accent-electric focus:shadow-[0_0_0_3px_rgba(0,212,255,0.15)] transition-all'
+const labelHud = 'block font-mono text-[11px] tracking-[0.2em] uppercase text-primary-300 mb-2'
+
 interface Job {
   id: string
   titulo: string
@@ -76,7 +82,7 @@ const applicationSchema = z.object({
   dni: z.string().length(8, 'El DNI debe tener 8 dígitos'),
   email: z.string().email('Ingresa un email válido'),
   phone: z.string().min(9, 'Ingresa un teléfono válido'),
-  linkedIn: z.string().url('Ingresa una URL valida').optional().or(z.literal('')),
+  linkedIn: z.string().url('Ingresa una URL válida').optional().or(z.literal('')),
   coverLetter: z.string().optional(),
   expectedSalary: z.string().optional(),
   availability: z.string().min(1, 'Selecciona tu disponibilidad'),
@@ -376,17 +382,17 @@ export default function JobDetailPage() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-primary-950 via-primary-900 to-primary-950 pt-24 pb-16 flex items-center justify-center">
+      <div className="min-h-screen bg-primary-950 pt-28 pb-16 flex items-center justify-center">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           className="text-center"
         >
-          <div className="relative">
-            <div className="w-20 h-20 border-4 border-accent-electric/20 rounded-full" />
-            <div className="w-20 h-20 border-4 border-accent-electric border-t-transparent rounded-full animate-spin absolute inset-0" />
+          <div className="relative w-20 h-20 mx-auto">
+            <div className="absolute inset-0 border-2 border-accent-electric/20 rounded-full" />
+            <div className="absolute inset-0 border-2 border-accent-electric border-t-transparent rounded-full animate-spin" />
           </div>
-          <p className="text-primary-400 mt-6 text-lg">Cargando convocatoria...</p>
+          <p className="font-mono text-xs tracking-[0.3em] uppercase text-primary-400 mt-6">Cargando convocatoria...</p>
         </motion.div>
       </div>
     )
@@ -395,21 +401,22 @@ export default function JobDetailPage() {
   // Error state
   if (error && !job) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-primary-950 via-primary-900 to-primary-950 pt-24 pb-16 flex items-center justify-center">
+      <div className="min-h-screen bg-primary-950 pt-28 pb-16 flex items-center justify-center">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-center max-w-md mx-auto px-4"
         >
-          <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-            <FaExclamationTriangle className="text-4xl text-red-400" />
+          <div className="w-20 h-20 bg-red-500/10 border border-red-500/40 flex items-center justify-center mx-auto mb-6" style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}>
+            <FaExclamationTriangle className="text-3xl text-red-400" />
           </div>
-          <h2 className="text-2xl font-display font-bold text-white mb-4">Error</h2>
+          <p className="font-mono text-[11px] tracking-[0.3em] uppercase text-red-400 mb-2">Error de enlace</p>
+          <h2 className="text-2xl font-display font-bold text-white mb-4">Convocatoria no disponible</h2>
           <p className="text-primary-400 mb-8">
             No pudimos cargar esta convocatoria. Puede que haya sido cerrada o que no esté disponible.
           </p>
           <Link to="/bolsa-trabajo">
-            <Button variant="primary">Ver otras convocatorias</Button>
+            <Button variant="primary" className="btn-hud">Ver otras convocatorias</Button>
           </Link>
         </motion.div>
       </div>
@@ -419,15 +426,16 @@ export default function JobDetailPage() {
   // Not found
   if (!job) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-primary-950 via-primary-900 to-primary-950 pt-24 pb-16 flex items-center justify-center">
+      <div className="min-h-screen bg-primary-950 pt-28 pb-16 flex items-center justify-center">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-center max-w-md mx-auto px-4"
         >
-          <div className="w-24 h-24 bg-primary-800/50 rounded-full flex items-center justify-center mx-auto mb-6">
-            <FaBriefcase className="text-4xl text-primary-500" />
+          <div className="w-20 h-20 bg-primary-900/60 border border-primary-600/60 flex items-center justify-center mx-auto mb-6" style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}>
+            <FaBriefcase className="text-3xl text-primary-400" />
           </div>
+          <p className="font-mono text-[11px] tracking-[0.3em] uppercase text-primary-400 mb-2">Sin registro</p>
           <h1 className="text-2xl font-display font-bold text-white mb-4">
             Vacante no encontrada
           </h1>
@@ -435,7 +443,7 @@ export default function JobDetailPage() {
             No pudimos cargar esta convocatoria. Puede que haya sido cerrada o que no esté disponible.
           </p>
           <Link to="/bolsa-trabajo">
-            <Button variant="primary">Ver otras convocatorias</Button>
+            <Button variant="primary" className="btn-hud">Ver otras convocatorias</Button>
           </Link>
         </motion.div>
       </div>
@@ -445,7 +453,7 @@ export default function JobDetailPage() {
   // Success state
   if (isSuccess) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-primary-950 via-primary-900 to-primary-950 pt-24 pb-16 flex items-center justify-center">
+      <div className="min-h-screen bg-primary-950 pt-28 pb-16 flex items-center justify-center">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -455,9 +463,10 @@ export default function JobDetailPage() {
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-            className="w-24 h-24 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg shadow-green-500/30"
+            className="w-24 h-24 bg-accent-success/15 border border-accent-success/50 flex items-center justify-center mx-auto mb-8 shadow-[0_0_40px_rgba(16,185,129,0.25)]"
+            style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}
           >
-            <FaCheckCircle className="text-5xl text-white" />
+            <FaCheckCircle className="text-5xl text-accent-success" />
           </motion.div>
 
           <motion.div
@@ -465,8 +474,9 @@ export default function JobDetailPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
           >
+            <p className="font-mono text-[11px] tracking-[0.3em] uppercase text-accent-success mb-3">Transmisión recibida</p>
             <h1 className="text-3xl md:text-4xl font-display font-bold text-white mb-4">
-              ¡Postulación Exitosa!
+              ¡Postulación exitosa!
             </h1>
             <p className="text-primary-300 text-lg mb-3">
               Tu postulación para el puesto de
@@ -478,7 +488,7 @@ export default function JobDetailPage() {
               Ha sido recibida correctamente. Revisaremos tu perfil y nos pondremos en contacto contigo pronto.
             </p>
 
-            <div className="bg-primary-800/30 rounded-xl p-6 mb-8 border border-primary-700/50">
+            <div className="panel-hud p-6 mb-8">
               <p className="text-primary-300 text-sm mb-2">Puedes consultar el estado de tu postulación con tu DNI en:</p>
               <Link to="/mi-postulacion" className="text-accent-electric hover:underline font-medium">
                 Consultar mi postulación
@@ -486,8 +496,8 @@ export default function JobDetailPage() {
             </div>
 
             <Link to="/bolsa-trabajo">
-              <Button variant="primary" className="min-w-[200px]">
-                Ver mas vacantes
+              <Button variant="primary" className="btn-hud min-w-[200px]">
+                Ver más vacantes
               </Button>
             </Link>
           </motion.div>
@@ -503,80 +513,99 @@ export default function JobDetailPage() {
   const daysRemaining = getDaysRemaining(job.fecha_cierre)
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary-950 via-primary-900 to-primary-950 pt-20 pb-16">
-      {/* Hero Header */}
-      <div className={`relative overflow-hidden bg-gradient-to-r ${categoryInfo.color} py-12 md:py-16`}>
-        <div className="absolute inset-0 bg-black/30" />
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAxOGMtOS45NDEgMC0xOCA4LjA1OS0xOCAxOHM4LjA1OSAxOCAxOCAxOCAxOC04LjA1OSAxOC0xOC04LjA1OS0xOC0xOC0xOHptMCAzMmMtNy43MzIgMC0xNC02LjI2OC0xNC0xNHM2LjI2OC0xNCAxNC0xNCAxNCA2LjI2OCAxNCAxNC02LjI2OCAxNC0xNCAxNHoiIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iLjA1Ii8+PC9nPjwvc3ZnPg==')] opacity-30" />
+    <div className="min-h-screen bg-primary-950 pt-20 pb-16">
+      {/* Cabecera HUD (antes: degradado de color por categoría) */}
+      <div className="relative overflow-hidden bg-primary-950 pt-8 pb-10 md:pb-14 border-b border-primary-800/70">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 opacity-[0.06] pointer-events-none"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(0,212,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,212,255,1) 1px, transparent 1px)',
+            backgroundSize: '64px 64px',
+            maskImage: 'radial-gradient(ellipse at 30% 40%, black 15%, transparent 70%)',
+            WebkitMaskImage: 'radial-gradient(ellipse at 30% 40%, black 15%, transparent 70%)',
+          }}
+        />
+        <div aria-hidden="true" className="absolute -top-24 -left-24 w-96 h-96 rounded-full blur-3xl bg-accent-energy/10 pointer-events-none" />
 
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            {/* Back Button */}
-            <button
-              onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/bolsa-trabajo')}
-              className="inline-flex items-center gap-2 text-white/80 hover:text-white transition-colors mb-3 group"
-            >
-              <FaArrowLeft className="group-hover:-translate-x-1 transition-transform" />
-              ← Volver a Convocatorias
-            </button>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mb-6">
+              {/* Back Button */}
+              <button
+                onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/bolsa-trabajo')}
+                className="inline-flex items-center gap-2 min-h-[44px] text-sm text-primary-300 hover:text-accent-electric transition-colors group"
+              >
+                <FaArrowLeft className="group-hover:-translate-x-1 transition-transform" />
+                Volver a convocatorias
+              </button>
 
-            {/* Breadcrumb */}
-            {job && (
-              <nav className="flex items-center gap-2 text-sm text-primary-400 mb-4">
-                <Link to="/" className="hover:text-accent-electric transition-colors">Inicio</Link>
-                <span>/</span>
-                <Link to="/bolsa-trabajo" className="hover:text-accent-electric transition-colors">Bolsa de Trabajo</Link>
-                <span>/</span>
-                <span className="text-white truncate max-w-xs">{job?.titulo || 'Convocatoria'}</span>
-              </nav>
-            )}
+              {/* Breadcrumb */}
+              {job && (
+                <nav aria-label="Ruta de navegación" className="flex items-center gap-2 font-mono text-[11px] tracking-[0.2em] uppercase text-primary-500 min-w-0">
+                  <Link to="/" className="hover:text-accent-electric transition-colors">Inicio</Link>
+                  <span aria-hidden="true">/</span>
+                  <Link to="/bolsa-trabajo" className="hover:text-accent-electric transition-colors whitespace-nowrap">Bolsa de trabajo</Link>
+                  <span aria-hidden="true">/</span>
+                  <span className="text-primary-200 truncate max-w-[10rem] sm:max-w-xs" aria-current="page">{job?.titulo || 'Convocatoria'}</span>
+                </nav>
+              )}
+            </div>
 
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
+                <p className="flex items-center gap-3 mb-4 font-mono text-xs tracking-[0.3em] uppercase text-accent-energy">
+                  <span className="h-px w-10 md:w-16 bg-gradient-to-r from-accent-energy/0 to-accent-energy/70" />
+                  Convocatoria abierta
+                </p>
+
                 {/* Badges */}
                 <div className="flex flex-wrap gap-2 mb-4">
                   {job.prioridad === 'alta' && (
                     <motion.span
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500 text-white text-sm font-bold rounded-full shadow-lg animate-pulse"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-accent-energy text-primary-950 font-mono text-[11px] tracking-[0.2em] font-bold"
                     >
                       <FaExclamationTriangle className="text-xs" />
                       URGENTE
                     </motion.span>
                   )}
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/20 backdrop-blur-sm text-white text-sm font-medium rounded-full">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 border border-accent-electric/40 bg-accent-electric/10 text-accent-electric font-mono text-[11px] tracking-[0.15em] uppercase">
                     {categoryInfo.icon}
                     {categoryInfo.label}
                   </span>
-                  <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border ${modalityInfo.color}`}>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 border border-primary-600/60 bg-primary-900/60 text-primary-200 font-mono text-[11px] tracking-[0.15em] uppercase">
                     {modalityInfo.label}
                   </span>
                 </div>
 
                 {/* Title */}
-                <h1 className="text-3xl md:text-4xl lg:text-5xl font-display font-bold text-white mb-4 drop-shadow-lg">
+                <h1 className="text-3xl md:text-4xl lg:text-5xl font-display font-bold text-white mb-5 leading-tight">
                   {job.titulo}
                 </h1>
 
                 {/* Meta Info */}
-                <div className="flex flex-wrap gap-x-6 gap-y-2 text-white/90">
-                  <div className="flex items-center gap-2">
-                    <FaMapMarkerAlt />
-                    <span>{job.ubicacion}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {job.ubicacion && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-primary-600/50 bg-primary-900/60 text-primary-200 font-mono text-xs">
+                      <FaMapMarkerAlt className="text-accent-electric" />
+                      {job.ubicacion}
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-accent-energy/40 bg-accent-energy/10 text-accent-energy font-mono text-xs">
                     <FaMoneyBillWave />
-                    <span className="font-semibold">{formatSalary(job.salario_min, job.salario_max)}</span>
-                  </div>
+                    {formatSalary(job.salario_min, job.salario_max)}
+                  </span>
                   {job.fecha_cierre && (
-                    <div className="flex items-center gap-2">
-                      <FaCalendarAlt />
-                      <span>Cierre: {formatDate(job.fecha_cierre)}</span>
-                    </div>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-primary-600/50 bg-primary-900/60 text-primary-200 font-mono text-xs">
+                      <FaCalendarAlt className="text-accent-electric" />
+                      Cierre: {formatDate(job.fecha_cierre)}
+                    </span>
                   )}
                 </div>
               </div>
@@ -585,8 +614,9 @@ export default function JobDetailPage() {
               <div className="relative">
                 <button
                   onClick={handleShare}
-                  className="p-3 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-full text-white transition-all hover:scale-110"
+                  className="btn-hud w-11 h-11 flex items-center justify-center border border-accent-electric/40 bg-primary-900/70 text-accent-electric hover:bg-accent-electric hover:text-primary-950 transition-colors"
                   title="Compartir vacante"
+                  aria-label="Compartir vacante"
                 >
                   <FaShare />
                 </button>
@@ -596,7 +626,7 @@ export default function JobDetailPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="absolute top-full mt-2 right-0 bg-white text-primary-900 text-sm px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap"
+                      className="absolute top-full mt-2 right-0 bg-primary-900 border border-accent-electric/40 text-accent-electric font-mono text-xs px-3 py-1.5 whitespace-nowrap"
                     >
                       ¡Enlace copiado!
                     </motion.div>
@@ -609,9 +639,9 @@ export default function JobDetailPage() {
       </div>
 
       {/* Stats Bar */}
-      <div className="bg-primary-900/80 border-b border-primary-700/50">
+      <div className="bg-primary-900/40 border-b border-primary-800/70">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap justify-center md:justify-start gap-4 md:gap-8 py-4">
+          <div className="flex flex-wrap justify-center md:justify-start gap-4 md:gap-8 py-4 font-mono text-xs tracking-[0.1em] uppercase">
             <div className="flex items-center gap-2 text-primary-300">
               <FaUsers className="text-accent-electric" />
               <span><strong className="text-white">{job.postulantes_count}</strong> postulantes</span>
@@ -645,10 +675,10 @@ export default function JobDetailPage() {
           >
             <button
               onClick={() => document.getElementById('formulario-postulacion')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              className="flex items-center gap-3 bg-accent-electric text-primary-950 px-8 py-4 rounded-full font-bold text-lg shadow-2xl shadow-accent-electric/40 hover:bg-accent-electric/90 transition-all hover:scale-105"
+              className="btn-hud flex items-center gap-3 bg-accent-energy text-primary-950 px-8 py-4 font-bold text-lg shadow-2xl shadow-accent-energy/30 hover:bg-yellow-400 transition-all"
             >
               <FaRocket />
-              Postular Ahora
+              Postular ahora
             </button>
           </motion.div>
         )}
@@ -665,9 +695,9 @@ export default function JobDetailPage() {
             className="max-w-4xl mx-auto space-y-6"
           >
             {/* Description */}
-            <div className="bg-primary-900/50 backdrop-blur-sm rounded-2xl border border-primary-700/50 p-6 md:p-8 hover:border-primary-600/50 transition-colors">
+            <div className="panel-hud p-6 md:p-8">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-accent-electric/20 rounded-xl flex items-center justify-center">
+                <div className="w-10 h-10 bg-accent-electric/10 border border-accent-electric/40 flex items-center justify-center" style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}>
                   <FaFileAlt className="text-accent-electric" />
                 </div>
                 <h2 className="text-xl md:text-2xl font-display font-bold text-white">
@@ -681,10 +711,10 @@ export default function JobDetailPage() {
 
             {/* Requirements */}
             {requisitos.length > 0 && (
-              <div className="bg-primary-900/50 backdrop-blur-sm rounded-2xl border border-primary-700/50 p-6 md:p-8 hover:border-primary-600/50 transition-colors">
+              <div className="panel-hud p-6 md:p-8">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
-                    <FaCheckCircle className="text-blue-400" />
+                  <div className="w-10 h-10 bg-accent-electric/10 border border-accent-electric/40 flex items-center justify-center" style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}>
+                    <FaCheckCircle className="text-accent-electric" />
                   </div>
                   <h2 className="text-xl md:text-2xl font-display font-bold text-white">
                     Requisitos
@@ -699,8 +729,8 @@ export default function JobDetailPage() {
                       transition={{ delay: 0.1 * index }}
                       className="flex items-start gap-4 text-primary-300"
                     >
-                      <span className="w-6 h-6 bg-blue-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <FaCheckCircle className="text-xs text-blue-400" />
+                      <span className="w-6 h-6 border border-accent-electric/40 bg-accent-electric/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <FaCheckCircle className="text-xs text-accent-electric" />
                       </span>
                       <span className="text-base md:text-lg">{req}</span>
                     </motion.li>
@@ -711,9 +741,9 @@ export default function JobDetailPage() {
 
             {/* Benefits */}
             {beneficios.length > 0 && (
-              <div className="bg-gradient-to-br from-accent-energy/10 to-green-500/10 backdrop-blur-sm rounded-2xl border border-accent-energy/30 p-6 md:p-8 hover:border-accent-energy/50 transition-colors">
+              <div className="panel-hud !border-accent-energy/30 p-6 md:p-8">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-accent-energy/20 rounded-xl flex items-center justify-center">
+                  <div className="w-10 h-10 bg-accent-energy/10 border border-accent-energy/40 flex items-center justify-center" style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}>
                     <FaGift className="text-accent-energy" />
                   </div>
                   <h2 className="text-xl md:text-2xl font-display font-bold text-white">
@@ -727,9 +757,9 @@ export default function JobDetailPage() {
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: 0.1 * index }}
-                      className="flex items-start gap-3 bg-primary-900/50 rounded-xl p-4 border border-primary-700/30"
+                      className="flex items-start gap-3 bg-primary-950/60 p-4 border border-primary-700/40"
                     >
-                      <span className="w-6 h-6 bg-accent-energy/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="w-6 h-6 border border-accent-energy/40 bg-accent-energy/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                         <FaStar className="text-xs text-accent-energy" />
                       </span>
                       <span className="text-primary-200">{benefit}</span>
@@ -751,6 +781,11 @@ export default function JobDetailPage() {
         >
           {/* Section Header */}
           <div className="text-center mb-8">
+            <p className="flex items-center justify-center gap-3 mb-3 font-mono text-xs tracking-[0.3em] uppercase text-accent-energy">
+              <span className="h-px w-10 bg-gradient-to-r from-accent-energy/0 to-accent-energy/70" />
+              Postulación
+              <span className="h-px w-10 bg-gradient-to-l from-accent-energy/0 to-accent-energy/70" />
+            </p>
             <h2 className="text-2xl md:text-3xl font-display font-bold text-white mb-2">
               ¿Listo para postular?
             </h2>
@@ -761,26 +796,26 @@ export default function JobDetailPage() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-6 relative overflow-hidden rounded-2xl border border-amber-400/40 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15"
+              className="panel-hud mb-6 relative overflow-hidden !border-accent-energy/40"
             >
               {/* Glow strip */}
-              <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-amber-400 to-transparent" />
+              <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-accent-energy to-transparent" />
 
               <div className="p-5 flex flex-col sm:flex-row items-center gap-5">
                 {/* Icon */}
-                <div className="w-14 h-14 rounded-xl bg-amber-400/20 border border-amber-400/30 flex items-center justify-center flex-shrink-0">
-                  <FaFilePdf className="text-amber-400 text-2xl" />
+                <div className="w-14 h-14 bg-accent-energy/10 border border-accent-energy/40 flex items-center justify-center flex-shrink-0" style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}>
+                  <FaFilePdf className="text-accent-energy text-2xl" />
                 </div>
 
                 {/* Text */}
                 <div className="flex-1 text-center sm:text-left">
                   <div className="flex items-center gap-2 justify-center sm:justify-start mb-1">
-                    <span className="text-amber-400 text-xs font-bold uppercase tracking-widest">Lectura obligatoria</span>
+                    <span className="font-mono text-accent-energy text-[11px] font-bold uppercase tracking-[0.25em]">Lectura obligatoria</span>
                   </div>
                   <p className="text-white font-bold text-base">Ficha Oficial de Postulación</p>
                   <p className="text-primary-300 text-sm mt-0.5">
                     Contiene requisitos detallados, funciones, documentos necesarios y pasos del proceso.
-                    <span className="text-amber-400 font-medium"> Léela antes de postular.</span>
+                    <span className="text-accent-energy font-medium"> Léela antes de postular.</span>
                   </p>
                 </div>
 
@@ -790,26 +825,27 @@ export default function JobDetailPage() {
                     href={job.pdf_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-white font-semibold rounded-xl transition-all shadow-lg shadow-amber-500/30 text-sm"
+                    className="btn-energy btn-hud gap-2 text-sm"
                   >
                     <FaDownload />
-                    Ver Ficha
+                    Ver ficha
                   </a>
                 </div>
               </div>
 
               {/* Bottom strip */}
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-accent-energy/50 to-transparent" />
             </motion.div>
           )}
 
-          <div className="bg-gradient-to-b from-primary-800/50 to-primary-900/50 backdrop-blur-sm rounded-2xl border border-primary-700/50 overflow-hidden">
+          <div className="panel-hud overflow-hidden">
             {/* Form Header */}
-            <div className={`bg-gradient-to-r ${categoryInfo.color} p-6`}>
+            <div className="border-b border-primary-700/60 bg-primary-950/60 p-6">
+              <p className="font-mono text-[10px] tracking-[0.3em] uppercase text-accent-energy mb-2">Formulario de postulación</p>
               <h3 className="text-xl font-display font-bold text-white mb-1">
                 {job.titulo}
               </h3>
-              <p className="text-white/80 text-sm">
+              <p className="text-primary-300 text-sm">
                 Ingeniería Telcom EIRL · {job.ubicacion}
               </p>
             </div>
@@ -824,21 +860,21 @@ export default function JobDetailPage() {
                 ].map(({ s, label }) => (
                   <div key={s} className="flex items-center gap-2">
                     <div className="flex flex-col items-center gap-1">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                      <div className={`w-9 h-9 flex items-center justify-center font-mono text-sm font-bold transition-all ${
                         step === s
-                          ? 'bg-accent-electric text-primary-950 scale-110'
+                          ? 'bg-accent-electric text-primary-950 shadow-[0_0_16px_rgba(0,212,255,0.5)]'
                           : step > s
-                          ? 'bg-green-500 text-white'
-                          : 'bg-primary-700 text-primary-400'
-                      }`}>
+                          ? 'bg-accent-success text-primary-950'
+                          : 'bg-primary-900 border border-primary-700 text-primary-400'
+                      }`} style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}>
                         {step > s ? '✓' : s}
                       </div>
-                      <span className={`text-xs ${step >= s ? 'text-accent-electric' : 'text-primary-300'}`}>
+                      <span className={`font-mono text-[10px] tracking-[0.2em] uppercase ${step >= s ? 'text-accent-electric' : 'text-primary-400'}`}>
                         {label}
                       </span>
                     </div>
                     {s < 3 && (
-                      <div className={`w-12 h-0.5 mb-4 ${step > s ? 'bg-green-500' : 'bg-primary-700'}`} />
+                      <div className={`w-10 sm:w-14 h-px mb-5 ${step > s ? 'bg-accent-success' : 'bg-primary-700'}`} />
                     )}
                   </div>
                 ))}
@@ -848,7 +884,7 @@ export default function JobDetailPage() {
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-xl"
+                  className="mb-6 p-4 bg-red-500/10 border border-red-500/50"
                 >
                   <p className="text-red-400 text-sm flex items-center gap-2">
                     <FaExclamationTriangle />
@@ -872,7 +908,7 @@ export default function JobDetailPage() {
                         <input
                           {...register('fullName')}
                           placeholder="Nombre completo *"
-                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                          className={`${inputHud} pl-11`}
                         />
                         {errors.fullName && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.fullName.message}</p>}
                       </div>
@@ -883,7 +919,7 @@ export default function JobDetailPage() {
                           {...register('dni')}
                           placeholder="DNI (8 dígitos) *"
                           maxLength={8}
-                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                          className={`${inputHud} pl-11`}
                         />
                         {errors.dni && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.dni.message}</p>}
                       </div>
@@ -894,7 +930,7 @@ export default function JobDetailPage() {
                           {...register('email')}
                           type="email"
                           placeholder="Email *"
-                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                          className={`${inputHud} pl-11`}
                         />
                         {errors.email && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.email.message}</p>}
                       </div>
@@ -904,7 +940,7 @@ export default function JobDetailPage() {
                         <input
                           {...register('phone')}
                           placeholder="Teléfono *"
-                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                          className={`${inputHud} pl-11`}
                         />
                         {errors.phone && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.phone.message}</p>}
                       </div>
@@ -914,11 +950,11 @@ export default function JobDetailPage() {
                         <input
                           {...register('linkedIn')}
                           placeholder="LinkedIn (opcional)"
-                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                          className={`${inputHud} pl-11`}
                         />
                       </div>
 
-                      <Button type="button" onClick={handleNextStep} className="w-full py-3.5">
+                      <Button type="button" onClick={handleNextStep} className="btn-hud w-full py-3.5">
                         Continuar
                       </Button>
                     </motion.div>
@@ -933,16 +969,16 @@ export default function JobDetailPage() {
                       className="space-y-4"
                     >
                       <div>
-                        <label className="block text-sm text-primary-300 mb-2 font-medium">
-                          Curriculum Vitae (PDF, DOC, DOCX)
+                        <label className={labelHud}>
+                          Currículum vitae (PDF, DOC, DOCX)
                         </label>
                         <label
-                          className={`flex flex-col items-center justify-center w-full min-h-32 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+                          className={`flex flex-col items-center justify-center w-full min-h-32 border-2 border-dashed cursor-pointer transition-all ${
                             isDragging
-                              ? 'border-accent-electric bg-accent-electric/20 scale-[1.02]'
+                              ? 'border-accent-electric bg-accent-electric/15'
                               : cvFile
                               ? 'border-accent-electric bg-accent-electric/10'
-                              : 'border-primary-600 hover:border-accent-electric hover:bg-primary-800/50'
+                              : 'border-primary-700 bg-primary-950/50 hover:border-accent-electric hover:bg-primary-900/60'
                           }`}
                           onDragOver={handleDragOver}
                           onDragLeave={handleDragLeave}
@@ -960,7 +996,7 @@ export default function JobDetailPage() {
                               <span className={`text-sm font-medium transition-colors ${isDragging ? 'text-accent-electric' : 'text-primary-400'}`}>
                                 {isDragging ? 'Suelta el archivo aquí' : 'Haz clic o arrastra tu CV aquí'}
                               </span>
-                              <span className="text-xs text-primary-600 mt-1">PDF, DOC, DOCX · Max 10MB</span>
+                              <span className="text-xs text-primary-600 mt-1">PDF, DOC, DOCX · Máx. 10 MB</span>
                             </div>
                           )}
                           <input
@@ -973,22 +1009,22 @@ export default function JobDetailPage() {
                       </div>
 
                       <div>
-                        <label className="block text-sm text-primary-300 mb-2 font-medium">
+                        <label className={labelHud}>
                           Carta de presentación (opcional)
                         </label>
                         <textarea
                           {...register('coverLetter')}
                           placeholder="Cuéntanos por qué eres ideal para este puesto..."
                           rows={4}
-                          className="w-full px-4 py-3 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric resize-none transition-all"
+                          className={`${inputHud} resize-none`}
                         />
                       </div>
 
                       <div className="flex gap-3">
-                        <Button type="button" variant="secondary" onClick={() => setStep(1)} className="flex-1 py-3">
-                          Atras
+                        <Button type="button" variant="secondary" onClick={() => setStep(1)} className="btn-hud flex-1 py-3">
+                          Atrás
                         </Button>
-                        <Button type="button" onClick={handleNextStep} className="flex-1 py-3">
+                        <Button type="button" onClick={handleNextStep} className="btn-hud flex-1 py-3">
                           Continuar
                         </Button>
                       </div>
@@ -1009,7 +1045,7 @@ export default function JobDetailPage() {
                           {...register('expectedSalary')}
                           placeholder="Pretensión salarial en S/ (opcional)"
                           type="number"
-                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric transition-all"
+                          className={`${inputHud} pl-11`}
                         />
                       </div>
 
@@ -1017,23 +1053,23 @@ export default function JobDetailPage() {
                         <FaClock className="absolute left-4 top-1/2 -translate-y-1/2 text-primary-500 pointer-events-none" />
                         <select
                           {...register('availability')}
-                          className="w-full pl-11 pr-4 py-3.5 bg-primary-800/50 border border-primary-700 rounded-xl text-white focus:outline-none focus:border-accent-electric focus:ring-1 focus:ring-accent-electric appearance-none cursor-pointer transition-all"
+                          className={`${inputHud} pl-11 appearance-none cursor-pointer`}
                         >
-                          <option value="" className="bg-primary-800">Disponibilidad para iniciar *</option>
-                          <option value="inmediata" className="bg-primary-800">Inmediata</option>
-                          <option value="1-semana" className="bg-primary-800">1 semana</option>
-                          <option value="2-semanas" className="bg-primary-800">2 semanas</option>
-                          <option value="1-mes" className="bg-primary-800">1 mes</option>
+                          <option value="" className="bg-primary-900">Disponibilidad para iniciar *</option>
+                          <option value="inmediata" className="bg-primary-900">Inmediata</option>
+                          <option value="1-semana" className="bg-primary-900">1 semana</option>
+                          <option value="2-semanas" className="bg-primary-900">2 semanas</option>
+                          <option value="1-mes" className="bg-primary-900">1 mes</option>
                         </select>
                         {errors.availability && <p className="text-red-400 text-xs mt-1.5 ml-1">{errors.availability.message}</p>}
                       </div>
 
-                      <div className="bg-primary-800/30 rounded-xl p-4 border border-primary-700/50">
+                      <div className="bg-primary-950/60 p-4 border border-primary-700/50">
                         <label className="flex items-start gap-3 cursor-pointer">
                           <input
                             {...register('terms')}
                             type="checkbox"
-                            className="mt-1 w-4 h-4 rounded border-primary-600 text-accent-electric focus:ring-accent-electric focus:ring-offset-0 bg-primary-800"
+                            className="mt-1 w-4 h-4 border-primary-600 text-accent-electric focus:ring-accent-electric focus:ring-offset-0 bg-primary-900"
                           />
                           <span className="text-sm text-primary-300 leading-relaxed">
                             Acepto los <span className="text-accent-electric">términos y condiciones</span> y autorizo el tratamiento de mis datos personales para fines de selección.
@@ -1043,13 +1079,13 @@ export default function JobDetailPage() {
                       </div>
 
                       <div className="flex gap-3">
-                        <Button type="button" variant="secondary" onClick={() => setStep(2)} className="flex-1 py-3">
-                          Atras
+                        <Button type="button" variant="secondary" onClick={() => setStep(2)} className="btn-hud flex-1 py-3">
+                          Atrás
                         </Button>
                         <Button
                           type="submit"
                           isLoading={isSubmitting}
-                          className="flex-1 py-3"
+                          className="btn-hud flex-1 py-3"
                         >
                           {isSubmitting ? (
                             <span className="flex items-center justify-center gap-2">
@@ -1059,7 +1095,7 @@ export default function JobDetailPage() {
                           ) : (
                             <span className="flex items-center justify-center gap-2">
                               <FaPaperPlane />
-                              Enviar Postulación
+                              Enviar postulación
                             </span>
                           )}
                         </Button>

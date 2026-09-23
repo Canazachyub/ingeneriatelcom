@@ -87,4 +87,22 @@ export const missionVision = {
     { title: 'Mejora Continua', description: 'Nos esforzamos por perfeccionar nuestro trabajo diariamente.' },
     { title: 'Innovación', description: 'Buscamos constantemente nuevas soluciones y formas de trabajar.' },
   ],
+  // Texto oficial (antes vivía en el componente, sin tildes).
+  qualityPolicy: 'En Ingeniería Telcom EIRL nos comprometemos a brindar servicios de telecomunicaciones y electricidad de calidad, cumpliendo con los requisitos de nuestros clientes y las normas legales vigentes. Para ello, nos esforzamos por mejorar continuamente nuestros procesos y la eficacia de nuestro sistema de gestión de calidad.',
 }
+
+// Normas del Código de Ética (texto oficial, con tildes corregidas).
+export const ethicsNorms = [
+  {
+    title: 'Ámbito de aplicación',
+    description: 'Este código establece pautas básicas de comportamiento ético, complementando las disposiciones legales y reglamentarias vigentes.',
+  },
+  {
+    title: 'Pautas de comportamiento',
+    description: 'Esperamos que nuestros empleados actúen conforme a los valores de la empresa, evitando conflictos de interés y actuando con lealtad.',
+  },
+  {
+    title: 'Medidas disciplinarias',
+    description: 'Frente a cualquier acto que viole este Código, el área de RR. HH. tomará las medidas disciplinarias correspondientes.',
+  },
+]
