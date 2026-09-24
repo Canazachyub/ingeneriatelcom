@@ -24,8 +24,20 @@ const LENTO_MS = 20000
 let fallas = 0
 let avisos = 0
 
-// Mismo protocolo que src/api/appScriptApi.ts: GET con ?payload, POST text/plain
+// Mismo protocolo que src/api/appScriptApi.ts: GET con ?payload, POST text/plain.
+// Si Google responde su página de error HTML (fallo pasajero de Apps Script),
+// se reintenta UNA vez, igual que el cliente del panel; queda registrado.
+let reintentos = 0
 async function llamar(action, method = 'GET', data) {
+  const r = await llamarUnaVez(action, method, data)
+  if (r.json !== null) return r
+  reintentos++
+  await new Promise((res) => setTimeout(res, 1500))
+  const r2 = await llamarUnaVez(action, method, data)
+  return { ...r2, ms: r.ms + r2.ms }
+}
+
+async function llamarUnaVez(action, method = 'GET', data) {
   const url = new URL(URL_API)
   url.searchParams.set('action', action)
   const t0 = Date.now()
@@ -129,5 +141,6 @@ for (const accion of ['getSueldos', 'getAsistenciasV2', 'getApplicationsAdmin', 
   })
 }
 
+if (reintentos) console.log(`\nNota: ${reintentos} respuesta(s) con página de error de Google se reintentaron (fallo pasajero de Apps Script).`)
 console.log(`\n${fallas === 0 ? '✔ SIN FALLAS' : `✘ ${fallas} FALLA(S)`} · ${avisos} aviso(s)`)
 process.exit(fallas ? 1 : 0)
