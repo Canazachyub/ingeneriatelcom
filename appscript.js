@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-24T18:43:19.021Z con tools/build-backend.mjs
+// Generado: 2026-09-24T18:51:36.126Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -610,7 +610,7 @@ function verifyTokenAction(token) {
 
     for (let i = 1; i < users.length; i++) {
       const row = users[i];
-      let id, nombre, email, rol, isActive, employeeId;
+      let id, nombre, email, rol, isActive, employeeId, permisos;
 
       if (isStructureA) {
         // Estructura A (8 cols): id, email, password, name, role, employeeId, active, createdAt
@@ -620,6 +620,7 @@ function verifyTokenAction(token) {
         rol = row[4];
         employeeId = row[5] || null;
         isActive = row[6] === true || row[6] === 'true' || row[6] === 'activo' || row[6] === 'TRUE';
+        permisos = rol === 'admin' ? ['all'] : [];
       } else {
         // Estructura B (10 cols): id, nombre, email, password, rol, permisos, estado, ...
         id = row[0];
@@ -628,6 +629,7 @@ function verifyTokenAction(token) {
         rol = row[4];
         employeeId = row[9] || null;
         isActive = row[6] === 'activo';
+        permisos = row[5] ? row[5].toString().split(',').map(function (p) { return p.trim(); }) : [];
       }
 
       if (id === userId && isActive) {
@@ -639,6 +641,9 @@ function verifyTokenAction(token) {
               name: nombre,
               email: email,
               role: rol,
+              // Mismos permisos que devuelve login: sin esto, al recargar la
+              // pagina el menu perdia las secciones concedidas por permiso.
+              permisos: permisos,
               employeeId: employeeId
             }
           }
@@ -648,7 +653,10 @@ function verifyTokenAction(token) {
 
     return { success: false, error: 'Usuario no encontrado' };
   } catch (e) {
-    return { success: false, error: 'Error verificando token: ' + e.message };
+    // Fallo al leer la hoja (Google lento): NO es un token invalido. Con el
+    // mensaje anterior el panel cerraba la sesion; "ocupado" hace que reintente.
+    console.error('verifyTokenAction: ' + e.message);
+    return { success: false, error: 'Servidor ocupado, intenta de nuevo en unos segundos' };
   }
 }
 

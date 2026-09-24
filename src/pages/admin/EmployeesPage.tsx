@@ -15,12 +15,14 @@ import {
   FaSortDown,
   FaExclamationTriangle,
   FaUsers,
+  FaCopy,
 } from 'react-icons/fa'
 import { api, Employee } from '../../api/appScriptApi'
 import { useEmployees, queryKeys } from '../../hooks/queries'
 import AdminLayout from '../../components/admin/AdminLayout'
 import TableSkeleton from '../../components/common/TableSkeleton'
 import EmptyState from '../../components/common/EmptyState'
+import { useToast } from '../../context/ToastContext'
 
 const cities = ['Tacna', 'Puno', 'Arequipa', 'Lima', 'Cusco', 'Juliaca']
 const departments = ['Software', 'Ingenieria Electrica', 'TIC', 'Mineria', 'Administracion']
@@ -144,6 +146,11 @@ export default function EmployeesPage() {
   const [transferData, setTransferData] = useState({ newCity: '', newDepartment: '' })
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
+  const toast = useToast()
+  // Credenciales recién creadas: se muestran UNA vez en un modal (antes en un
+  // alert() que no dejaba copiar y quedaba a la vista de cualquiera).
+  const [credenciales, setCredenciales] = useState<{ nombre: string; email: string; tempPassword: string } | null>(null)
+  const [creandoCredenciales, setCreandoCredenciales] = useState<string | null>(null)
 
   // ─── Derived area list from actual data ──────────────────────────────────────
   const areaOptions = useMemo(() => {
@@ -286,13 +293,26 @@ export default function EmployeesPage() {
   }
 
   const handleCreateCredentials = async (employee: RawEmployee) => {
-    if (!confirm(`Crear credenciales para ${getEmpName(employee)}?`)) return
+    if (creandoCredenciales) return
+    if (!confirm(`¿Crear credenciales de acceso para ${getEmpName(employee)}? Se enviará una contraseña temporal a su correo.`)) return
 
+    setCreandoCredenciales(employee.id)
     const result = await api.createEmployeeCredentials(employee.id)
+    setCreandoCredenciales(null)
     if (result.success && result.data) {
-      alert(`Credenciales creadas:\nEmail: ${result.data.email}\nContrasena temporal: ${result.data.tempPassword}`)
+      setCredenciales({ nombre: getEmpName(employee), email: result.data.email, tempPassword: result.data.tempPassword })
     } else {
-      setMessage({ type: 'error', text: result.error || 'Error al crear credenciales' })
+      toast.error(`No se pudieron crear las credenciales: ${result.error || 'error desconocido'}`)
+    }
+  }
+
+  const copiarCredenciales = async () => {
+    if (!credenciales) return
+    try {
+      await navigator.clipboard.writeText(`Usuario: ${credenciales.email}\nContraseña temporal: ${credenciales.tempPassword}`)
+      toast.success('Credenciales copiadas')
+    } catch {
+      toast.error('No se pudo copiar: selecciona el texto y cópialo manualmente')
     }
   }
 
@@ -527,10 +547,12 @@ export default function EmployeesPage() {
                           </button>
                           <button
                             onClick={() => handleCreateCredentials(employee)}
-                            className="p-2 text-primary-400 hover:text-accent-electric hover:bg-primary-800 rounded-lg transition-colors"
-                            title="Crear Credenciales"
+                            disabled={!!creandoCredenciales}
+                            className="p-2 text-primary-400 hover:text-accent-electric hover:bg-primary-800 rounded-lg transition-colors disabled:opacity-40"
+                            title="Crear credenciales"
+                            aria-label={`Crear credenciales para ${getEmpName(employee)}`}
                           >
-                            <FaKey size={14} />
+                            {creandoCredenciales === employee.id ? <FaSpinner size={14} className="animate-spin" /> : <FaKey size={14} />}
                           </button>
                         </div>
                       </td>
@@ -729,6 +751,66 @@ export default function EmployeesPage() {
                     </button>
                   </div>
                 </form>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Credenciales creadas (se muestran una sola vez) ── */}
+        <AnimatePresence>
+          {credenciales && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="titulo-credenciales"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-primary-900 border border-primary-700 rounded-2xl w-full max-w-md p-6 shadow-2xl"
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-accent-electric/15 flex items-center justify-center">
+                    <FaKey className="text-accent-electric" />
+                  </div>
+                  <div>
+                    <h2 id="titulo-credenciales" className="text-lg font-display font-semibold text-white">Credenciales creadas</h2>
+                    <p className="text-primary-400 text-sm">{credenciales.nombre}</p>
+                  </div>
+                </div>
+                <div className="space-y-3 bg-primary-950/70 border border-primary-800 rounded-xl p-4 font-mono text-sm">
+                  <div>
+                    <p className="text-primary-500 text-xs mb-0.5">Usuario</p>
+                    <p className="text-white select-all break-all">{credenciales.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-primary-500 text-xs mb-0.5">Contraseña temporal</p>
+                    <p className="text-accent-electric text-base select-all break-all">{credenciales.tempPassword}</p>
+                  </div>
+                </div>
+                <p className="flex items-start gap-2 text-amber-300/90 text-xs mt-4">
+                  <FaExclamationTriangle className="mt-0.5 shrink-0" />
+                  Se envió también por correo al trabajador. Esta contraseña no se volverá a mostrar: cópiala ahora si la necesitas.
+                </p>
+                <div className="flex gap-3 mt-5">
+                  <button
+                    onClick={copiarCredenciales}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary-800 hover:bg-primary-700 text-white text-sm font-medium transition-colors"
+                  >
+                    <FaCopy /> Copiar
+                  </button>
+                  <button
+                    onClick={() => setCredenciales(null)}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-accent-electric text-primary-950 text-sm font-semibold hover:brightness-110 transition"
+                  >
+                    Listo
+                  </button>
+                </div>
               </motion.div>
             </motion.div>
           )}

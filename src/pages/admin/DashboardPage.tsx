@@ -1,398 +1,455 @@
-import { useEffect } from 'react'
-import { useToast } from '../../context/ToastContext'
+import { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import {
   FaUsers,
   FaProjectDiagram,
   FaFileAlt,
   FaCheckCircle,
   FaMapMarkerAlt,
-  FaSpinner,
   FaClock,
   FaBriefcase,
   FaUserCheck,
-  FaUserTimes,
-  FaCalendarAlt,
-  FaArrowRight,
   FaExclamationTriangle,
   FaChartLine,
   FaEnvelope,
-  FaPlus,
   FaGraduationCap,
   FaClipboardList,
+  FaFileInvoiceDollar,
+  FaPaperclip,
+  FaRedo,
+  FaArrowRight,
+  FaTabletAlt,
+  FaCalendarAlt,
 } from 'react-icons/fa'
-import { DashboardStats } from '../../api/appScriptApi'
-import { useDashboardStats, useAttendanceToday } from '../../hooks/queries'
 import AdminLayout from '../../components/admin/AdminLayout'
+import { useAuth } from '../../context/AuthContext'
+import { esAdmin, nombreDe } from '../../utils/roles'
+import {
+  useDashboardStats,
+  useAttendanceToday,
+  useIncidenciasMes,
+  useApplicationsAdmin,
+  useContacts,
+  useJustificacionesRecientes,
+  useJobsAdmin,
+  useEvaluacionesAdmin,
+} from '../../hooks/queries'
 
-const statCards = [
-  { key: 'totalEmployees', label: 'Empleados Activos', icon: FaUsers, color: 'from-blue-500 to-blue-600', bgColor: 'bg-blue-500/10' },
-  { key: 'activeProjects', label: 'Proyectos Activos', icon: FaProjectDiagram, color: 'from-green-500 to-emerald-600', bgColor: 'bg-green-500/10' },
-  { key: 'pendingApplications', label: 'Postulaciones Pendientes', icon: FaFileAlt, color: 'from-amber-500 to-orange-600', bgColor: 'bg-amber-500/10' },
-  { key: 'completedProjects', label: 'Proyectos Completados', icon: FaCheckCircle, color: 'from-purple-500 to-violet-600', bgColor: 'bg-purple-500/10' },
+// ── Centro de actividades ────────────────────────────────────────────────────
+// Lo primero que ve el equipo al entrar: qué requiere atención HOY, con un
+// enlace directo a donde se resuelve. Cada bloque carga por su cuenta; si uno
+// falla muestra "no se pudo cargar" (nunca un 0 que parezca "no hay nada").
+
+// Fecha local en formato ISO (yyyy-mm-dd), no UTC: a las 19:00 de Lima el UTC
+// ya es el día siguiente.
+const isoLocal = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+const saludo = () => {
+  const h = new Date().getHours()
+  if (h < 12) return 'Buenos días'
+  if (h < 19) return 'Buenas tardes'
+  return 'Buenas noches'
+}
+
+const texto = (v: unknown) => String(v ?? '').toLowerCase().trim()
+
+interface EstadoConsulta {
+  isLoading: boolean
+  isError: boolean
+  error?: unknown
+  refetch: () => unknown
+}
+
+// Tarjeta de "requiere atención". `valor` es la cifra principal; `alerta`
+// resalta la tarjeta cuando hay algo pendiente.
+function Pendiente({
+  titulo,
+  icono,
+  href,
+  consulta,
+  valor,
+  unidad,
+  detalle,
+  alerta,
+  accion,
+}: {
+  titulo: string
+  icono: ReactNode
+  href: string
+  consulta: EstadoConsulta
+  valor?: number | string
+  unidad?: string
+  detalle?: ReactNode
+  alerta?: boolean
+  accion: string
+}) {
+  const borde = consulta.isError
+    ? 'border-rose-500/30'
+    : alerta
+    ? 'border-accent-energy/50 shadow-[0_0_24px_rgba(251,191,36,0.08)]'
+    : 'border-primary-700/50'
+
+  return (
+    <div className={`relative flex flex-col bg-primary-900/40 backdrop-blur-sm border ${borde} p-5 transition-colors hover:border-accent-electric/40`}>
+      <div className="flex items-center gap-2.5 mb-4">
+        <span className={`w-9 h-9 flex items-center justify-center border ${alerta ? 'text-accent-energy border-accent-energy/40 bg-accent-energy/10' : 'text-accent-electric border-accent-electric/30 bg-accent-electric/10'}`}>
+          {icono}
+        </span>
+        <h3 className="font-mono text-[11px] tracking-[0.18em] uppercase text-primary-300">{titulo}</h3>
+        {alerta && !consulta.isError && !consulta.isLoading && (
+          <span className="ml-auto w-2 h-2 rounded-full bg-accent-energy animate-pulse" aria-label="Requiere atención" />
+        )}
+      </div>
+
+      {consulta.isLoading ? (
+        <div className="space-y-2 animate-pulse" aria-busy="true">
+          <div className="h-8 w-16 bg-primary-800/70" />
+          <div className="h-3 w-3/4 bg-primary-800/50" />
+        </div>
+      ) : consulta.isError ? (
+        <div className="text-sm">
+          <p className="text-rose-300 flex items-center gap-1.5">
+            <FaExclamationTriangle /> No se pudo cargar
+          </p>
+          <p className="text-primary-500 text-xs mt-1">Los datos siguen en el servidor.</p>
+          <button
+            onClick={() => consulta.refetch()}
+            className="mt-3 inline-flex items-center gap-1.5 text-xs text-accent-electric hover:underline"
+          >
+            <FaRedo /> Reintentar
+          </button>
+        </div>
+      ) : (
+        <>
+          <p className="text-3xl font-display font-bold text-white tabular-nums">
+            {valor}
+            {unidad && <span className="ml-1.5 text-sm font-body font-normal text-primary-400">{unidad}</span>}
+          </p>
+          {detalle && <div className="mt-1.5 text-xs text-primary-400 leading-relaxed">{detalle}</div>}
+        </>
+      )}
+
+      <Link
+        to={href}
+        className="mt-auto pt-4 inline-flex items-center gap-1.5 text-xs font-medium text-accent-electric hover:gap-2.5 transition-all"
+      >
+        {accion} <FaArrowRight className="text-[10px]" />
+      </Link>
+    </div>
+  )
+}
+
+function Kpi({ etiqueta, valor, icono, cargando, error }: { etiqueta: string; valor?: number; icono: ReactNode; cargando: boolean; error: boolean }) {
+  return (
+    <div className="panel-hud p-4 md:p-5">
+      <div className="flex items-center justify-between mb-2 text-accent-electric">{icono}</div>
+      <p className="text-2xl md:text-3xl font-display font-bold text-white tabular-nums">
+        {cargando ? <span className="inline-block h-7 w-10 bg-primary-800/70 animate-pulse align-middle" /> : error ? '—' : valor ?? 0}
+      </p>
+      <p className="font-mono text-[10px] tracking-[0.18em] uppercase text-primary-400 mt-1">{etiqueta}</p>
+    </div>
+  )
+}
+
+const ACCESOS: { nombre: string; href: string; icono: ReactNode; externo?: boolean; soloAdmin?: boolean }[] = [
+  { nombre: 'Asistencias', href: '/admin/asistencias', icono: <FaClock /> },
+  { nombre: 'Planilla', href: '/admin/planilla', icono: <FaFileInvoiceDollar />, soloAdmin: true },
+  { nombre: 'Empleados', href: '/admin/empleados', icono: <FaUsers /> },
+  { nombre: 'Proyectos', href: '/admin/proyectos', icono: <FaProjectDiagram /> },
+  { nombre: 'Bolsa de trabajo', href: '/admin/bolsa-trabajo', icono: <FaBriefcase /> },
+  { nombre: 'Postulaciones', href: '/admin/postulaciones', icono: <FaFileAlt /> },
+  { nombre: 'Mensajes', href: '/admin/mensajes', icono: <FaEnvelope /> },
+  { nombre: 'Cursos', href: '/admin/capacitaciones', icono: <FaGraduationCap /> },
+  { nombre: 'Evaluaciones', href: '/admin/evaluaciones', icono: <FaClipboardList /> },
+  { nombre: 'Reportes', href: '/admin/reportes', icono: <FaChartLine /> },
+  { nombre: 'Kiosko', href: '/asistencia', icono: <FaTabletAlt />, externo: true },
 ]
 
+const ESTADO_PROYECTO: Record<string, { label: string; color: string }> = {
+  planning: { label: 'Planificación', color: 'text-sky-300' },
+  in_progress: { label: 'En progreso', color: 'text-emerald-300' },
+  completed: { label: 'Completados', color: 'text-violet-300' },
+  on_hold: { label: 'En espera', color: 'text-amber-300' },
+}
+
 export default function DashboardPage() {
-  const toast = useToast()
+  const { user } = useAuth()
+  const admin = esAdmin(user)
+  const reducir = useReducedMotion()
 
-  const { data: stats, isLoading: isLoadingStats, error: statsError } = useDashboardStats()
-  const { data: attendance, isLoading: isLoadingAttendance } = useAttendanceToday()
+  const hoy = new Date()
+  const inicioMes = isoLocal(new Date(hoy.getFullYear(), hoy.getMonth(), 1))
+  const hace7 = isoLocal(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 7))
+  const hoyISO = isoLocal(hoy)
 
-  const isLoading = isLoadingStats || isLoadingAttendance
-  const error = statsError ? (statsError as Error).message || 'Error al cargar estadisticas' : ''
+  const stats = useDashboardStats()
+  const asistencia = useAttendanceToday()
+  // Carga escalonada: primero los indicadores y la asistencia de hoy; los
+  // pendientes se piden cuando esa primera tanda terminó. Apps Script se pone
+  // lento (y falla de a ratos) con 8+ consultas simultáneas del mismo usuario.
+  const segundaTanda = !stats.isLoading && !asistencia.isLoading
+  const incidencias = useIncidenciasMes(inicioMes, hoyISO, admin && segundaTanda)
+  const postulaciones = useApplicationsAdmin(segundaTanda)
+  const mensajes = useContacts(segundaTanda)
+  const justificaciones = useJustificacionesRecientes(hace7, segundaTanda)
+  const convocatorias = useJobsAdmin(segundaTanda)
+  const evaluaciones = useEvaluacionesAdmin(segundaTanda)
 
-  useEffect(() => {
-    if (!sessionStorage.getItem('admin_welcomed')) {
-      toast.info('Panel de administración cargado correctamente')
-      sessionStorage.setItem('admin_welcomed', 'true')
-    }
-  }, [])
+  // ── Cálculos por bloque ──
+  const totalHoy = asistencia.data?.totalEmpleados ?? 0
+  const presentesHoy = asistencia.data?.presentes ?? 0
+  const ausentesHoy = Math.max(0, totalHoy - presentesHoy)
 
-  const getGreeting = () => {
-    const hour = new Date().getHours()
-    if (hour < 12) return 'Buenos dias'
-    if (hour < 18) return 'Buenas tardes'
-    return 'Buenas noches'
-  }
+  const incPend = (incidencias.data || []).filter((i) => texto(i.estado) === 'pendiente')
+  const incGraves = incPend.filter((i) => i.grave === true || texto(i.grave) === 'true').length
 
-  const attendancePercentage = attendance && attendance.totalEmpleados > 0
-    ? Math.round((attendance.presentes / attendance.totalEmpleados) * 100)
-    : 0
+  // Postulaciones "sin revisar": pendiente, o sin estado (filas afectadas por el
+  // antiguo fallo que guardaba el estado vacío).
+  const postSinRevisar = (postulaciones.data || []).filter((p) => {
+    const e = texto(p.status ?? p.estado)
+    return e === '' || e === 'pendiente' || e === 'pending'
+  }).length
+
+  const msgPend = (mensajes.data || []).filter((m) => texto(m.estado) === 'pendiente').length
+  const justRecientes = justificaciones.data || []
+
+  const convActivas = (convocatorias.data || []).filter((c) => ['activo', 'active'].includes(texto(c.estado ?? c.status))).length
+  const convTotal = (convocatorias.data || []).length
+
+  const evalPorRevisar = (evaluaciones.data || []).filter((e) => texto(e.estado) === 'pendiente_revision').length
+
+  const s = stats.data
+  const aparecer = (i: number) =>
+    reducir ? {} : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.05 * i, duration: 0.35 } }
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-display font-bold text-white">
-              {getGreeting()}
-            </h1>
-            <p className="text-primary-400 mt-1">
-              Resumen de hoy, {new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <Link
-              to="/admin/empleados"
-              className="flex items-center gap-2 px-4 py-2 bg-accent-electric text-white rounded-lg hover:bg-accent-electric/90 transition-colors text-sm font-medium"
-            >
-              <FaPlus className="text-xs" />
-              Nuevo Empleado
-            </Link>
-          </div>
-        </div>
+      <div className="space-y-8 max-w-7xl">
+        {/* Encabezado */}
+        <header>
+          <p className="font-mono text-[11px] tracking-[0.3em] uppercase text-accent-electric/80 flex items-center gap-2">
+            <span className="h-px w-8 bg-gradient-to-r from-accent-electric/0 to-accent-electric/70" />
+            Centro de actividades
+          </p>
+          <h1 className="mt-2 text-2xl md:text-3xl font-display font-bold text-white">
+            {saludo()}, {nombreDe(user).split(' ')[0] || 'equipo'}
+          </h1>
+          <p className="text-primary-400 mt-1 text-sm capitalize">
+            {hoy.toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </p>
+        </header>
 
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl flex items-center gap-3"
-          >
-            <FaExclamationTriangle className="text-yellow-400" />
-            <span className="text-yellow-400 text-sm">{error}</span>
-          </motion.div>
-        )}
+        {/* KPIs */}
+        <section aria-label="Indicadores" className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+          <Kpi etiqueta="Empleados activos" valor={s?.totalEmployees} icono={<FaUsers />} cargando={stats.isLoading} error={stats.isError} />
+          <Kpi etiqueta="Presentes hoy" valor={presentesHoy} icono={<FaUserCheck />} cargando={asistencia.isLoading} error={asistencia.isError} />
+          <Kpi etiqueta="Proyectos activos" valor={s?.activeProjects} icono={<FaProjectDiagram />} cargando={stats.isLoading} error={stats.isError} />
+          <Kpi etiqueta="Convocatorias activas" valor={convActivas} icono={<FaBriefcase />} cargando={convocatorias.isLoading} error={convocatorias.isError} />
+        </section>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-24">
-            <div className="text-center">
-              <div className="relative inline-block">
-                <div className="w-16 h-16 border-4 border-accent-electric/20 rounded-full" />
-                <div className="w-16 h-16 border-4 border-accent-electric border-t-transparent rounded-full animate-spin absolute inset-0" />
-              </div>
-              <p className="text-primary-400 mt-4">Cargando dashboard...</p>
-            </div>
+        {/* Requieren atención */}
+        <section aria-labelledby="titulo-pendientes">
+          <h2 id="titulo-pendientes" className="font-mono text-xs tracking-[0.25em] uppercase text-primary-300 mb-4 flex items-center gap-3">
+            <FaExclamationTriangle className="text-accent-energy" />
+            Requieren atención
+            <span className="flex-1 h-px bg-gradient-to-r from-primary-700/70 to-transparent" />
+          </h2>
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <motion.div {...aparecer(0)}>
+              <Pendiente
+                titulo="Asistencia de hoy"
+                icono={<FaClock />}
+                href="/admin/asistencias"
+                consulta={asistencia}
+                valor={`${presentesHoy}/${totalHoy}`}
+                unidad="presentes"
+                alerta={ausentesHoy > 0}
+                detalle={ausentesHoy > 0 ? `${ausentesHoy} sin marcar aún` : 'Todo el personal marcó'}
+                accion="Ver marcas"
+              />
+            </motion.div>
+
+            {admin && (
+              <motion.div {...aparecer(1)}>
+                <Pendiente
+                  titulo="Incidencias pendientes"
+                  icono={<FaFileInvoiceDollar />}
+                  href="/admin/planilla"
+                  consulta={incidencias}
+                  valor={incPend.length}
+                  unidad="del mes"
+                  alerta={incPend.length > 0}
+                  detalle={incPend.length ? `${incGraves} grave${incGraves === 1 ? '' : 's'} · se vuelven injustificadas a las 48 h` : 'Sin incidencias por revisar'}
+                  accion="Revisar en planilla"
+                />
+              </motion.div>
+            )}
+
+            <motion.div {...aparecer(2)}>
+              <Pendiente
+                titulo="Justificaciones (7 días)"
+                icono={<FaPaperclip />}
+                href="/admin/asistencias"
+                consulta={justificaciones}
+                valor={justRecientes.length}
+                unidad="recibidas"
+                alerta={justRecientes.length > 0}
+                detalle={
+                  justRecientes.length
+                    ? justRecientes.slice(-3).map((j) => String(j.nombre || j.dni)).join(' · ')
+                    : 'Ninguna en la última semana'
+                }
+                accion="Ver justificaciones"
+              />
+            </motion.div>
+
+            <motion.div {...aparecer(3)}>
+              <Pendiente
+                titulo="Postulaciones sin revisar"
+                icono={<FaFileAlt />}
+                href="/admin/postulaciones"
+                consulta={postulaciones}
+                valor={postSinRevisar}
+                unidad={`de ${(postulaciones.data || []).length}`}
+                alerta={postSinRevisar > 0}
+                detalle={postSinRevisar ? 'Pendientes o sin estado asignado' : 'Todas revisadas'}
+                accion="Revisar postulaciones"
+              />
+            </motion.div>
+
+            <motion.div {...aparecer(4)}>
+              <Pendiente
+                titulo="Mensajes pendientes"
+                icono={<FaEnvelope />}
+                href="/admin/mensajes"
+                consulta={mensajes}
+                valor={msgPend}
+                unidad={`de ${(mensajes.data || []).length}`}
+                alerta={msgPend > 0}
+                detalle={msgPend ? 'Formulario de contacto sin responder' : 'Bandeja al día'}
+                accion="Abrir mensajes"
+              />
+            </motion.div>
+
+            <motion.div {...aparecer(5)}>
+              <Pendiente
+                titulo="Evaluaciones por calificar"
+                icono={<FaClipboardList />}
+                href="/admin/evaluaciones"
+                consulta={evaluaciones}
+                valor={evalPorRevisar}
+                unidad="enviadas"
+                alerta={evalPorRevisar > 0}
+                detalle={evalPorRevisar ? 'Exámenes esperando nota y retroalimentación' : 'Sin exámenes por calificar'}
+                accion="Calificar"
+              />
+            </motion.div>
+
+            <motion.div {...aparecer(6)}>
+              <Pendiente
+                titulo="Bolsa de trabajo"
+                icono={<FaBriefcase />}
+                href="/admin/bolsa-trabajo"
+                consulta={convocatorias}
+                valor={convActivas}
+                unidad={`activas de ${convTotal}`}
+                alerta={convActivas === 0}
+                detalle={convActivas === 0 ? 'La web pública no muestra ninguna oferta' : 'Visibles en la web pública'}
+                accion="Gestionar convocatorias"
+              />
+            </motion.div>
           </div>
-        ) : stats ? (
-          <>
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {statCards.map((card, index) => (
-                <motion.div
-                  key={card.key}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className={`relative overflow-hidden bg-primary-900/50 backdrop-blur-sm rounded-2xl border border-primary-800 p-6 hover:border-primary-700 transition-colors`}
-                >
-                  <div className={`absolute top-0 right-0 w-32 h-32 ${card.bgColor} rounded-full blur-3xl -translate-y-1/2 translate-x-1/2`} />
-                  <div className="relative">
-                    <div className={`w-12 h-12 bg-gradient-to-br ${card.color} rounded-xl flex items-center justify-center mb-4 shadow-lg`}>
-                      <card.icon className="text-xl text-white" />
+        </section>
+
+        {/* Personal y proyectos */}
+        <section className="grid lg:grid-cols-2 gap-4">
+          <div className="bg-primary-900/40 border border-primary-700/50 p-5">
+            <h3 className="font-mono text-[11px] tracking-[0.18em] uppercase text-primary-300 mb-4 flex items-center gap-2">
+              <FaMapMarkerAlt className="text-accent-electric" /> Personal por sede
+            </h3>
+            {stats.isLoading ? (
+              <div className="h-24 bg-primary-800/40 animate-pulse" />
+            ) : stats.isError ? (
+              <button onClick={() => stats.refetch()} className="text-sm text-rose-300 flex items-center gap-1.5">
+                <FaExclamationTriangle /> No se pudo cargar — <span className="text-accent-electric underline">reintentar</span>
+              </button>
+            ) : (
+              <div className="space-y-3">
+                {Object.entries(s?.employeesByCity || {}).map(([sede, n]) => (
+                  <div key={sede}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-primary-200">{sede}</span>
+                      <span className="text-white font-semibold tabular-nums">{n}</span>
                     </div>
-                    <p className="text-4xl font-display font-bold text-white mb-1 tabular-nums">
-                      {Number(stats[card.key as keyof DashboardStats]) || 0}
-                    </p>
-                    <p className="text-primary-400 text-sm">{card.label}</p>
+                    <div className="h-1.5 bg-primary-800">
+                      <div
+                        className="h-full bg-gradient-to-r from-primary-500 to-accent-electric"
+                        style={{ width: `${s && s.totalEmployees > 0 ? (n / s.totalEmployees) * 100 : 0}%` }}
+                      />
+                    </div>
                   </div>
-                </motion.div>
-              ))}
-            </div>
+                ))}
+                {Object.keys(s?.employeesByCity || {}).length === 0 && <p className="text-sm text-primary-500">Sin datos de sede</p>}
+              </div>
+            )}
+          </div>
 
-            {/* Asistencia de Hoy + Acciones Rapidas */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Asistencia Widget */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-                className="lg:col-span-1 bg-gradient-to-br from-accent-electric/20 to-blue-600/10 backdrop-blur-sm rounded-2xl border border-accent-electric/30 p-6"
-              >
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-display font-semibold text-white flex items-center gap-2">
-                    <FaClock className="text-accent-electric" />
-                    Asistencia Hoy
-                  </h3>
-                  <Link to="/admin/asistencias" className="text-accent-electric text-sm hover:underline flex items-center gap-1">
-                    Ver todo <FaArrowRight className="text-xs" />
-                  </Link>
-                </div>
+          <div className="bg-primary-900/40 border border-primary-700/50 p-5">
+            <h3 className="font-mono text-[11px] tracking-[0.18em] uppercase text-primary-300 mb-4 flex items-center gap-2">
+              <FaProjectDiagram className="text-accent-electric" /> Proyectos por estado
+            </h3>
+            {stats.isLoading ? (
+              <div className="h-24 bg-primary-800/40 animate-pulse" />
+            ) : stats.isError ? (
+              <button onClick={() => stats.refetch()} className="text-sm text-rose-300 flex items-center gap-1.5">
+                <FaExclamationTriangle /> No se pudo cargar — <span className="text-accent-electric underline">reintentar</span>
+              </button>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {Object.entries(s?.projectsByStatus || {}).map(([estado, n]) => {
+                  const cfg = ESTADO_PROYECTO[estado] || { label: estado, color: 'text-primary-300' }
+                  return (
+                    <div key={estado} className="border border-primary-700/40 bg-primary-950/40 p-3">
+                      <p className="text-2xl font-display font-bold text-white tabular-nums">{n}</p>
+                      <p className={`text-xs ${cfg.color}`}>{cfg.label}</p>
+                    </div>
+                  )
+                })}
+                {Object.keys(s?.projectsByStatus || {}).length === 0 && <p className="text-sm text-primary-500">Sin proyectos</p>}
+              </div>
+            )}
+          </div>
+        </section>
 
-                {attendance && (
-                  <>
-                    {/* Circular Progress */}
-                    <div className="flex items-center justify-center mb-6">
-                      <div className="relative w-32 h-32">
-                        <svg className="w-32 h-32 transform -rotate-90">
-                          <circle
-                            cx="64"
-                            cy="64"
-                            r="56"
-                            stroke="currentColor"
-                            strokeWidth="12"
-                            fill="none"
-                            className="text-primary-800"
-                          />
-                          <circle
-                            cx="64"
-                            cy="64"
-                            r="56"
-                            stroke="currentColor"
-                            strokeWidth="12"
-                            fill="none"
-                            strokeDasharray={`${2 * Math.PI * 56}`}
-                            strokeDashoffset={`${2 * Math.PI * 56 * (1 - attendancePercentage / 100)}`}
-                            className="text-accent-electric transition-all duration-1000"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-3xl font-bold text-white">{attendancePercentage}%</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Stats */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-green-500/10 rounded-xl p-4 text-center">
-                        <FaUserCheck className="text-2xl text-green-400 mx-auto mb-2" />
-                        <p className="text-2xl font-bold text-white">{attendance.presentes || 0}</p>
-                        <p className="text-xs text-primary-400">Presentes</p>
-                      </div>
-                      <div className="bg-red-500/10 rounded-xl p-4 text-center">
-                        <FaUserTimes className="text-2xl text-red-400 mx-auto mb-2" />
-                        <p className="text-2xl font-bold text-white">{(attendance.totalEmpleados || 0) - (attendance.presentes || 0)}</p>
-                        <p className="text-xs text-primary-400">Ausentes</p>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </motion.div>
-
-              {/* Acciones Rapidas */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
-                className="lg:col-span-2 bg-primary-900/50 backdrop-blur-sm rounded-2xl border border-primary-800 p-6"
-              >
-                <h3 className="text-lg font-display font-semibold text-white mb-6">
-                  Acciones Rapidas
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Link
-                    to="/admin/empleados"
-                    className="group p-4 bg-primary-800/50 rounded-xl hover:bg-blue-500/20 hover:border-blue-500/30 border border-transparent transition-all text-center"
-                  >
-                    <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                      <FaUsers className="text-xl text-blue-400" />
-                    </div>
-                    <span className="text-primary-200 text-sm font-medium">Empleados</span>
-                  </Link>
-                  <Link
-                    to="/admin/proyectos"
-                    className="group p-4 bg-primary-800/50 rounded-xl hover:bg-green-500/20 hover:border-green-500/30 border border-transparent transition-all text-center"
-                  >
-                    <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                      <FaProjectDiagram className="text-xl text-green-400" />
-                    </div>
-                    <span className="text-primary-200 text-sm font-medium">Proyectos</span>
-                  </Link>
-                  <Link
-                    to="/admin/bolsa-trabajo"
-                    className="group p-4 bg-primary-800/50 rounded-xl hover:bg-purple-500/20 hover:border-purple-500/30 border border-transparent transition-all text-center"
-                  >
-                    <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                      <FaBriefcase className="text-xl text-purple-400" />
-                    </div>
-                    <span className="text-primary-200 text-sm font-medium">Vacantes</span>
-                  </Link>
-                  <Link
-                    to="/admin/postulaciones"
-                    className="group p-4 bg-primary-800/50 rounded-xl hover:bg-amber-500/20 hover:border-amber-500/30 border border-transparent transition-all text-center"
-                  >
-                    <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                      <FaFileAlt className="text-xl text-amber-400" />
-                    </div>
-                    <span className="text-primary-200 text-sm font-medium">Postulaciones</span>
-                  </Link>
-                  <Link
-                    to="/admin/asistencias"
-                    className="group p-4 bg-primary-800/50 rounded-xl hover:bg-cyan-500/20 hover:border-cyan-500/30 border border-transparent transition-all text-center"
-                  >
-                    <div className="w-12 h-12 bg-cyan-500/20 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                      <FaClock className="text-xl text-cyan-400" />
-                    </div>
-                    <span className="text-primary-200 text-sm font-medium">Asistencias</span>
-                  </Link>
-                  <Link
-                    to="/admin/mensajes"
-                    className="group p-4 bg-primary-800/50 rounded-xl hover:bg-pink-500/20 hover:border-pink-500/30 border border-transparent transition-all text-center"
-                  >
-                    <div className="w-12 h-12 bg-pink-500/20 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                      <FaEnvelope className="text-xl text-pink-400" />
-                    </div>
-                    <span className="text-primary-200 text-sm font-medium">Mensajes</span>
-                  </Link>
-                  <Link
-                    to="/admin/reportes"
-                    className="group p-4 bg-primary-800/50 rounded-xl hover:bg-teal-500/20 hover:border-teal-500/30 border border-transparent transition-all text-center"
-                  >
-                    <div className="w-12 h-12 bg-teal-500/20 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                      <FaChartLine className="text-xl text-teal-400" />
-                    </div>
-                    <span className="text-primary-200 text-sm font-medium">Reportes</span>
-                  </Link>
-                  <a
-                    href="/asistencia"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group p-4 bg-primary-800/50 rounded-xl hover:bg-accent-electric/20 hover:border-accent-electric/30 border border-transparent transition-all text-center"
-                  >
-                    <div className="w-12 h-12 bg-accent-electric/20 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                      <FaCalendarAlt className="text-xl text-accent-electric" />
-                    </div>
-                    <span className="text-primary-200 text-sm font-medium">Kiosko</span>
-                  </a>
-                  <Link
-                    to="/admin/capacitaciones"
-                    className="group p-4 bg-primary-800/50 rounded-xl hover:bg-indigo-500/20 hover:border-indigo-500/30 border border-transparent transition-all text-center"
-                  >
-                    <div className="w-12 h-12 bg-indigo-500/20 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                      <FaGraduationCap className="text-xl text-indigo-400" />
-                    </div>
-                    <span className="text-primary-200 text-sm font-medium">Cursos</span>
-                  </Link>
-                  <Link
-                    to="/admin/evaluaciones"
-                    className="group p-4 bg-primary-800/50 rounded-xl hover:bg-violet-500/20 hover:border-violet-500/30 border border-transparent transition-all text-center"
-                  >
-                    <div className="w-12 h-12 bg-violet-500/20 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                      <FaClipboardList className="text-xl text-violet-400" />
-                    </div>
-                    <span className="text-primary-200 text-sm font-medium">Evaluaciones</span>
-                  </Link>
-                </div>
-              </motion.div>
-            </div>
-
-            {/* Charts Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Employees by City */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 }}
-                className="bg-primary-900/50 backdrop-blur-sm rounded-2xl border border-primary-800 p-6"
-              >
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-display font-semibold text-white flex items-center gap-2">
-                    <FaMapMarkerAlt className="text-accent-electric" />
-                    Empleados por Ciudad
-                  </h3>
-                  <span className="text-primary-500 text-sm">{stats.totalEmployees || 0} total</span>
-                </div>
-                <div className="space-y-4">
-                  {Object.entries(stats.employeesByCity || {}).map(([city, count], index) => {
-                    const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-amber-500', 'bg-pink-500']
-                    return (
-                      <motion.div
-                        key={city}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.7 + index * 0.1 }}
-                      >
-                        <div className="flex justify-between text-sm mb-2">
-                          <span className="text-primary-300 font-medium">{city}</span>
-                          <span className="text-white font-semibold">{count} empleados</span>
-                        </div>
-                        <div className="h-3 bg-primary-800 rounded-full overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${stats.totalEmployees > 0 ? (count / stats.totalEmployees) * 100 : 0}%` }}
-                            transition={{ duration: 1, delay: 0.7 + index * 0.1 }}
-                            className={`h-full ${colors[index % colors.length]} rounded-full`}
-                          />
-                        </div>
-                      </motion.div>
-                    )
-                  })}
-                </div>
-              </motion.div>
-
-              {/* Projects by Status */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.7 }}
-                className="bg-primary-900/50 backdrop-blur-sm rounded-2xl border border-primary-800 p-6"
-              >
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-display font-semibold text-white flex items-center gap-2">
-                    <FaProjectDiagram className="text-accent-electric" />
-                    Proyectos por Estado
-                  </h3>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  {Object.entries(stats.projectsByStatus || {}).map(([status, count]) => {
-                    const statusConfig: Record<string, { label: string; color: string; bgColor: string; icon: JSX.Element }> = {
-                      planning: { label: 'Planificacion', color: 'text-blue-400', bgColor: 'bg-blue-500/10', icon: <FaCalendarAlt /> },
-                      in_progress: { label: 'En Progreso', color: 'text-green-400', bgColor: 'bg-green-500/10', icon: <FaSpinner className="animate-spin" /> },
-                      completed: { label: 'Completados', color: 'text-purple-400', bgColor: 'bg-purple-500/10', icon: <FaCheckCircle /> },
-                      on_hold: { label: 'En Espera', color: 'text-amber-400', bgColor: 'bg-amber-500/10', icon: <FaExclamationTriangle /> },
-                    }
-                    const config = statusConfig[status] || { label: status, color: 'text-gray-400', bgColor: 'bg-gray-500/10', icon: <FaProjectDiagram /> }
-                    return (
-                      <motion.div
-                        key={status}
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: 0.8 }}
-                        className={`${config.bgColor} rounded-xl p-4`}
-                      >
-                        <div className={`${config.color} text-2xl mb-2`}>{config.icon}</div>
-                        <p className="text-2xl font-bold text-white">{count}</p>
-                        <p className={`text-sm ${config.color}`}>{config.label}</p>
-                      </motion.div>
-                    )
-                  })}
-                </div>
-              </motion.div>
-            </div>
-          </>
-        ) : null}
+        {/* Accesos rápidos */}
+        <section aria-labelledby="titulo-accesos">
+          <h2 id="titulo-accesos" className="font-mono text-xs tracking-[0.25em] uppercase text-primary-300 mb-4 flex items-center gap-3">
+            <FaCheckCircle className="text-accent-electric" />
+            Accesos rápidos
+            <span className="flex-1 h-px bg-gradient-to-r from-primary-700/70 to-transparent" />
+          </h2>
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+            {ACCESOS.filter((a) => !a.soloAdmin || admin).map((a) => {
+              const clase = 'group flex flex-col items-center gap-2 p-4 bg-primary-900/40 border border-primary-700/50 hover:border-accent-electric/50 hover:bg-accent-electric/5 transition-colors text-center'
+              const contenido = (
+                <>
+                  <span className="text-xl text-accent-electric group-hover:scale-110 transition-transform">{a.icono}</span>
+                  <span className="text-xs text-primary-200">{a.nombre}</span>
+                </>
+              )
+              return a.externo ? (
+                <a key={a.href} href={a.href} target="_blank" rel="noopener noreferrer" className={clase}>{contenido}</a>
+              ) : (
+                <Link key={a.href} to={a.href} className={clase}>{contenido}</Link>
+              )
+            })}
+          </div>
+          <p className="mt-3 text-[11px] text-primary-500 flex items-center gap-1.5">
+            <FaCalendarAlt /> Las cifras se actualizan al volver a esta pantalla (cada 2 minutos como máximo).
+          </p>
+        </section>
       </div>
     </AdminLayout>
   )

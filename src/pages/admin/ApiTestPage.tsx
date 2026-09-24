@@ -27,6 +27,9 @@ interface TestResult {
 export default function ApiTestPage() {
   const [tests, setTests] = useState<TestResult[]>([])
   const [isRunning, setIsRunning] = useState(false)
+  // La prueba de contacto crea un mensaje REAL en la hoja `contactos` y envía
+  // un correo: queda apagada salvo que se marque a propósito.
+  const [incluirEscritura, setIncluirEscritura] = useState(false)
 
   const updateTest = (name: string, updates: Partial<TestResult>) => {
     setTests((prev) =>
@@ -39,7 +42,7 @@ export default function ApiTestPage() {
 
     const testList: TestResult[] = [
       { name: 'Verificar URL del API', status: 'pending' },
-      { name: 'Test de conexion (getJobs)', status: 'pending' },
+      { name: 'Test de conexión (getJobs)', status: 'pending' },
       { name: 'Login de admin', status: 'pending' },
       { name: 'Verificar token', status: 'pending' },
       { name: 'Obtener empleados', status: 'pending' },
@@ -48,7 +51,7 @@ export default function ApiTestPage() {
       { name: 'Obtener postulaciones', status: 'pending' },
       { name: 'Obtener mensajes de contacto', status: 'pending' },
       { name: 'Dashboard stats', status: 'pending' },
-      { name: 'Enviar mensaje de contacto (test)', status: 'pending' },
+      ...(incluirEscritura ? [{ name: 'Enviar mensaje de contacto (test)', status: 'pending' as const }] : []),
     ]
 
     setTests(testList)
@@ -74,10 +77,10 @@ export default function ApiTestPage() {
 
     // Test 2: Conexion basica
     const startTime2 = Date.now()
-    updateTest('Test de conexion (getJobs)', { status: 'running' })
+    updateTest('Test de conexión (getJobs)', { status: 'running' })
     try {
       const jobsResult = await api.getJobs()
-      updateTest('Test de conexion (getJobs)', {
+      updateTest('Test de conexión (getJobs)', {
         status: jobsResult.success ? 'success' : 'error',
         message: jobsResult.success
           ? `${(jobsResult.data as unknown[])?.length || 0} convocatorias encontradas`
@@ -86,7 +89,7 @@ export default function ApiTestPage() {
         duration: Date.now() - startTime2,
       })
     } catch (e) {
-      updateTest('Test de conexion (getJobs)', {
+      updateTest('Test de conexión (getJobs)', {
         status: 'error',
         message: String(e),
         duration: Date.now() - startTime2,
@@ -264,7 +267,11 @@ export default function ApiTestPage() {
       })
     }
 
-    // Test 11: Submit Contact (test message)
+    // Test 11: Submit Contact (test message) — SOLO si se pidió explícitamente
+    if (!incluirEscritura) {
+      setIsRunning(false)
+      return
+    }
     const startTime11 = Date.now()
     updateTest('Enviar mensaje de contacto (test)', { status: 'running' })
     try {
@@ -321,9 +328,21 @@ export default function ApiTestPage() {
               Test del API
             </h1>
             <p className="text-primary-400">
-              Verifica que todos los endpoints del backend esten funcionando
+              Verifica que los endpoints del backend estén funcionando
             </p>
           </div>
+          <div className="flex flex-col items-start sm:items-end gap-2">
+          <label className="flex items-center gap-2 text-sm text-primary-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={incluirEscritura}
+              onChange={(e) => setIncluirEscritura(e.target.checked)}
+              disabled={isRunning}
+              className="w-4 h-4 accent-amber-500"
+            />
+            Incluir prueba que escribe datos reales
+            <span className="text-amber-400/80 text-xs">(crea un mensaje de contacto)</span>
+          </label>
           <button
             onClick={runAllTests}
             disabled={isRunning}
@@ -336,6 +355,7 @@ export default function ApiTestPage() {
             )}
             {isRunning ? 'Ejecutando...' : 'Ejecutar Tests'}
           </button>
+          </div>
         </div>
 
         {/* API Info */}
@@ -469,16 +489,19 @@ export default function ApiTestPage() {
           <h4 className="font-medium text-yellow-400 mb-2">Importante:</h4>
           <ul className="text-sm text-yellow-300/80 space-y-1">
             <li>
-              1. Asegurate de haber desplegado el Apps Script como "Web App" con acceso "Anyone"
+              1. Estas pruebas solo leen datos, salvo la opcional de contacto, que crea un mensaje real
+              (bórralo luego en Mensajes).
             </li>
             <li>
-              2. Ejecuta la funcion <code className="bg-yellow-500/20 px-1 rounded">setupAllSheets()</code> en el editor de Apps Script para crear las hojas
+              2. Para una verificación completa <strong>sin efectos</strong>, ejecuta en la terminal del proyecto{' '}
+              <code className="bg-yellow-500/20 px-1 rounded">npm run test:prod</code> y, en el editor de Apps Script,{' '}
+              <code className="bg-yellow-500/20 px-1 rounded">ejecutarTestSalud</code>.
             </li>
             <li>
-              3. Si ves errores de "No autorizado", verifica que el token sea valido
+              3. Si ves "No autorizado", tu sesión venció: vuelve a iniciar sesión. "Servidor ocupado" es pasajero: reintenta.
             </li>
             <li>
-              4. La URL del API debe estar configurada en el archivo .env
+              4. Tras publicar una versión nueva del Apps Script, las primeras respuestas pueden tardar 20–30 s.
             </li>
           </ul>
         </div>

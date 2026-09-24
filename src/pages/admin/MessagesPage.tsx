@@ -14,6 +14,7 @@ import AdminLayout from '../../components/admin/AdminLayout'
 import TableSkeleton from '../../components/common/TableSkeleton'
 import EmptyState from '../../components/common/EmptyState'
 import ErrorCarga from '../../components/admin/ErrorCarga'
+import { useToast } from '../../context/ToastContext'
 
 interface ContactMessage {
   id: string
@@ -27,6 +28,7 @@ interface ContactMessage {
 }
 
 export default function MessagesPage() {
+  const toast = useToast()
   const [messages, setMessages] = useState<ContactMessage[]>([])
   const [isLoading, setIsLoading] = useState(true)
   // Falló la carga ≠ no hay datos (ver ErrorCarga)
@@ -65,30 +67,37 @@ export default function MessagesPage() {
     return matchesSearch && matchesStatus
   })
 
-  const handleMarkAsRead = async (messageId: string) => {
-    const result = await api.updateContactStatus(messageId, 'leido')
+  // Cambios de estado: antes un fallo no mostraba nada y el admin creía que
+  // se había guardado. Ahora cada error se avisa con el motivo del servidor.
+  const cambiarEstado = async (messageId: string, estado: 'leido' | 'respondido', ok: string) => {
+    const result = await api.updateContactStatus(messageId, estado)
     if (result.success) {
-      setMessages(messages.map(m => m.id === messageId ? { ...m, estado: 'leido' } : m))
-      setMessage({ type: 'success', text: 'Mensaje marcado como leido' })
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, estado } : m)))
+      setSelectedMessage((prev) => (prev && prev.id === messageId ? { ...prev, estado } : prev))
+      setMessage({ type: 'success', text: ok })
+    } else {
+      toast.error(`No se pudo actualizar el mensaje: ${result.error || 'error desconocido'}`)
     }
   }
 
-  const handleMarkAsAnswered = async (messageId: string) => {
-    const result = await api.updateContactStatus(messageId, 'respondido')
-    if (result.success) {
-      setMessages(messages.map(m => m.id === messageId ? { ...m, estado: 'respondido' } : m))
-      setMessage({ type: 'success', text: 'Mensaje marcado como respondido' })
-    }
-  }
+  const handleMarkAsRead = (messageId: string) =>
+    cambiarEstado(messageId, 'leido', 'Mensaje marcado como leído')
+
+  const handleMarkAsAnswered = (messageId: string) =>
+    cambiarEstado(messageId, 'respondido', 'Mensaje marcado como respondido')
 
   const handleDelete = async (messageId: string) => {
-    if (!confirm('Eliminar este mensaje?')) return
+    const msg = messages.find((m) => m.id === messageId)
+    const quien = msg ? ` de ${msg.nombre}` : ''
+    if (!confirm(`¿Eliminar el mensaje${quien}? Esta acción no se puede deshacer.`)) return
 
     const result = await api.deleteContact(messageId)
     if (result.success) {
-      setMessages(messages.filter(m => m.id !== messageId))
+      setMessages((prev) => prev.filter((m) => m.id !== messageId))
       setSelectedMessage(null)
       setMessage({ type: 'success', text: 'Mensaje eliminado' })
+    } else {
+      toast.error(`No se pudo eliminar el mensaje: ${result.error || 'error desconocido'}`)
     }
   }
 
@@ -100,7 +109,7 @@ export default function MessagesPage() {
     }
     const labels: Record<string, string> = {
       pendiente: 'Pendiente',
-      leido: 'Leido',
+      leido: 'Leído',
       respondido: 'Respondido',
     }
     return (

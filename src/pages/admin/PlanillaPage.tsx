@@ -23,6 +23,7 @@ import IncidenciasPanel from './planilla/IncidenciasPanel'
 import BolsaHorasPanel from './planilla/BolsaHorasPanel'
 import NuevoTrabajadorModal, { NuevoTrabajadorDraft } from './planilla/NuevoTrabajadorModal'
 import BajaTrabajadorModal from './planilla/BajaTrabajadorModal'
+import { esAdmin } from '../../utils/roles'
 
 export default function PlanillaPage() {
   const { user } = useAuth()
@@ -71,12 +72,10 @@ export default function PlanillaPage() {
   const [fechaFinDraft, setFechaFinDraft] = useState(hoyISO())
   const [guardandoBaja, setGuardandoBaja] = useState(false)
 
-  // Solo el Administrador de Planilla (rol admin o permiso 'planilla') ve montos
-  const autorizado = !!user && (
-    user.role === 'admin' ||
-    (user as unknown as { rol?: string }).rol === 'admin' ||
-    (user as unknown as { permisos?: string[] }).permisos?.some(p => p === 'all' || p === 'planilla')
-  )
+  // Mismo criterio que el backend (esRolAdmin_): las acciones de planilla son
+  // nivel 'admin'. Antes aquí se exigía solo rol 'admin' y un manager veía
+  // "Acceso restringido" aunque el backend sí le permitía operar.
+  const autorizado = esAdmin(user)
 
   const loadData = async () => {
     setLoading(true)

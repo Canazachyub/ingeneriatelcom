@@ -19,10 +19,13 @@ import {
   FaCheckCircle,
   FaTimesCircle,
   FaUserTie,
+  FaSave,
+  FaEye,
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
 import ErrorCarga from '../../components/admin/ErrorCarga'
+import FileViewerModal from '../../components/admin/FileViewerModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -160,6 +163,10 @@ const statusToApi: Record<string, string> = {
   rejected: 'rechazado',
 }
 
+// Los CV subidos quedan en Drive: se abren con el visor seguro (getArchivo,
+// nivel auth) en lugar de un enlace directo. Otros enlaces se abren tal cual.
+const esUrlDrive = (url: string) => /drive\.google\.com|docs\.google\.com/.test(url)
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
@@ -180,10 +187,17 @@ interface DetailModalProps {
   application: ApplicationData
   isSaving: boolean
   onClose: () => void
-  onStatusChange: (id: string, newStatus: string) => void
+  onStatusChange: (id: string, newStatus: string, notificar: boolean) => void
+  onSaveNotes: (id: string, notes: string) => void
+  onViewCv: (url: string, nombre: string) => void
 }
 
-function DetailModal({ application, isSaving, onClose, onStatusChange }: DetailModalProps) {
+function DetailModal({ application, isSaving, onClose, onStatusChange, onSaveNotes, onViewCv }: DetailModalProps) {
+  // Aviso por correo al postulante: desmarcado por defecto (es un envío real)
+  const [notificar, setNotificar] = useState(false)
+  const [notas, setNotas] = useState(application.notes)
+  const notasCambiaron = notas.trim() !== application.notes.trim()
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -214,15 +228,25 @@ function DetailModal({ application, isSaving, onClose, onStatusChange }: DetailM
           </div>
           <div className="flex items-center gap-2 ml-4 flex-shrink-0">
             {application.cvUrl && (
-              <a
-                href={application.cvUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                <FaDownload className="text-xs" />
-                Descargar CV
-              </a>
+              esUrlDrive(application.cvUrl) ? (
+                <button
+                  onClick={() => onViewCv(application.cvUrl, application.fullName)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  <FaEye className="text-xs" />
+                  Ver CV
+                </button>
+              ) : (
+                <a
+                  href={application.cvUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  <FaDownload className="text-xs" />
+                  Abrir CV
+                </a>
+              )
             )}
             <button
               onClick={onClose}
@@ -331,12 +355,29 @@ function DetailModal({ application, isSaving, onClose, onStatusChange }: DetailM
                   </div>
                 )}
 
-                {application.notes && (
-                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-                    <p className="text-xs text-amber-400 font-medium mb-1">Nota interna</p>
-                    <p className="text-amber-300 text-sm">{application.notes}</p>
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                  <label htmlFor="notas-internas" className="block text-xs text-amber-400 font-medium mb-1.5">
+                    Notas internas (no las ve el postulante)
+                  </label>
+                  <textarea
+                    id="notas-internas"
+                    value={notas}
+                    onChange={(e) => setNotas(e.target.value)}
+                    rows={3}
+                    placeholder="Ej.: buena experiencia en campo, coordinar entrevista el lunes…"
+                    className="w-full bg-gray-900/60 border border-amber-500/20 rounded-lg p-2.5 text-amber-100 text-sm placeholder-amber-200/30 resize-y focus:outline-none focus:border-amber-400/60"
+                  />
+                  <div className="flex justify-end mt-2">
+                    <button
+                      onClick={() => onSaveNotes(application.id, notas.trim())}
+                      disabled={isSaving || !notasCambiaron}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 text-gray-900 hover:bg-amber-400 disabled:opacity-40 transition-colors"
+                    >
+                      {isSaving ? <FaSpinner className="animate-spin text-[10px]" /> : <FaSave className="text-[10px]" />}
+                      Guardar notas
+                    </button>
                   </div>
-                )}
+                </div>
               </div>
             </div>
           </div>
@@ -361,13 +402,27 @@ function DetailModal({ application, isSaving, onClose, onStatusChange }: DetailM
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
               Cambiar Estado
             </h3>
+            <label className="flex items-center gap-2 mb-3 text-sm text-gray-300 cursor-pointer select-none w-fit">
+              <input
+                type="checkbox"
+                checked={notificar}
+                onChange={(e) => setNotificar(e.target.checked)}
+                className="w-4 h-4 accent-indigo-500"
+              />
+              Avisar al postulante por correo
+              {application.email ? (
+                <span className="text-gray-500 text-xs">({application.email})</span>
+              ) : (
+                <span className="text-amber-400 text-xs">(no tiene correo registrado)</span>
+              )}
+            </label>
             <div className="flex flex-wrap gap-2">
               {STATUS_OPTIONS.map((s) => {
                 const isActive = application.status === s.value
                 return (
                   <button
                     key={s.value}
-                    onClick={() => !isActive && onStatusChange(application.id, s.value)}
+                    onClick={() => !isActive && onStatusChange(application.id, s.value, notificar)}
                     disabled={isSaving || isActive}
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                       isActive
@@ -482,6 +537,7 @@ export default function ApplicationsPage() {
   const [selectedApplication, setSelectedApplication] = useState<ApplicationData | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [cvAbierto, setCvAbierto] = useState<{ url: string; nombre: string } | null>(null)
 
   useEffect(() => {
     loadApplications()
@@ -492,11 +548,15 @@ export default function ApplicationsPage() {
     setTimeout(() => setToast(null), 3500)
   }
 
-  const loadApplications = async () => {
-    setIsLoading(true)
-    setErrorCarga('')
+  // silencioso: refresca tras guardar sin tapar la lista con el esqueleto
+  const loadApplications = async (silencioso = false) => {
+    if (!silencioso) {
+      setIsLoading(true)
+      setErrorCarga('')
+    }
     const result = await api.getApplicationsAdmin()
     setIsLoading(false)
+    if (silencioso && !result.success) return // se conserva lo que ya se ve
 
     if (result.success && result.data) {
       const mapped = (result.data as unknown[]).map((app: unknown) => {
@@ -521,27 +581,51 @@ export default function ApplicationsPage() {
         } as ApplicationData
       })
       setApplications(mapped)
+      setSelectedApplication((prev) => (prev ? mapped.find((m) => m.id === prev.id) ?? prev : prev))
     } else {
       setApplications([])
       setErrorCarga(result.error || 'Error desconocido')
     }
   }
 
-  const handleUpdateStatus = async (applicationId: string, newStatus: string) => {
+  const handleUpdateStatus = async (applicationId: string, newStatus: string, notificar = false) => {
     setIsSaving(true)
-    const result = await api.updateApplicationStatus(applicationId, statusToApi[newStatus] ?? newStatus)
+    const result = await api.updateApplicationStatus(
+      applicationId,
+      statusToApi[newStatus] ?? newStatus,
+      undefined,
+      notificar
+    )
     setIsSaving(false)
 
     if (result.success) {
-      showToast('success', 'Estado actualizado correctamente')
+      showToast('success', notificar ? 'Estado actualizado y aviso enviado al postulante' : 'Estado actualizado correctamente')
       setApplications((prev) =>
         prev.map((a) => (a.id === applicationId ? { ...a, status: newStatus } : a))
       )
       if (selectedApplication?.id === applicationId) {
         setSelectedApplication((prev) => prev ? { ...prev, status: newStatus } : prev)
       }
+      loadApplications(true)
     } else {
-      showToast('error', 'Error al actualizar el estado')
+      showToast('error', `No se pudo actualizar el estado: ${result.error || 'error desconocido'}`)
+    }
+  }
+
+  const handleSaveNotes = async (applicationId: string, notes: string) => {
+    const actual = applications.find((a) => a.id === applicationId)
+    if (!actual) return
+    setIsSaving(true)
+    // El backend exige un estado válido: se reenvía el actual junto con las notas
+    const result = await api.updateApplicationStatus(applicationId, statusToApi[actual.status] ?? 'pendiente', notes)
+    setIsSaving(false)
+    if (result.success) {
+      showToast('success', 'Notas guardadas')
+      setApplications((prev) => prev.map((a) => (a.id === applicationId ? { ...a, notes } : a)))
+      setSelectedApplication((prev) => (prev && prev.id === applicationId ? { ...prev, notes } : prev))
+      loadApplications(true)
+    } else {
+      showToast('error', `No se pudieron guardar las notas: ${result.error || 'error desconocido'}`)
     }
   }
 
@@ -711,7 +795,7 @@ export default function ApplicationsPage() {
         )}
 
         {!isLoading && errorCarga && (
-          <ErrorCarga que="las postulaciones" error={errorCarga} onReintentar={loadApplications} />
+          <ErrorCarga que="las postulaciones" error={errorCarga} onReintentar={() => loadApplications()} />
         )}
 
         {/* ── Empty state ── */}
@@ -815,15 +899,26 @@ export default function ApplicationsPage() {
                             Ver
                           </button>
                           {app.cvUrl && (
-                            <a
-                              href={app.cvUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="Descargar CV"
-                              className="p-1.5 text-indigo-400 hover:text-white hover:bg-indigo-600/30 rounded-lg transition-colors"
-                            >
-                              <FaDownload className="text-xs" />
-                            </a>
+                            esUrlDrive(app.cvUrl) ? (
+                              <button
+                                onClick={() => setCvAbierto({ url: app.cvUrl, nombre: app.fullName })}
+                                title="Ver CV"
+                                aria-label={`Ver CV de ${app.fullName}`}
+                                className="p-1.5 text-indigo-400 hover:text-white hover:bg-indigo-600/30 rounded-lg transition-colors"
+                              >
+                                <FaEye className="text-xs" />
+                              </button>
+                            ) : (
+                              <a
+                                href={app.cvUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Abrir CV"
+                                className="p-1.5 text-indigo-400 hover:text-white hover:bg-indigo-600/30 rounded-lg transition-colors"
+                              >
+                                <FaDownload className="text-xs" />
+                              </a>
+                            )
                           )}
                         </div>
                       </td>
@@ -858,9 +953,20 @@ export default function ApplicationsPage() {
               isSaving={isSaving}
               onClose={() => setSelectedApplication(null)}
               onStatusChange={handleUpdateStatus}
+              onSaveNotes={handleSaveNotes}
+              onViewCv={(url, nombre) => setCvAbierto({ url, nombre })}
             />
           )}
         </AnimatePresence>
+
+        {/* ── Visor seguro del CV (getArchivo) ── */}
+        {cvAbierto && (
+          <FileViewerModal
+            fileUrl={cvAbierto.url}
+            title={`CV — ${cvAbierto.nombre}`}
+            onClose={() => setCvAbierto(null)}
+          />
+        )}
       </div>
     </AdminLayout>
   )
