@@ -22,6 +22,7 @@ import {
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
+import ErrorCarga from '../../components/admin/ErrorCarga'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -472,6 +473,8 @@ function KanbanColumn({
 export default function ApplicationsPage() {
   const [applications, setApplications] = useState<ApplicationData[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  // Falló la carga ≠ no hay datos (ver ErrorCarga)
+  const [errorCarga, setErrorCarga] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
@@ -491,6 +494,7 @@ export default function ApplicationsPage() {
 
   const loadApplications = async () => {
     setIsLoading(true)
+    setErrorCarga('')
     const result = await api.getApplicationsAdmin()
     setIsLoading(false)
 
@@ -519,6 +523,7 @@ export default function ApplicationsPage() {
       setApplications(mapped)
     } else {
       setApplications([])
+      setErrorCarga(result.error || 'Error desconocido')
     }
   }
 
@@ -705,8 +710,12 @@ export default function ApplicationsPage() {
           </div>
         )}
 
+        {!isLoading && errorCarga && (
+          <ErrorCarga que="las postulaciones" error={errorCarga} onReintentar={loadApplications} />
+        )}
+
         {/* ── Empty state ── */}
-        {!isLoading && filteredApplications.length === 0 && (
+        {!isLoading && !errorCarga && filteredApplications.length === 0 && (
           <div className="text-center py-20">
             <FaBriefcase className="text-4xl text-gray-500 mx-auto mb-3" />
             <p className="text-gray-400 font-medium">No se encontraron postulaciones</p>

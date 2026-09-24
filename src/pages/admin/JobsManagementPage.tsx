@@ -21,6 +21,7 @@ import {
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
+import ErrorCarga from '../../components/admin/ErrorCarga'
 
 interface JobData {
   id: string
@@ -79,6 +80,8 @@ const priorities = [
 export default function JobsManagementPage() {
   const [jobs, setJobs] = useState<JobData[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  // Falló la carga ≠ no hay convocatorias (ver ErrorCarga)
+  const [errorCarga, setErrorCarga] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [showModal, setShowModal] = useState(false)
@@ -111,6 +114,7 @@ export default function JobsManagementPage() {
 
   const loadJobs = async () => {
     setIsLoading(true)
+    setErrorCarga('')
     const result = await api.getJobsAdmin()
     setIsLoading(false)
 
@@ -144,6 +148,7 @@ export default function JobsManagementPage() {
       setJobs(mappedJobs)
     } else {
       setJobs([])
+      setErrorCarga(result.error || 'Error desconocido')
     }
   }
 
@@ -412,7 +417,9 @@ export default function JobsManagementPage() {
         </div>
 
         {/* Jobs List */}
-        {isLoading ? (
+        {!isLoading && errorCarga ? (
+          <ErrorCarga que="las convocatorias" error={errorCarga} onReintentar={loadJobs} />
+        ) : isLoading ? (
           <div className="flex items-center justify-center py-12">
             <FaSpinner className="animate-spin text-3xl text-accent-electric" />
           </div>

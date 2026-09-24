@@ -8,6 +8,7 @@ import {
 import { api } from '../../api/appScriptApi'
 import { Evaluacion, Capacitacion, Pregunta } from '../../types/capacitacion.types'
 import FileViewerModal from '../../components/admin/FileViewerModal'
+import ErrorCarga from '../../components/admin/ErrorCarga'
 
 const ESTADO_LABELS: Record<string, string> = {
   pendiente_revision: 'Pendiente',
@@ -30,6 +31,8 @@ export default function EvaluacionesPage() {
   const [evaluaciones, setEvaluaciones] = useState<Evaluacion[]>([])
   const [capacitaciones, setCapacitaciones] = useState<Capacitacion[]>([])
   const [loading, setLoading] = useState(true)
+  // Falló la carga ≠ no hay datos (ver ErrorCarga)
+  const [errorCarga, setErrorCarga] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroCap, setFiltroCap] = useState('')
 
@@ -50,11 +53,13 @@ export default function EvaluacionesPage() {
 
   const loadData = async () => {
     setLoading(true)
+    setErrorCarga('')
     const [evalRes, capRes] = await Promise.all([
       api.getEvaluaciones({ estado: filtroEstado || undefined, capacitacion_id: filtroCap || undefined }),
       api.getCapacitaciones()
     ])
     if (evalRes.success && evalRes.data) setEvaluaciones(evalRes.data)
+    else { setEvaluaciones([]); setErrorCarga(evalRes.error || 'Error desconocido') }
     if (capRes.success && capRes.data) setCapacitaciones(capRes.data)
     setLoading(false)
   }
@@ -188,6 +193,8 @@ export default function EvaluacionesPage() {
       {/* Tabla */}
       {loading ? (
         <div className="text-center py-12 text-gray-400">Cargando evaluaciones...</div>
+      ) : errorCarga ? (
+        <ErrorCarga que="las evaluaciones" error={errorCarga} onReintentar={loadData} />
       ) : evaluaciones.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <FaEye className="text-4xl mx-auto mb-3 opacity-30" />

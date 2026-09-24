@@ -13,6 +13,7 @@ import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
 import TableSkeleton from '../../components/common/TableSkeleton'
 import EmptyState from '../../components/common/EmptyState'
+import ErrorCarga from '../../components/admin/ErrorCarga'
 
 interface ContactMessage {
   id: string
@@ -28,6 +29,8 @@ interface ContactMessage {
 export default function MessagesPage() {
   const [messages, setMessages] = useState<ContactMessage[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  // Falló la carga ≠ no hay datos (ver ErrorCarga)
+  const [errorCarga, setErrorCarga] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null)
@@ -39,45 +42,17 @@ export default function MessagesPage() {
 
   const loadMessages = async () => {
     setIsLoading(true)
+    setErrorCarga('')
     const result = await api.getContacts()
     setIsLoading(false)
 
     if (result.success && result.data) {
       setMessages(result.data as ContactMessage[])
     } else {
-      // Mock data
-      setMessages([
-        {
-          id: '1',
-          nombre: 'Carlos Rodriguez',
-          email: 'carlos.rodriguez@empresa.com',
-          telefono: '+51 987 654 321',
-          asunto: 'Consulta sobre servicios de software',
-          mensaje: 'Buenas tardes, estoy interesado en conocer mas sobre sus servicios de desarrollo de software. Tenemos un proyecto de gestion de inventarios que nos gustaria implementar. Podrian enviarme informacion sobre costos y tiempos de desarrollo?',
-          fecha: '2024-01-11T10:30:00',
-          estado: 'pendiente',
-        },
-        {
-          id: '2',
-          nombre: 'Ana Maria Torres',
-          email: 'ana.torres@minera.pe',
-          telefono: '+51 956 123 456',
-          asunto: 'Cotizacion proyecto minero',
-          mensaje: 'Estimados, somos una empresa minera ubicada en Puno y necesitamos supervision de obras electricas. Quisiera agendar una reunion para discutir los detalles del proyecto.',
-          fecha: '2024-01-10T15:45:00',
-          estado: 'respondido',
-        },
-        {
-          id: '3',
-          nombre: 'Luis Fernandez',
-          email: 'lfernandez@gmail.com',
-          telefono: '',
-          asunto: 'Consulta general',
-          mensaje: 'Hola, vi su pagina web y me gustaria saber si realizan trabajos en la ciudad de Arequipa. Gracias.',
-          fecha: '2024-01-09T09:15:00',
-          estado: 'pendiente',
-        },
-      ])
+      // Antes aquí se cargaban 3 mensajes de EJEMPLO (2024) como si fueran
+      // reales. Ahora se muestra el error con Reintentar.
+      setMessages([])
+      setErrorCarga(result.error || 'Error desconocido')
     }
   }
 
@@ -211,6 +186,8 @@ export default function MessagesPage() {
           <div className="space-y-3">
             {isLoading ? (
               <TableSkeleton rows={4} cols={2} />
+            ) : errorCarga ? (
+              <ErrorCarga que="los mensajes" error={errorCarga} onReintentar={loadMessages} />
             ) : filteredMessages.length === 0 ? (
               messages.length === 0 ? (
                 <EmptyState
