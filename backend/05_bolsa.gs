@@ -549,6 +549,46 @@ function incrementApplicationCount(jobId) {
 // ============================================
 // CONTACTO
 // ============================================
+
+
+// ── Contactos ────────────────────────────────────────────────
+// La hoja real es: id, nombre, email, telefono, empresa, asunto, mensaje,
+// estado, createdAt. Antes submitContact hacia appendRow con 8 valores en
+// OTRO orden (id, nombre, email, telefono, asunto, mensaje, fecha, estado):
+// el asunto caia en `empresa`, el texto en `asunto`, la fecha en `mensaje` y
+// `createdAt` quedaba vacio. Ahora se escribe por nombre de cabecera y, al
+// leer, las filas viejas desplazadas se reacomodan (sin tocar la hoja).
+
+function filaContactoPorCabecera_(headers, valores) {
+  var alias = {
+    id: ['id'], nombre: ['nombre', 'name'], email: ['email', 'correo'],
+    telefono: ['telefono', 'phone'], empresa: ['empresa', 'company'],
+    asunto: ['asunto', 'subject'], mensaje: ['mensaje', 'message'],
+    estado: ['estado', 'status'], createdAt: ['createdAt', 'fecha']
+  };
+  return headers.map(function (h) {
+    for (var campo in alias) {
+      if (alias[campo].indexOf(String(h)) !== -1) return valores[campo] !== undefined ? valores[campo] : '';
+    }
+    return '';
+  });
+}
+
+// Fila grabada con el orden viejo: `mensaje` contiene una fecha y
+// `createdAt` esta vacio.
+function normalizarContacto_(c) {
+  var mensajeEsFecha = c.mensaje instanceof Date ||
+    (typeof c.mensaje === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(c.mensaje));
+  if (mensajeEsFecha && !c.createdAt) {
+    return {
+      id: c.id, nombre: c.nombre, email: c.email, telefono: c.telefono,
+      empresa: '', asunto: c.empresa || 'Consulta', mensaje: c.asunto || '',
+      estado: c.estado || 'pendiente', createdAt: c.mensaje, reparado: true
+    };
+  }
+  return c;
+}
+
 function submitContact(data) {
   const rlError = checkRateLimit_('contact:' + (data.email || 'anon'), 10);
   if (rlError) return rlError;
@@ -556,17 +596,19 @@ function submitContact(data) {
   const result = withLock_(function () {
     const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('contactos');
     const id = generateSequentialId('contactos', 'CNT');
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
-    sheet.appendRow([
-      id,
-      data.name,
-      data.email,
-      data.phone || '',
-      data.subject || 'Consulta',
-      data.message,
-      new Date(),
-      'pendiente'
-    ]);
+    sheet.appendRow(filaContactoPorCabecera_(headers, {
+      id: id,
+      nombre: data.name || data.nombre || '',
+      email: data.email || '',
+      telefono: data.phone || data.telefono || '',
+      empresa: data.company || data.empresa || '',
+      asunto: data.subject || data.asunto || 'Consulta',
+      mensaje: data.message || data.mensaje || '',
+      estado: 'pendiente',
+      createdAt: new Date()
+    }));
 
     return { success: true, data: { id: id }, message: 'Mensaje enviado' };
   });
@@ -585,8 +627,8 @@ function getContacts() {
 
   const contacts = data.slice(1)
     .filter(row => row[0] !== '')
-    .map(row => rowToObject(headers, row))
-    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    .map(row => normalizarContacto_(rowToObject(headers, row)))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
   return { success: true, data: contacts };
 }
@@ -595,9 +637,10 @@ function updateContactStatus(data) {
   const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('contactos');
   const contacts = sheet.getDataRange().getValues();
 
+  const cEstado = contacts[0].indexOf('estado') >= 0 ? contacts[0].indexOf('estado') : 7;
   for (let i = 1; i < contacts.length; i++) {
     if (contacts[i][0] === data.id) {
-      sheet.getRange(i + 1, 8).setValue(data.estado);
+      sheet.getRange(i + 1, cEstado + 1).setValue(data.estado);
       return { success: true, message: 'Estado actualizado' };
     }
   }

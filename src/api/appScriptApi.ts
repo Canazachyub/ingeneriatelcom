@@ -1066,6 +1066,13 @@ class AppScriptApi {
     return this.request('getBolsaHoras', 'POST', dni ? { dni } : {})
   }
 
+  // Última sincronización de incidencias (ver sincronizarIncidenciasProgramada).
+  async getEstadoPlanilla(): Promise<ApiResponse<{
+    ultima_sincronizacion: { cuando: string; desde: string; hasta: string; creadas: number; expiradas: number; origen: string } | null
+  }>> {
+    return this.request('getEstadoPlanilla', 'POST', {})
+  }
+
   async getIncidencias(filtros?: {
     dni?: string
     desde?: string

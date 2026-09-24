@@ -27,6 +27,28 @@ interface ContactMessage {
   estado: string
 }
 
+// La hoja usó distintos valores de estado según la época (nuevo, en_proceso,
+// pendiente, leido, respondido); la pantalla trabaja con tres.
+const normalizarEstado = (e: unknown): string => {
+  const v = String(e || '').toLowerCase().trim()
+  if (v === 'respondido') return 'respondido'
+  if (v === 'leido' || v === 'leído' || v === 'en_proceso') return 'leido'
+  return 'pendiente' // nuevo, pendiente o vacío
+}
+
+// La fecha real está en `createdAt` (antes se leía `fecha`, inexistente →
+// "Invalid Date" en todos los mensajes).
+const normalizarMensaje = (m: Record<string, unknown>): ContactMessage => ({
+  id: String(m.id || ''),
+  nombre: String(m.nombre || m.name || ''),
+  email: String(m.email || ''),
+  telefono: String(m.telefono || m.phone || ''),
+  asunto: String(m.asunto || m.subject || ''),
+  mensaje: String(m.mensaje || m.message || ''),
+  fecha: String(m.createdAt || m.fecha || ''),
+  estado: normalizarEstado(m.estado),
+})
+
 export default function MessagesPage() {
   const toast = useToast()
   const [messages, setMessages] = useState<ContactMessage[]>([])
@@ -49,7 +71,7 @@ export default function MessagesPage() {
     setIsLoading(false)
 
     if (result.success && result.data) {
-      setMessages(result.data as ContactMessage[])
+      setMessages((result.data as unknown as Record<string, unknown>[]).map(normalizarMensaje))
     } else {
       // Antes aquí se cargaban 3 mensajes de EJEMPLO (2024) como si fueran
       // reales. Ahora se muestra el error con Reintentar.
@@ -121,6 +143,7 @@ export default function MessagesPage() {
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
+    if (!dateStr || isNaN(date.getTime())) return '—'
     return date.toLocaleDateString('es-PE', {
       year: 'numeric',
       month: 'short',

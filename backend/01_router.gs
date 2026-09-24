@@ -99,6 +99,7 @@ var ROUTES = {
   getIncidencias: { nivel: 'admin', handler: function (ctx) { return getIncidencias(ctx.data); } },
   revisarIncidencia: { nivel: 'admin', handler: function (ctx) { return revisarIncidencia(ctx.data); } },
   sincronizarIncidencias: { nivel: 'admin', handler: function (ctx) { return sincronizarIncidencias(ctx.data); } },
+  getEstadoPlanilla: { nivel: 'admin', handler: function () { return getEstadoPlanilla(); } },
   autorizarSalida5pm: { nivel: 'admin', handler: function (ctx) { return autorizarSalida5pm(ctx.data); } },
   getAutorizaciones5pm: { nivel: 'admin', handler: function (ctx) { return getAutorizaciones5pm(ctx.data); } },
   registrarMuestreo: { nivel: 'admin', handler: function (ctx) { return registrarMuestreo(ctx.data); } },

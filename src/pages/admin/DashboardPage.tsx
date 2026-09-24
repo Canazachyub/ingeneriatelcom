@@ -29,6 +29,7 @@ import {
   useDashboardStats,
   useAttendanceToday,
   useIncidenciasMes,
+  useEstadoPlanilla,
   useApplicationsAdmin,
   useContacts,
   useJustificacionesRecientes,
@@ -191,6 +192,12 @@ export default function DashboardPage() {
   // lento (y falla de a ratos) con 8+ consultas simultáneas del mismo usuario.
   const segundaTanda = !stats.isLoading && !asistencia.isLoading
   const incidencias = useIncidenciasMes(inicioMes, hoyISO, admin && segundaTanda)
+  const estadoPlanilla = useEstadoPlanilla(admin && segundaTanda)
+  // Sin sincronizar hace más de 2 días (o nunca registrado): las incidencias
+  // del mes NO están calculadas y "0 pendientes" sería engañoso.
+  const ultimaSync = estadoPlanilla.data?.cuando ? new Date(estadoPlanilla.data.cuando) : null
+  const diasSinSync = ultimaSync ? Math.floor((Date.now() - ultimaSync.getTime()) / 86400000) : null
+  const syncAtrasada = estadoPlanilla.isSuccess && (diasSinSync === null || diasSinSync > 2)
   const postulaciones = useApplicationsAdmin(segundaTanda)
   const mensajes = useContacts(segundaTanda)
   const justificaciones = useJustificacionesRecientes(hace7, segundaTanda)
@@ -280,8 +287,12 @@ export default function DashboardPage() {
                   consulta={incidencias}
                   valor={incPend.length}
                   unidad="del mes"
-                  alerta={incPend.length > 0}
-                  detalle={incPend.length ? `${incGraves} grave${incGraves === 1 ? '' : 's'} · se vuelven injustificadas a las 48 h` : 'Sin incidencias por revisar'}
+                  alerta={incPend.length > 0 || syncAtrasada}
+                  detalle={syncAtrasada
+                    ? `⚠ Sin sincronizar ${diasSinSync === null ? 'desde el cambio de sistema' : `hace ${diasSinSync} días`}: las incidencias del mes no están calculadas. Pulsa "Sincronizar incidencias" en Planilla.`
+                    : incPend.length
+                      ? `${incGraves} grave${incGraves === 1 ? '' : 's'} · se vuelven injustificadas a las 48 h`
+                      : `Sin incidencias por revisar${ultimaSync ? ` · sincronizado ${ultimaSync.toLocaleDateString('es-PE')}` : ''}`}
                   accion="Revisar en planilla"
                 />
               </motion.div>

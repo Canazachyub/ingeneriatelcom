@@ -1057,6 +1057,45 @@ function sincronizarIncidencias(data) {
     }
   }
 
+  // Constancia de la ultima sincronizacion (la muestra el Centro de
+  // actividades: sin esto nadie noto que no se sincronizaba desde el 23/07).
+  try {
+    PropertiesService.getScriptProperties().setProperty('ULTIMA_SYNC_INCIDENCIAS', JSON.stringify({
+      cuando: new Date().toISOString(), desde: desde, hasta: hasta,
+      creadas: creadas, expiradas: expiradas, origen: String(data.origen || 'panel')
+    }));
+  } catch (e) { /* no critico */ }
+
   return { success: true, data: { creadas: creadas, expiradas: expiradas } };
   });
 }
+
+// Estado de la planilla para el Centro de actividades (solo lectura).
+function getEstadoPlanilla() {
+  var raw = null;
+  try { raw = PropertiesService.getScriptProperties().getProperty('ULTIMA_SYNC_INCIDENCIAS'); } catch (e) {}
+  var ultima = null;
+  try { ultima = raw ? JSON.parse(raw) : null; } catch (e) { ultima = null; }
+  // Sin ScriptApp a proposito: usarlo agrega un permiso nuevo al proyecto y,
+  // sin reautorizar, la web entera dejaria de responder. El panel deduce si
+  // el activador funciona por `origen: 'activador_nocturno'` y la fecha.
+  return { success: true, data: { ultima_sincronizacion: ultima } };
+}
+
+// ── Sincronizacion automatica nocturna ─────────────────────────
+// La sincronizacion corre dentro del lock global: hacerla de noche evita
+// frenar las marcas del kiosko y que dependa de que alguien pulse el boton.
+// Revisa los ultimos 35 dias (idempotente: no duplica incidencias).
+function sincronizarIncidenciasProgramada() {
+  var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
+  var d = new Date(); d.setDate(d.getDate() - 35);
+  var desde = Utilities.formatDate(d, 'America/Lima', 'yyyy-MM-dd');
+  var res = sincronizarIncidencias({ desde: desde, hasta: hoy, origen: 'activador_nocturno' });
+  Logger.log('Sincronizacion nocturna: ' + JSON.stringify(res));
+  return res;
+}
+
+// Activador nocturno: se crea A MANO (como precalentarRosterKiosko), sin
+// codigo ScriptApp para no agregar permisos nuevos al proyecto:
+//   Activadores (reloj) > Anadir activador > sincronizarIncidenciasProgramada
+//   > Segun tiempo > Temporizador diario > 10 p. m. a 11 p. m.

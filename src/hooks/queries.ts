@@ -116,6 +116,20 @@ export function useIncidenciasMes(desde: string, hasta: string, enabled: boolean
   })
 }
 
+/** Última sincronización de incidencias (nivel admin). */
+export function useEstadoPlanilla(enabled: boolean) {
+  return useQuery({
+    queryKey: ['estadoPlanilla'] as const,
+    queryFn: async () => {
+      const r = await api.getEstadoPlanilla()
+      if (!r.success) throw new Error(r.error || 'Error al cargar')
+      return r.data?.ultima_sincronizacion ?? null
+    },
+    enabled,
+    staleTime: DOS_MIN,
+  })
+}
+
 export function useApplicationsAdmin(enabled = true) {
   return useQuery({
     queryKey: queryKeys.applicationsAdmin,

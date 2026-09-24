@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-24T18:51:36.126Z con tools/build-backend.mjs
+// Generado: 2026-09-24T19:31:20.558Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -494,6 +494,7 @@ var ROUTES = {
   getIncidencias: { nivel: 'admin', handler: function (ctx) { return getIncidencias(ctx.data); } },
   revisarIncidencia: { nivel: 'admin', handler: function (ctx) { return revisarIncidencia(ctx.data); } },
   sincronizarIncidencias: { nivel: 'admin', handler: function (ctx) { return sincronizarIncidencias(ctx.data); } },
+  getEstadoPlanilla: { nivel: 'admin', handler: function () { return getEstadoPlanilla(); } },
   autorizarSalida5pm: { nivel: 'admin', handler: function (ctx) { return autorizarSalida5pm(ctx.data); } },
   getAutorizaciones5pm: { nivel: 'admin', handler: function (ctx) { return getAutorizaciones5pm(ctx.data); } },
   registrarMuestreo: { nivel: 'admin', handler: function (ctx) { return registrarMuestreo(ctx.data); } },
@@ -2378,6 +2379,46 @@ function incrementApplicationCount(jobId) {
 // ============================================
 // CONTACTO
 // ============================================
+
+
+// ── Contactos ────────────────────────────────────────────────
+// La hoja real es: id, nombre, email, telefono, empresa, asunto, mensaje,
+// estado, createdAt. Antes submitContact hacia appendRow con 8 valores en
+// OTRO orden (id, nombre, email, telefono, asunto, mensaje, fecha, estado):
+// el asunto caia en `empresa`, el texto en `asunto`, la fecha en `mensaje` y
+// `createdAt` quedaba vacio. Ahora se escribe por nombre de cabecera y, al
+// leer, las filas viejas desplazadas se reacomodan (sin tocar la hoja).
+
+function filaContactoPorCabecera_(headers, valores) {
+  var alias = {
+    id: ['id'], nombre: ['nombre', 'name'], email: ['email', 'correo'],
+    telefono: ['telefono', 'phone'], empresa: ['empresa', 'company'],
+    asunto: ['asunto', 'subject'], mensaje: ['mensaje', 'message'],
+    estado: ['estado', 'status'], createdAt: ['createdAt', 'fecha']
+  };
+  return headers.map(function (h) {
+    for (var campo in alias) {
+      if (alias[campo].indexOf(String(h)) !== -1) return valores[campo] !== undefined ? valores[campo] : '';
+    }
+    return '';
+  });
+}
+
+// Fila grabada con el orden viejo: `mensaje` contiene una fecha y
+// `createdAt` esta vacio.
+function normalizarContacto_(c) {
+  var mensajeEsFecha = c.mensaje instanceof Date ||
+    (typeof c.mensaje === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(c.mensaje));
+  if (mensajeEsFecha && !c.createdAt) {
+    return {
+      id: c.id, nombre: c.nombre, email: c.email, telefono: c.telefono,
+      empresa: '', asunto: c.empresa || 'Consulta', mensaje: c.asunto || '',
+      estado: c.estado || 'pendiente', createdAt: c.mensaje, reparado: true
+    };
+  }
+  return c;
+}
+
 function submitContact(data) {
   const rlError = checkRateLimit_('contact:' + (data.email || 'anon'), 10);
   if (rlError) return rlError;
@@ -2385,17 +2426,19 @@ function submitContact(data) {
   const result = withLock_(function () {
     const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('contactos');
     const id = generateSequentialId('contactos', 'CNT');
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
-    sheet.appendRow([
-      id,
-      data.name,
-      data.email,
-      data.phone || '',
-      data.subject || 'Consulta',
-      data.message,
-      new Date(),
-      'pendiente'
-    ]);
+    sheet.appendRow(filaContactoPorCabecera_(headers, {
+      id: id,
+      nombre: data.name || data.nombre || '',
+      email: data.email || '',
+      telefono: data.phone || data.telefono || '',
+      empresa: data.company || data.empresa || '',
+      asunto: data.subject || data.asunto || 'Consulta',
+      mensaje: data.message || data.mensaje || '',
+      estado: 'pendiente',
+      createdAt: new Date()
+    }));
 
     return { success: true, data: { id: id }, message: 'Mensaje enviado' };
   });
@@ -2414,8 +2457,8 @@ function getContacts() {
 
   const contacts = data.slice(1)
     .filter(row => row[0] !== '')
-    .map(row => rowToObject(headers, row))
-    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    .map(row => normalizarContacto_(rowToObject(headers, row)))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
   return { success: true, data: contacts };
 }
@@ -2424,9 +2467,10 @@ function updateContactStatus(data) {
   const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('contactos');
   const contacts = sheet.getDataRange().getValues();
 
+  const cEstado = contacts[0].indexOf('estado') >= 0 ? contacts[0].indexOf('estado') : 7;
   for (let i = 1; i < contacts.length; i++) {
     if (contacts[i][0] === data.id) {
-      sheet.getRange(i + 1, 8).setValue(data.estado);
+      sheet.getRange(i + 1, cEstado + 1).setValue(data.estado);
       return { success: true, message: 'Estado actualizado' };
     }
   }
@@ -5233,9 +5277,48 @@ function sincronizarIncidencias(data) {
     }
   }
 
+  // Constancia de la ultima sincronizacion (la muestra el Centro de
+  // actividades: sin esto nadie noto que no se sincronizaba desde el 23/07).
+  try {
+    PropertiesService.getScriptProperties().setProperty('ULTIMA_SYNC_INCIDENCIAS', JSON.stringify({
+      cuando: new Date().toISOString(), desde: desde, hasta: hasta,
+      creadas: creadas, expiradas: expiradas, origen: String(data.origen || 'panel')
+    }));
+  } catch (e) { /* no critico */ }
+
   return { success: true, data: { creadas: creadas, expiradas: expiradas } };
   });
 }
+
+// Estado de la planilla para el Centro de actividades (solo lectura).
+function getEstadoPlanilla() {
+  var raw = null;
+  try { raw = PropertiesService.getScriptProperties().getProperty('ULTIMA_SYNC_INCIDENCIAS'); } catch (e) {}
+  var ultima = null;
+  try { ultima = raw ? JSON.parse(raw) : null; } catch (e) { ultima = null; }
+  // Sin ScriptApp a proposito: usarlo agrega un permiso nuevo al proyecto y,
+  // sin reautorizar, la web entera dejaria de responder. El panel deduce si
+  // el activador funciona por `origen: 'activador_nocturno'` y la fecha.
+  return { success: true, data: { ultima_sincronizacion: ultima } };
+}
+
+// ── Sincronizacion automatica nocturna ─────────────────────────
+// La sincronizacion corre dentro del lock global: hacerla de noche evita
+// frenar las marcas del kiosko y que dependa de que alguien pulse el boton.
+// Revisa los ultimos 35 dias (idempotente: no duplica incidencias).
+function sincronizarIncidenciasProgramada() {
+  var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
+  var d = new Date(); d.setDate(d.getDate() - 35);
+  var desde = Utilities.formatDate(d, 'America/Lima', 'yyyy-MM-dd');
+  var res = sincronizarIncidencias({ desde: desde, hasta: hoy, origen: 'activador_nocturno' });
+  Logger.log('Sincronizacion nocturna: ' + JSON.stringify(res));
+  return res;
+}
+
+// Activador nocturno: se crea A MANO (como precalentarRosterKiosko), sin
+// codigo ScriptApp para no agregar permisos nuevos al proyecto:
+//   Activadores (reloj) > Anadir activador > sincronizarIncidenciasProgramada
+//   > Segun tiempo > Temporizador diario > 10 p. m. a 11 p. m.
 
 // ============================================================
 // REPORTES — dashboard y reportes agregados
@@ -6189,7 +6272,7 @@ var FUNCIONES_REQUERIDAS = [
   'registrarAsistenciaManual',
   'getConfigPlanillaAction', 'updateConfigPlanilla', 'getSueldos', 'updateSueldo', 'crearTrabajador',
   'darDeBajaTrabajador', 'reactivarTrabajador',
-  'getIncidencias', 'revisarIncidencia', 'sincronizarIncidencias',
+  'getIncidencias', 'revisarIncidencia', 'sincronizarIncidencias', 'getEstadoPlanilla', 'sincronizarIncidenciasProgramada',
   'autorizarSalida5pm', 'getAutorizaciones5pm', 'registrarMuestreo', 'getBolsaHoras',
   'getFeriados', 'agregarFeriado', 'eliminarFeriado', 'sembrarFeriadosPeru2026',
   'getCapacitaciones', 'getCapacitacionById', 'iniciarEvaluacion', 'submitEvaluacion',
