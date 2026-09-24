@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-23T21:40:16.261Z con tools/build-backend.mjs
+// Generado: 2026-09-24T18:33:08.384Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -2053,6 +2053,12 @@ function submitApplication(data) {
   const rlError = checkRateLimit_('apply:' + data.dni, 5);
   if (rlError) return rlError;
 
+  // La convocatoria debe existir y estar ACTIVA. Antes no se validaba: con un
+  // enlace viejo se podia postular a una oferta cerrada (y se subia el CV a
+  // Drive igual). Va antes de la subida para no dejar archivos huerfanos.
+  const errorConvocatoria = validarConvocatoriaAbierta_(data.jobId);
+  if (errorConvocatoria) return errorConvocatoria;
+
   const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('postulaciones');
 
   // Subir CV si viene incluido en base64
@@ -2141,6 +2147,26 @@ function submitApplication(data) {
   return result;
 }
 
+// null si se puede postular; si no, la respuesta de error para el cliente.
+function validarConvocatoriaAbierta_(jobId) {
+  if (!jobId) return { success: false, error: 'Falta la convocatoria a la que postulas' };
+  var hoja = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
+  if (!hoja) return { success: false, error: 'Convocatoria no encontrada' };
+  var filas = hoja.getDataRange().getValues();
+  var h = filas[0];
+  var cEstado = h.indexOf('estado') >= 0 ? h.indexOf('estado') : h.indexOf('status');
+  for (var i = 1; i < filas.length; i++) {
+    if (String(filas[i][0]) === String(jobId)) {
+      var estado = cEstado >= 0 ? String(filas[i][cEstado]).toLowerCase().trim() : 'activo';
+      if (estado && estado !== 'activo' && estado !== 'active') {
+        return { success: false, error: 'Esta convocatoria ya no recibe postulaciones' };
+      }
+      return null;
+    }
+  }
+  return { success: false, error: 'Convocatoria no encontrada' };
+}
+
 function getApplications(jobId) {
   const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('postulaciones');
   const data = sheet.getDataRange().getValues();
@@ -2198,7 +2224,7 @@ function updateApplicationStatus(data) {
       }
 
       if (data.notificar) {
-        sendStatusUpdateEmail(apps[i], data.estado);
+        sendStatusUpdateEmail(rowToObject(headers, apps[i]), data.estado);
       }
 
       return { success: true, message: 'Estado actualizado' };
@@ -2406,16 +2432,29 @@ Fecha: ${new Date().toLocaleString('es-PE')}
   }
 }
 
-function sendStatusUpdateEmail(applicationRow, newStatus) {
+// Recibe la postulacion como objeto (cabecera -> valor). Antes recibia la fila
+// y leia nombre = columna 2 y correo = columna 4 por POSICION: con la hoja
+// real (id, jobId, jobTitle, fullName, dni, email...) eso era el titulo del
+// puesto y el DNI, asi que el correo nunca llegaba al postulante.
+function sendStatusUpdateEmail(postulacion, newStatus) {
   const messages = {
     'revisado': 'Tu postulacion ha sido revisada.',
+    'en_revision': 'Tu postulacion esta en revision.',
     'entrevista': 'Has sido seleccionado para entrevista.',
     'rechazado': 'Lamentamos informarte que no has sido seleccionado.',
     'contratado': 'Felicitaciones! Has sido seleccionado.'
   };
-  
+  const email = String(postulacion.email || postulacion.correo || '').trim();
+  const nombre = String(postulacion.fullName || postulacion.nombre_completo || postulacion.nombre || 'postulante');
+  const puesto = String(postulacion.jobTitle || postulacion.titulo_convocatoria || '');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    console.error('sendStatusUpdateEmail: la postulacion no tiene un correo valido');
+    return;
+  }
+
   const body = `
-Hola ${applicationRow[2]},
+Hola ${nombre},
+${puesto ? '\nPuesto: ' + puesto + '\n' : ''}
 
 ${messages[newStatus] || 'El estado de tu postulacion ha cambiado.'}
 
@@ -2424,7 +2463,7 @@ Ingenieria Telcom EIRL
   `;
   
   try {
-    MailApp.sendEmail(applicationRow[4], 'Actualizacion de Postulacion', body);
+    MailApp.sendEmail(email, 'Actualizacion de Postulacion', body);
   } catch (e) {
     console.error('Error enviando email:', e);
   }
@@ -6262,6 +6301,24 @@ function ejecutarTestSalud() {
       ok();
     }
   } catch (e) { fail('Verificacion de "ya registrado con hora" fallo: ' + e.message); }
+
+  // 9c. Bolsa: no se puede postular a convocatorias cerradas o inexistentes
+  // (solo lectura: evalua la regla, no envia ninguna postulacion).
+  try {
+    if (validarConvocatoriaAbierta_('NO-EXISTE-' + Date.now()) === null) {
+      fail('Se acepta postular a una convocatoria inexistente');
+    } else {
+      var hojaConv = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
+      var filasConv = hojaConv ? hojaConv.getDataRange().getValues() : [];
+      var cEst = filasConv.length ? filasConv[0].indexOf('estado') : -1;
+      var inactiva = null;
+      for (var v = 1; v < filasConv.length && !inactiva; v++) {
+        if (cEst >= 0 && String(filasConv[v][cEst]).toLowerCase() === 'inactivo') inactiva = filasConv[v][0];
+      }
+      if (inactiva && validarConvocatoriaAbierta_(inactiva) === null) fail('Se acepta postular a una convocatoria INACTIVA (' + inactiva + ')');
+      else ok();
+    }
+  } catch (e) { fail('Verificacion de convocatorias abiertas fallo: ' + e.message); }
 
   // 10. CacheService operativo (via rapida del anti-duplicado)
   try {

@@ -208,6 +208,24 @@ function ejecutarTestSalud() {
     }
   } catch (e) { fail('Verificacion de "ya registrado con hora" fallo: ' + e.message); }
 
+  // 9c. Bolsa: no se puede postular a convocatorias cerradas o inexistentes
+  // (solo lectura: evalua la regla, no envia ninguna postulacion).
+  try {
+    if (validarConvocatoriaAbierta_('NO-EXISTE-' + Date.now()) === null) {
+      fail('Se acepta postular a una convocatoria inexistente');
+    } else {
+      var hojaConv = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
+      var filasConv = hojaConv ? hojaConv.getDataRange().getValues() : [];
+      var cEst = filasConv.length ? filasConv[0].indexOf('estado') : -1;
+      var inactiva = null;
+      for (var v = 1; v < filasConv.length && !inactiva; v++) {
+        if (cEst >= 0 && String(filasConv[v][cEst]).toLowerCase() === 'inactivo') inactiva = filasConv[v][0];
+      }
+      if (inactiva && validarConvocatoriaAbierta_(inactiva) === null) fail('Se acepta postular a una convocatoria INACTIVA (' + inactiva + ')');
+      else ok();
+    }
+  } catch (e) { fail('Verificacion de convocatorias abiertas fallo: ' + e.message); }
+
   // 10. CacheService operativo (via rapida del anti-duplicado)
   try {
     var pruebaKey = 'salud:cache';
