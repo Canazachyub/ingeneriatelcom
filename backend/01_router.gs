@@ -100,6 +100,12 @@ var ROUTES = {
   revisarIncidencia: { nivel: 'admin', handler: function (ctx) { return revisarIncidencia(ctx.data); } },
   sincronizarIncidencias: { nivel: 'admin', handler: function (ctx) { return sincronizarIncidencias(ctx.data); } },
   getEstadoPlanilla: { nivel: 'admin', handler: function () { return getEstadoPlanilla(); } },
+  // Usuarios y auditoria (13_usuarios.gs)
+  listarUsuarios: { nivel: 'admin', handler: function () { return listarUsuarios(); } },
+  crearUsuario: { nivel: 'admin', handler: function (ctx) { return crearUsuario(ctx.data, ctx); } },
+  actualizarUsuario: { nivel: 'admin', handler: function (ctx) { return actualizarUsuario(ctx.data, ctx); } },
+  restablecerContrasena: { nivel: 'admin', handler: function (ctx) { return restablecerContrasena(ctx.data); } },
+  getAuditoria: { nivel: 'admin', handler: function (ctx) { return getAuditoria(ctx.data); } },
   autorizarSalida5pm: { nivel: 'admin', handler: function (ctx) { return autorizarSalida5pm(ctx.data); } },
   getAutorizaciones5pm: { nivel: 'admin', handler: function (ctx) { return getAutorizaciones5pm(ctx.data); } },
   registrarMuestreo: { nivel: 'admin', handler: function (ctx) { return registrarMuestreo(ctx.data); } },
@@ -127,6 +133,27 @@ var ROUTES = {
   eliminarPregunta: { nivel: 'auth', handler: function (ctx) { return eliminarPregunta(ctx.data); } },
   getEvaluaciones: { nivel: 'auth', handler: function (ctx) { return getEvaluaciones(ctx.data); } },
   revisarEvaluacion: { nivel: 'auth', handler: function (ctx) { return revisarEvaluacion(ctx.data); } }
+};
+
+// Modulo del panel que exige cada accion de nivel 'auth' (escalon 2).
+// Rol de administracion o permiso 'all' = todos los modulos (como antes).
+// Otros usuarios necesitan el permiso del modulo (columna `permisos`).
+// Una lista = basta con cualquiera de esos permisos. Sin entrada = cualquier
+// sesion valida (verifyToken, getDashboard con conteos, getFeriados).
+var MODULO_POR_ACCION_ = {
+  getJobsAdmin: 'bolsa', createJob: 'bolsa', updateJob: 'bolsa', uploadJobPdf: 'bolsa',
+  getApplicationsAdmin: 'bolsa', updateApplicationStatus: 'bolsa', upload: 'bolsa',
+  getContacts: 'mensajes', updateContactStatus: 'mensajes',
+  getEmployees: 'personal', getEmployee: 'personal', createEmployee: 'personal',
+  updateEmployee: 'personal', transferEmployee: 'personal',
+  getProjects: 'proyectos', getProject: 'proyectos', createProject: 'proyectos', updateProject: 'proyectos',
+  getAssignments: 'proyectos', assignEmployee: 'proyectos', removeAssignment: 'proyectos',
+  getAttendances: 'asistencias', obtenerAsistenciasHoy: 'asistencias', getAsistenciasV2: ['asistencias', 'reportes'],
+  getJustificaciones: 'asistencias', registrarAsistenciaManual: 'asistencias',
+  getArchivo: ['asistencias', 'bolsa', 'capacitaciones'],
+  crearCapacitacion: 'capacitaciones', actualizarCapacitacion: 'capacitaciones',
+  getPreguntas: 'capacitaciones', crearPregunta: 'capacitaciones', actualizarPregunta: 'capacitaciones',
+  eliminarPregunta: 'capacitaciones', getEvaluaciones: 'capacitaciones', revisarEvaluacion: 'capacitaciones'
 };
 
 function handleRequest_(e) {
@@ -165,14 +192,39 @@ function handleRequest_(e) {
     if (!userId) {
       return jsonResponse({ success: false, error: 'No autorizado' });
     }
-    if (route.nivel === 'admin' && !esRolAdmin_(userId)) {
+    // Perfil (rol, permisos, activo). Un fallo al leerlo es transitorio, no
+    // un rechazo: el cliente reintenta en vez de cerrar la sesion.
+    var perfil;
+    try {
+      perfil = perfilUsuario_(userId);
+    } catch (errPerfil) {
+      return jsonResponse({ success: false, error: 'Servidor ocupado, intenta de nuevo en unos segundos' });
+    }
+    // Cuenta desactivada: antes su token seguia sirviendo hasta expirar.
+    if (!perfil || !perfil.activo) {
+      return jsonResponse({ success: false, error: 'No autorizado' });
+    }
+    if (route.nivel === 'admin' && !perfil.esAdmin) {
       return jsonResponse({ success: false, error: 'Permisos insuficientes para esta accion' });
+    }
+    var moduloRequerido = MODULO_POR_ACCION_[action];
+    if (route.nivel === 'auth' && moduloRequerido && !puedeModulo_(perfil, moduloRequerido)) {
+      return jsonResponse({ success: false, error: 'Permisos insuficientes para esta accion (modulo ' + [].concat(moduloRequerido).join(' / ') + ')' });
     }
   }
 
   const ctx = { data: data, param: param, token: token, userId: userId };
   try {
-    return jsonResponse(route.handler(ctx));
+    var resultado = LECTURAS_CACHEABLES_.indexOf(action) >= 0
+      ? leerConCache_(action, function () { return route.handler(ctx); })
+      : route.handler(ctx);
+    if (!esAccionDeLectura_(action)) {
+      // Cualquier escritura exitosa invalida las lecturas cacheadas
+      if (resultado && resultado.success) invalidarLecturas_();
+      // Auditoria de escrituras del panel (no de acciones publicas)
+      if (route.nivel !== 'publico') registrarAuditoria_(ctx, action, resultado);
+    }
+    return jsonResponse(resultado);
   } catch (error) {
     console.error('Error en accion ' + action + ':', error);
     // Un fallo transitorio de Google dentro de la accion (p. ej. al re-validar

@@ -90,6 +90,28 @@ export interface ApiResponse<T> {
   transporte?: boolean
 }
 
+export interface UsuarioPanel {
+  id: string
+  nombre: string
+  email: string
+  rol: string
+  permisos: string[]
+  activo: boolean
+  esAdmin: boolean
+  ultimo_acceso: string
+  empleado_id: string
+}
+
+export interface RegistroAuditoria {
+  id: string
+  timestamp: string
+  usuario_id: string
+  usuario: string
+  accion: string
+  resultado: string
+  detalle: string
+}
+
 export interface User {
   id: string
   email: string
@@ -1064,6 +1086,34 @@ class AppScriptApi {
 
   async getBolsaHoras(dni?: string): Promise<ApiResponse<{ saldos: Record<string, number>; movimientos: Record<string, unknown>[] }>> {
     return this.request('getBolsaHoras', 'POST', dni ? { dni } : {})
+  }
+
+  // ── Usuarios, permisos por módulo y auditoría (nivel admin) ──────────
+  // Ver backend/13_usuarios.gs y docs/ADMIN.md §2.2.
+  async listarUsuarios(): Promise<ApiResponse<{
+    usuarios: UsuarioPanel[]
+    modulos: { clave: string; etiqueta: string; soloAdmin: boolean }[]
+    rolesAdmin: string[]
+  }>> {
+    return this.request('listarUsuarios', 'POST', {})
+  }
+
+  async crearUsuario(data: { nombre: string; email: string; rol: string; permisos: string[] }): Promise<ApiResponse<{ id: string; email: string; tempPassword: string }>> {
+    return this.request('crearUsuario', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  // Solo se envían los campos a cambiar. El backend impide quitarse la
+  // administración a uno mismo y dejar el sistema sin administradores.
+  async actualizarUsuario(data: { id: string; nombre?: string; rol?: string; permisos?: string[]; estado?: 'activo' | 'inactivo' }): Promise<ApiResponse<unknown>> {
+    return this.request('actualizarUsuario', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async restablecerContrasena(id: string): Promise<ApiResponse<{ id: string; email: string; tempPassword: string }>> {
+    return this.request('restablecerContrasena', 'POST', { id })
+  }
+
+  async getAuditoria(filtros?: { desde?: string; hasta?: string; usuario?: string; accion?: string; limite?: number }): Promise<ApiResponse<RegistroAuditoria[]>> {
+    return this.request('getAuditoria', 'POST', (filtros || {}) as Record<string, unknown>)
   }
 
   // Última sincronización de incidencias (ver sincronizarIncidenciasProgramada).

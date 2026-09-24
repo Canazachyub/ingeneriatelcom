@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-24T19:31:20.558Z con tools/build-backend.mjs
+// Generado: 2026-09-24T20:30:54.402Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -495,6 +495,12 @@ var ROUTES = {
   revisarIncidencia: { nivel: 'admin', handler: function (ctx) { return revisarIncidencia(ctx.data); } },
   sincronizarIncidencias: { nivel: 'admin', handler: function (ctx) { return sincronizarIncidencias(ctx.data); } },
   getEstadoPlanilla: { nivel: 'admin', handler: function () { return getEstadoPlanilla(); } },
+  // Usuarios y auditoria (13_usuarios.gs)
+  listarUsuarios: { nivel: 'admin', handler: function () { return listarUsuarios(); } },
+  crearUsuario: { nivel: 'admin', handler: function (ctx) { return crearUsuario(ctx.data, ctx); } },
+  actualizarUsuario: { nivel: 'admin', handler: function (ctx) { return actualizarUsuario(ctx.data, ctx); } },
+  restablecerContrasena: { nivel: 'admin', handler: function (ctx) { return restablecerContrasena(ctx.data); } },
+  getAuditoria: { nivel: 'admin', handler: function (ctx) { return getAuditoria(ctx.data); } },
   autorizarSalida5pm: { nivel: 'admin', handler: function (ctx) { return autorizarSalida5pm(ctx.data); } },
   getAutorizaciones5pm: { nivel: 'admin', handler: function (ctx) { return getAutorizaciones5pm(ctx.data); } },
   registrarMuestreo: { nivel: 'admin', handler: function (ctx) { return registrarMuestreo(ctx.data); } },
@@ -522,6 +528,27 @@ var ROUTES = {
   eliminarPregunta: { nivel: 'auth', handler: function (ctx) { return eliminarPregunta(ctx.data); } },
   getEvaluaciones: { nivel: 'auth', handler: function (ctx) { return getEvaluaciones(ctx.data); } },
   revisarEvaluacion: { nivel: 'auth', handler: function (ctx) { return revisarEvaluacion(ctx.data); } }
+};
+
+// Modulo del panel que exige cada accion de nivel 'auth' (escalon 2).
+// Rol de administracion o permiso 'all' = todos los modulos (como antes).
+// Otros usuarios necesitan el permiso del modulo (columna `permisos`).
+// Una lista = basta con cualquiera de esos permisos. Sin entrada = cualquier
+// sesion valida (verifyToken, getDashboard con conteos, getFeriados).
+var MODULO_POR_ACCION_ = {
+  getJobsAdmin: 'bolsa', createJob: 'bolsa', updateJob: 'bolsa', uploadJobPdf: 'bolsa',
+  getApplicationsAdmin: 'bolsa', updateApplicationStatus: 'bolsa', upload: 'bolsa',
+  getContacts: 'mensajes', updateContactStatus: 'mensajes',
+  getEmployees: 'personal', getEmployee: 'personal', createEmployee: 'personal',
+  updateEmployee: 'personal', transferEmployee: 'personal',
+  getProjects: 'proyectos', getProject: 'proyectos', createProject: 'proyectos', updateProject: 'proyectos',
+  getAssignments: 'proyectos', assignEmployee: 'proyectos', removeAssignment: 'proyectos',
+  getAttendances: 'asistencias', obtenerAsistenciasHoy: 'asistencias', getAsistenciasV2: ['asistencias', 'reportes'],
+  getJustificaciones: 'asistencias', registrarAsistenciaManual: 'asistencias',
+  getArchivo: ['asistencias', 'bolsa', 'capacitaciones'],
+  crearCapacitacion: 'capacitaciones', actualizarCapacitacion: 'capacitaciones',
+  getPreguntas: 'capacitaciones', crearPregunta: 'capacitaciones', actualizarPregunta: 'capacitaciones',
+  eliminarPregunta: 'capacitaciones', getEvaluaciones: 'capacitaciones', revisarEvaluacion: 'capacitaciones'
 };
 
 function handleRequest_(e) {
@@ -560,14 +587,39 @@ function handleRequest_(e) {
     if (!userId) {
       return jsonResponse({ success: false, error: 'No autorizado' });
     }
-    if (route.nivel === 'admin' && !esRolAdmin_(userId)) {
+    // Perfil (rol, permisos, activo). Un fallo al leerlo es transitorio, no
+    // un rechazo: el cliente reintenta en vez de cerrar la sesion.
+    var perfil;
+    try {
+      perfil = perfilUsuario_(userId);
+    } catch (errPerfil) {
+      return jsonResponse({ success: false, error: 'Servidor ocupado, intenta de nuevo en unos segundos' });
+    }
+    // Cuenta desactivada: antes su token seguia sirviendo hasta expirar.
+    if (!perfil || !perfil.activo) {
+      return jsonResponse({ success: false, error: 'No autorizado' });
+    }
+    if (route.nivel === 'admin' && !perfil.esAdmin) {
       return jsonResponse({ success: false, error: 'Permisos insuficientes para esta accion' });
+    }
+    var moduloRequerido = MODULO_POR_ACCION_[action];
+    if (route.nivel === 'auth' && moduloRequerido && !puedeModulo_(perfil, moduloRequerido)) {
+      return jsonResponse({ success: false, error: 'Permisos insuficientes para esta accion (modulo ' + [].concat(moduloRequerido).join(' / ') + ')' });
     }
   }
 
   const ctx = { data: data, param: param, token: token, userId: userId };
   try {
-    return jsonResponse(route.handler(ctx));
+    var resultado = LECTURAS_CACHEABLES_.indexOf(action) >= 0
+      ? leerConCache_(action, function () { return route.handler(ctx); })
+      : route.handler(ctx);
+    if (!esAccionDeLectura_(action)) {
+      // Cualquier escritura exitosa invalida las lecturas cacheadas
+      if (resultado && resultado.success) invalidarLecturas_();
+      // Auditoria de escrituras del panel (no de acciones publicas)
+      if (route.nivel !== 'publico') registrarAuditoria_(ctx, action, resultado);
+    }
+    return jsonResponse(resultado);
   } catch (error) {
     console.error('Error en accion ' + action + ':', error);
     // Un fallo transitorio de Google dentro de la accion (p. ej. al re-validar
@@ -4082,6 +4134,12 @@ function registrarAsistenciaManual(data) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return { success: false, error: 'Fecha invalida (yyyy-mm-dd)' };
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) return { success: false, error: 'Hora invalida (HH:mm)' };
   if (!nota) return { success: false, error: 'La observacion es obligatoria (auditoria del registro manual)' };
+  // Sin fechas futuras: ademas de no tener sentido, la lectura por rango de
+  // getAsistenciasV2 asume que ninguna fila tiene fecha posterior a su
+  // momento de escritura (ver leerFilasAsistenciaDesde_).
+  if (fecha > Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd')) {
+    return { success: false, error: 'No se puede registrar una marca con fecha futura' };
+  }
 
   // nombre/cargo siempre desde el roster real, nunca desde el cliente.
   // Se incluyen los CESADOS a proposito: el admin tiene que poder registrar
@@ -4154,12 +4212,43 @@ function filtrarPorRango_(result, data) {
   return result;
 }
 
+// Devuelve { headers, rows } con TODAS las filas cuya fecha puede ser >= desde.
+// Crece desde el final hasta encontrar una marca del KIOSKO (foto_url no vacio)
+// escrita antes de `desde`: las marcas del kiosko se escriben en orden, y las
+// manuales nunca tienen fecha futura, asi que todo lo anterior a esa fila es
+// de antes de `desde`. Si no se puede asegurar, lee la hoja completa.
+function leerFilasAsistenciaDesde_(sheet, desde) {
+  var n = 800;
+  for (var intento = 0; intento < 6; intento++) {
+    var t = leerTramoFinal_(sheet, n);
+    if (t.completa) return t;
+    var cTs = t.headers.indexOf('timestamp');
+    var cFoto = t.headers.indexOf('foto_url');
+    if (cTs < 0 || cFoto < 0) break;
+    for (var i = 0; i < t.rows.length; i++) {
+      if (!t.rows[i][cFoto]) continue; // manual: no sirve para cortar
+      var ts = t.rows[i][cTs];
+      var d = (ts instanceof Date) ? ts : (ts ? new Date(ts) : null);
+      if (d && !isNaN(d.getTime()) &&
+          Utilities.formatDate(d, 'America/Lima', 'yyyy-MM-dd') < desde) {
+        return t; // hay una marca del kiosko anterior al rango dentro del tramo
+      }
+    }
+    n *= 3;
+  }
+  var todo = sheet.getDataRange().getValues();
+  return { headers: todo[0], rows: todo.slice(1), completa: true };
+}
+
 function getAsistenciasV2(data) {
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName('asistencias_v2');
   if (!sheet) return { success: true, data: [] };
 
-  var rows = sheet.getDataRange().getValues();
+  // Escalon 1: con `desde`, se lee solo el tramo final necesario (la hoja
+  // crece ~1,100 filas/mes y antes se leia completa en cada consulta).
+  var lect = (data && data.desde) ? leerFilasAsistenciaDesde_(sheet, String(data.desde)) : null;
+  var rows = lect ? [lect.headers].concat(lect.rows) : sheet.getDataRange().getValues();
   if (rows.length <= 1) return { success: true, data: [] };
 
   var headers = rows[0];
@@ -4201,7 +4290,23 @@ function getJustificaciones(data) {
   var sheet = ss.getSheetByName('justificaciones');
   if (!sheet) return { success: true, data: [] };
 
-  var rows = sheet.getDataRange().getValues();
+  // Escalon 1: las justificaciones solo las escribe el kiosko, en orden
+  // cronologico; con `desde` basta el tramo final que llega antes de esa fecha.
+  var rows;
+  if (data && data.desde) {
+    var n = 300, t = null;
+    for (var intento = 0; intento < 6; intento++) {
+      t = leerTramoFinal_(sheet, n);
+      var cF = t.headers.indexOf('fecha');
+      if (t.completa || cF < 0) break;
+      var primera = fechaISO_(t.rows[0][cF]);
+      if (primera && primera < String(data.desde)) break;
+      n *= 3;
+    }
+    rows = [t.headers].concat(t.rows);
+  } else {
+    rows = sheet.getDataRange().getValues();
+  }
   if (rows.length <= 1) return { success: true, data: [] };
 
   var headers = rows[0];
@@ -6273,6 +6378,8 @@ var FUNCIONES_REQUERIDAS = [
   'getConfigPlanillaAction', 'updateConfigPlanilla', 'getSueldos', 'updateSueldo', 'crearTrabajador',
   'darDeBajaTrabajador', 'reactivarTrabajador',
   'getIncidencias', 'revisarIncidencia', 'sincronizarIncidencias', 'getEstadoPlanilla', 'sincronizarIncidenciasProgramada',
+  'listarUsuarios', 'crearUsuario', 'actualizarUsuario', 'restablecerContrasena', 'getAuditoria',
+  'perfilUsuario_', 'puedeModulo_', 'registrarAuditoria_', 'leerConCache_', 'leerFilasAsistenciaDesde_',
   'autorizarSalida5pm', 'getAutorizaciones5pm', 'registrarMuestreo', 'getBolsaHoras',
   'getFeriados', 'agregarFeriado', 'eliminarFeriado', 'sembrarFeriadosPeru2026',
   'getCapacitaciones', 'getCapacitacionById', 'iniciarEvaluacion', 'submitEvaluacion',
@@ -6465,6 +6572,45 @@ function ejecutarTestSalud() {
     }
   } catch (e) { fail('Verificacion de convocatorias abiertas fallo: ' + e.message); }
 
+  // 9d. Escalon 1: la lectura por rango devuelve EXACTAMENTE lo mismo que la
+  // lectura completa filtrada (solo lectura). Si esto falla, NO desplegar.
+  try {
+    var desdeEq = Utilities.formatDate(new Date(Date.now() - 45 * 86400000), 'America/Lima', 'yyyy-MM-dd');
+    var clave = function (r) { return String(r.id); };
+    var completoA = (getAsistenciasV2({}).data || []).filter(function (r) { return String(r.fecha) >= desdeEq; }).map(clave).sort();
+    var rangoA = (getAsistenciasV2({ desde: desdeEq }).data || []).map(clave).sort();
+    if (completoA.join('|') !== rangoA.join('|')) {
+      fail('Lectura por rango de asistencias difiere de la completa (' + rangoA.length + ' vs ' + completoA.length + ')');
+    } else ok();
+    var completoJ = (getJustificaciones({}).data || []).filter(function (r) { return String(r.fecha) >= desdeEq; }).map(clave).sort();
+    var rangoJ = (getJustificaciones({ desde: desdeEq }).data || []).map(clave).sort();
+    if (completoJ.join('|') !== rangoJ.join('|')) {
+      fail('Lectura por rango de justificaciones difiere de la completa (' + rangoJ.length + ' vs ' + completoJ.length + ')');
+    } else ok();
+  } catch (e) { fail('Verificacion de lectura por rango fallo: ' + e.message); }
+
+  // 9e. Escalon 2: quien pierde acceso con los permisos por modulo. Los
+  // usuarios activos SIN rol de administracion ni permisos de modulo solo
+  // veran el Centro de actividades. Revisar ANTES de publicar la version.
+  try {
+    var filasU = SpreadsheetApp.openById(SHEET_ID).getSheetByName('usuarios').getDataRange().getValues();
+    var colsU = columnasUsuarios_(filasU[0]);
+    var admins = 0, sinModulos = [];
+    for (var u = 1; u < filasU.length; u++) {
+      if (!filasU[u][colsU.id]) continue;
+      var pu = filaAUsuario_(filasU[u], colsU);
+      if (!pu.activo) continue;
+      if (pu.esAdmin) { admins++; continue; }
+      var conModulo = pu.permisos.some(function (p) { return MODULOS_PANEL_[p] && !MODULOS_PANEL_[p].soloAdmin; });
+      if (!conModulo) sinModulos.push((pu.email || pu.id) + ' (rol ' + (pu.rol || '—') + ')');
+    }
+    if (admins === 0) fail('No hay ningun administrador activo en usuarios');
+    else ok();
+    if (sinModulos.length) {
+      warn(sinModulos.length + ' usuario(s) activo(s) sin rol admin ni permisos de modulo — solo veran el Centro de actividades: ' + sinModulos.join(', '));
+    }
+  } catch (e) { fail('Verificacion de permisos de usuarios fallo: ' + e.message); }
+
   // 10. CacheService operativo (via rapida del anti-duplicado)
   try {
     var pruebaKey = 'salud:cache';
@@ -6632,4 +6778,383 @@ function revocarComparticionRecursiva_(folder) {
   }
 
   return count;
+}
+
+// ============================================================
+// USUARIOS, PERMISOS POR MODULO, AUDITORIA Y CACHE DE LECTURAS
+// Escalones 1 y 2 (sept. 2026). Documentado en docs/ADMIN.md §2.2, §5.6, §11.
+// Fuente modular del backend GAS. NO editar appscript.js a mano:
+// se regenera con `npm run build:backend`.
+// ============================================================
+
+// ── Modulos del panel ──────────────────────────────────────────
+// Un usuario con rol de administracion (ROLES_ADMIN_ en 02_auth.gs) o permiso
+// 'all' accede a TODO, igual que antes. Cualquier otro usuario necesita el
+// permiso explicito del modulo en la columna `permisos` de la hoja usuarios
+// (lista separada por comas). Los modulos marcados soloAdmin no se conceden
+// por permiso: exigen rol de administracion.
+var MODULOS_PANEL_ = {
+  asistencias:    { etiqueta: 'Asistencias',     soloAdmin: false },
+  personal:       { etiqueta: 'Empleados',       soloAdmin: false },
+  proyectos:      { etiqueta: 'Proyectos',       soloAdmin: false },
+  bolsa:          { etiqueta: 'Bolsa y postulaciones', soloAdmin: false },
+  mensajes:       { etiqueta: 'Mensajes',        soloAdmin: false },
+  capacitaciones: { etiqueta: 'Capacitaciones',  soloAdmin: false },
+  reportes:       { etiqueta: 'Reportes',        soloAdmin: false },
+  planilla:       { etiqueta: 'Planilla',        soloAdmin: true },
+  usuarios:       { etiqueta: 'Usuarios',        soloAdmin: true },
+  auditoria:      { etiqueta: 'Auditoria',       soloAdmin: true }
+};
+
+var ESTADOS_USUARIO_ = ['activo', 'inactivo'];
+
+// ── Lectura de la hoja usuarios por CABECERA ──────────────────
+// La hoja existe con dos esquemas historicos:
+//   A: id, email, password, name, role, employeeId, active, createdAt
+//   B: id, nombre, email, password, rol, permisos, estado, ultimo_acceso, fecha_creacion, empleado_id
+// Todo lo nuevo lee y escribe por nombre de columna (nunca por posicion).
+var ALIAS_USUARIO_ = {
+  id: ['id'],
+  nombre: ['nombre', 'name'],
+  email: ['email', 'correo'],
+  password: ['password', 'contrasena'],
+  rol: ['rol', 'role'],
+  permisos: ['permisos', 'permissions'],
+  estado: ['estado', 'active', 'activo'],
+  ultimo_acceso: ['ultimo_acceso', 'lastLogin'],
+  creado: ['fecha_creacion', 'createdAt'],
+  empleado_id: ['empleado_id', 'employeeId']
+};
+
+function columnasUsuarios_(headers) {
+  var cols = {};
+  for (var campo in ALIAS_USUARIO_) {
+    cols[campo] = -1;
+    for (var k = 0; k < ALIAS_USUARIO_[campo].length; k++) {
+      var c = headers.indexOf(ALIAS_USUARIO_[campo][k]);
+      if (c >= 0) { cols[campo] = c; break; }
+    }
+  }
+  return cols;
+}
+
+function esActivoValor_(v) {
+  return v === true || v === 'true' || v === 'TRUE' || String(v).toLowerCase() === 'activo';
+}
+
+function listaPermisos_(v) {
+  return String(v || '').split(',').map(function (p) { return p.toLowerCase().trim(); }).filter(Boolean);
+}
+
+function filaAUsuario_(row, cols) {
+  var rol = cols.rol >= 0 ? String(row[cols.rol] || '').toLowerCase().trim() : '';
+  var permisos = cols.permisos >= 0 ? listaPermisos_(row[cols.permisos]) : (rol === 'admin' ? ['all'] : []);
+  var activo = cols.estado >= 0 ? esActivoValor_(row[cols.estado]) : true;
+  return {
+    id: String(row[cols.id] || ''),
+    nombre: cols.nombre >= 0 ? String(row[cols.nombre] || '') : '',
+    email: cols.email >= 0 ? String(row[cols.email] || '') : '',
+    rol: rol,
+    permisos: permisos,
+    activo: activo,
+    esAdmin: activo && (ROLES_ADMIN_.indexOf(rol) >= 0 || permisos.indexOf('all') >= 0),
+    ultimo_acceso: cols.ultimo_acceso >= 0 && row[cols.ultimo_acceso] ? String(row[cols.ultimo_acceso]) : '',
+    empleado_id: cols.empleado_id >= 0 ? String(row[cols.empleado_id] || '') : ''
+  };
+}
+
+// ── Perfil del usuario de la sesion (con cache corto) ──────────
+// A diferencia del esRolAdmin_ original, un fallo al leer la hoja NO se
+// cachea como "sin permisos": lanza TOKEN_TRANSITORIO y el router responde
+// "Servidor ocupado" (el cliente reintenta). Antes un tropiezo de Google
+// dejaba a un admin sin acceso durante 5 minutos.
+function perfilUsuario_(userId) {
+  if (!userId) return null;
+  var cache = CacheService.getScriptCache();
+  var clave = 'perfil:' + userId;
+  try {
+    var enCache = cache.get(clave);
+    if (enCache) return JSON.parse(enCache);
+  } catch (e) { /* sin cache: se lee la hoja */ }
+
+  var filas;
+  try {
+    filas = SpreadsheetApp.openById(SHEET_ID).getSheetByName('usuarios').getDataRange().getValues();
+  } catch (e) {
+    console.error('perfilUsuario_: no se pudo leer usuarios: ' + e.message);
+    throw new Error('TOKEN_TRANSITORIO');
+  }
+  var cols = columnasUsuarios_(filas[0]);
+  var perfil = null;
+  for (var i = 1; i < filas.length; i++) {
+    if (String(filas[i][cols.id]) === String(userId)) { perfil = filaAUsuario_(filas[i], cols); break; }
+  }
+  if (!perfil) perfil = { id: String(userId), activo: false, esAdmin: false, permisos: [], rol: '' };
+  try { cache.put(clave, JSON.stringify(perfil), 120); } catch (e) {}
+  return perfil;
+}
+
+function invalidarPerfil_(userId) {
+  try {
+    var cache = CacheService.getScriptCache();
+    cache.remove('perfil:' + userId);
+    cache.remove('rol:' + userId); // cache del esRolAdmin_ original
+  } catch (e) {}
+}
+
+// true si el perfil puede usar el modulo (o alguno de la lista).
+function puedeModulo_(perfil, modulos) {
+  if (!perfil || !perfil.activo) return false;
+  if (perfil.esAdmin) return true;
+  var lista = Array.isArray(modulos) ? modulos : [modulos];
+  for (var k = 0; k < lista.length; k++) {
+    var m = MODULOS_PANEL_[lista[k]];
+    if (m && !m.soloAdmin && perfil.permisos.indexOf(lista[k]) >= 0) return true;
+  }
+  return false;
+}
+
+// ── Pantalla Usuarios (nivel admin) ────────────────────────────
+function listarUsuarios() {
+  var filas = SpreadsheetApp.openById(SHEET_ID).getSheetByName('usuarios').getDataRange().getValues();
+  var cols = columnasUsuarios_(filas[0]);
+  var usuarios = [];
+  for (var i = 1; i < filas.length; i++) {
+    if (!filas[i][cols.id]) continue;
+    usuarios.push(filaAUsuario_(filas[i], cols)); // nunca incluye la contrasena
+  }
+  var modulos = Object.keys(MODULOS_PANEL_).map(function (k) {
+    return { clave: k, etiqueta: MODULOS_PANEL_[k].etiqueta, soloAdmin: MODULOS_PANEL_[k].soloAdmin };
+  });
+  return { success: true, data: { usuarios: usuarios, modulos: modulos, rolesAdmin: ROLES_ADMIN_ } };
+}
+
+function normalizarPermisosEntrada_(permisos) {
+  var lista = Array.isArray(permisos) ? permisos : listaPermisos_(permisos);
+  return lista.map(function (p) { return String(p).toLowerCase().trim(); })
+    .filter(function (p) { return p === 'all' || (MODULOS_PANEL_[p] && !MODULOS_PANEL_[p].soloAdmin); });
+}
+
+function crearUsuario(data, ctx) {
+  var email = String(data.email || '').trim().toLowerCase();
+  var nombre = String(data.nombre || '').trim();
+  var rol = String(data.rol || '').toLowerCase().trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { success: false, error: 'Correo no valido' };
+  if (!nombre) return { success: false, error: 'El nombre es obligatorio' };
+  if (!rol) return { success: false, error: 'El rol es obligatorio' };
+  var permisos = normalizarPermisosEntrada_(data.permisos);
+
+  return withLock_(function () {
+    var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('usuarios');
+    var filas = sheet.getDataRange().getValues();
+    var headers = filas[0];
+    var cols = columnasUsuarios_(headers);
+    for (var i = 1; i < filas.length; i++) {
+      if (String(filas[i][cols.email]).toLowerCase().trim() === email) {
+        return { success: false, error: 'Ya existe un usuario con ese correo' };
+      }
+    }
+    // Esquema A no tiene columna permisos: se agrega al FINAL (no desplaza
+    // las posiciones que usan login/verifyToken).
+    if (cols.permisos < 0 && permisos.length) {
+      sheet.getRange(1, headers.length + 1).setValue('permisos');
+      headers = headers.concat(['permisos']);
+      cols = columnasUsuarios_(headers);
+    }
+    var id = generateSequentialId('usuarios', 'USR');
+    var temporal = generateTempPassword();
+    var fila = headers.map(function () { return ''; });
+    var poner = function (campo, valor) { if (cols[campo] >= 0) fila[cols[campo]] = valor; };
+    poner('id', id);
+    poner('nombre', nombre);
+    poner('email', email);
+    poner('password', hashPassword_(id, temporal));
+    poner('rol', rol);
+    poner('permisos', permisos.join(','));
+    // En esquema A la columna es `active` (booleano); en B, `estado` ('activo')
+    poner('estado', headers[cols.estado] === 'active' ? true : 'activo');
+    poner('creado', new Date());
+    poner('empleado_id', data.empleado_id || '');
+    sheet.appendRow(fila);
+    sendCredentialsEmail(email, nombre, temporal);
+    return { success: true, data: { id: id, email: email, tempPassword: temporal } };
+  });
+}
+
+// Cambia rol, permisos, estado o nombre. Protecciones anti-bloqueo:
+// nadie se quita a si mismo la administracion ni se desactiva, y siempre
+// debe quedar al menos un administrador activo.
+function actualizarUsuario(data, ctx) {
+  var id = String(data.id || '');
+  if (!id) return { success: false, error: 'Falta el usuario' };
+  if (data.estado !== undefined && ESTADOS_USUARIO_.indexOf(String(data.estado)) === -1) {
+    return { success: false, error: 'Estado no valido' };
+  }
+  return withLock_(function () {
+    var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('usuarios');
+    var filas = sheet.getDataRange().getValues();
+    var headers = filas[0];
+    var cols = columnasUsuarios_(headers);
+    var fila = -1;
+    for (var i = 1; i < filas.length; i++) { if (String(filas[i][cols.id]) === id) { fila = i; break; } }
+    if (fila < 0) return { success: false, error: 'Usuario no encontrado' };
+
+    var antes = filaAUsuario_(filas[fila], cols);
+    var nuevoRol = data.rol !== undefined ? String(data.rol).toLowerCase().trim() : antes.rol;
+    var nuevosPermisos = data.permisos !== undefined ? normalizarPermisosEntrada_(data.permisos) : antes.permisos;
+    var nuevoActivo = data.estado !== undefined ? data.estado === 'activo' : antes.activo;
+    var despuesEsAdmin = nuevoActivo && (ROLES_ADMIN_.indexOf(nuevoRol) >= 0 || nuevosPermisos.indexOf('all') >= 0);
+
+    if (ctx && String(ctx.userId) === id && antes.esAdmin && !despuesEsAdmin) {
+      return { success: false, error: 'No puedes quitarte la administracion ni desactivarte a ti mismo' };
+    }
+    if (antes.esAdmin && !despuesEsAdmin) {
+      var otrosAdmins = 0;
+      for (var j = 1; j < filas.length; j++) {
+        if (j !== fila && filaAUsuario_(filas[j], cols).esAdmin) otrosAdmins++;
+      }
+      if (otrosAdmins === 0) return { success: false, error: 'Debe quedar al menos un administrador activo' };
+    }
+
+    if (data.permisos !== undefined && cols.permisos < 0) {
+      sheet.getRange(1, headers.length + 1).setValue('permisos');
+      headers = headers.concat(['permisos']);
+      cols = columnasUsuarios_(headers);
+    }
+    var fijar = function (campo, valor) { if (cols[campo] >= 0) sheet.getRange(fila + 1, cols[campo] + 1).setValue(valor); };
+    if (data.nombre !== undefined) fijar('nombre', String(data.nombre).trim());
+    if (data.rol !== undefined) fijar('rol', nuevoRol);
+    if (data.permisos !== undefined) fijar('permisos', nuevosPermisos.join(','));
+    if (data.estado !== undefined) fijar('estado', headers[cols.estado] === 'active' ? nuevoActivo : (nuevoActivo ? 'activo' : 'inactivo'));
+
+    invalidarPerfil_(id);
+    return { success: true, data: { antes: antes, despues: { rol: nuevoRol, permisos: nuevosPermisos, activo: nuevoActivo } } };
+  });
+}
+
+function restablecerContrasena(data) {
+  var id = String(data.id || '');
+  return withLock_(function () {
+    var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('usuarios');
+    var filas = sheet.getDataRange().getValues();
+    var cols = columnasUsuarios_(filas[0]);
+    for (var i = 1; i < filas.length; i++) {
+      if (String(filas[i][cols.id]) === id) {
+        var u = filaAUsuario_(filas[i], cols);
+        var temporal = generateTempPassword();
+        sheet.getRange(i + 1, cols.password + 1).setValue(hashPassword_(filas[i][cols.id], temporal));
+        sendCredentialsEmail(u.email, u.nombre, temporal);
+        return { success: true, data: { id: id, email: u.email, tempPassword: temporal } };
+      }
+    }
+    return { success: false, error: 'Usuario no encontrado' };
+  });
+}
+
+// ── Auditoria ──────────────────────────────────────────────────
+// El router registra AUTOMATICAMENTE toda accion de escritura de nivel
+// auth/admin (quien, que, cuando, con que datos y el resultado). No se
+// auditan las acciones publicas (el kiosko debe seguir rapido; sus marcas ya
+// quedan con foto y GPS en asistencias_v2).
+var HEADERS_AUDITORIA_ = ['id', 'timestamp', 'usuario_id', 'usuario', 'accion', 'resultado', 'detalle'];
+var CAMPOS_OCULTOS_AUDITORIA_ = ['token', 'password', 'contrasena', 'fileContent', 'cvBase64', 'base64', 'foto', 'tempPassword'];
+
+function resumirDatos_(obj, profundidad) {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj === 'string') return obj.length > 200 ? obj.slice(0, 200) + '…' : obj;
+  if (typeof obj !== 'object') return obj;
+  if ((profundidad || 0) > 2) return '[…]';
+  var out = Array.isArray(obj) ? [] : {};
+  for (var k in obj) {
+    if (CAMPOS_OCULTOS_AUDITORIA_.indexOf(k) >= 0) { out[k] = '[oculto]'; continue; }
+    out[k] = resumirDatos_(obj[k], (profundidad || 0) + 1);
+  }
+  return out;
+}
+
+function registrarAuditoria_(ctx, action, resultado) {
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var hoja = ss.getSheetByName('auditoria');
+    if (!hoja) {
+      hoja = ss.insertSheet('auditoria');
+      hoja.appendRow(HEADERS_AUDITORIA_);
+      hoja.getRange(1, 1, 1, HEADERS_AUDITORIA_.length).setFontWeight('bold');
+    }
+    var perfil = null;
+    try { perfil = perfilUsuario_(ctx.userId); } catch (e) {}
+    var detalle = JSON.stringify({ datos: resumirDatos_(ctx.data), respuesta: resumirDatos_(resultado && resultado.data) });
+    if (detalle.length > 4000) detalle = detalle.slice(0, 4000) + '…';
+    hoja.appendRow([
+      Utilities.getUuid(),
+      new Date().toISOString(),
+      String(ctx.userId || ''),
+      perfil ? (perfil.nombre || perfil.email || '') : '',
+      action,
+      resultado && resultado.success ? 'ok' : ('error: ' + String(resultado && resultado.error || '')).slice(0, 200),
+      detalle
+    ]);
+  } catch (e) {
+    console.error('registrarAuditoria_ fallo (no bloquea la accion): ' + e.message);
+  }
+}
+
+// Lectura desde el final (lo mas reciente primero), con filtros.
+function getAuditoria(data) {
+  var hoja = SpreadsheetApp.openById(SHEET_ID).getSheetByName('auditoria');
+  if (!hoja || hoja.getLastRow() < 2) return { success: true, data: [] };
+  var limite = Math.min(Number(data && data.limite) || 300, 1000);
+  var t = leerTramoFinal_(hoja, Math.max(limite * 3, 600));
+  var h = t.headers;
+  var filas = t.rows.map(function (r) { return rowToObject(h, r); }).reverse();
+  var desde = data && data.desde ? String(data.desde) : '';
+  var hasta = data && data.hasta ? String(data.hasta) + 'T99' : '';
+  var usuario = data && data.usuario ? String(data.usuario).toLowerCase() : '';
+  var accion = data && data.accion ? String(data.accion) : '';
+  filas = filas.filter(function (f) {
+    var ts = String(f.timestamp || '');
+    if (desde && ts < desde) return false;
+    if (hasta && ts > hasta) return false;
+    if (usuario && String(f.usuario || '').toLowerCase().indexOf(usuario) === -1 && String(f.usuario_id) !== data.usuario) return false;
+    if (accion && f.accion !== accion) return false;
+    return true;
+  });
+  return { success: true, data: filas.slice(0, limite) };
+}
+
+// ── Cache de lecturas frecuentes (escalon 1) ───────────────────
+// Lecturas sin parametros que se piden mucho y cambian poco. TTL 5 min y
+// se invalidan TODAS tras cualquier escritura exitosa que pase por el router
+// (asi ningun cambio del panel queda oculto por la cache). Cambios hechos a
+// mano en la hoja o desde el editor tardan como maximo 5 min en verse.
+var LECTURAS_CACHEABLES_ = ['getJobs', 'getCapacitaciones', 'getFeriados', 'getConfigPlanilla'];
+var TTL_LECTURAS_ = 300;
+
+function leerConCache_(action, fn) {
+  var cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (e) {}
+  var clave = 'lect:' + action;
+  if (cache) {
+    try {
+      var guardado = cache.get(clave);
+      if (guardado) return JSON.parse(guardado);
+    } catch (e) {}
+  }
+  var res = fn();
+  if (cache && res && res.success) {
+    try {
+      var json = JSON.stringify(res);
+      if (json.length < 90000) cache.put(clave, json, TTL_LECTURAS_); // limite de CacheService: 100 KB
+    } catch (e) {}
+  }
+  return res;
+}
+
+function invalidarLecturas_() {
+  try { CacheService.getScriptCache().removeAll(LECTURAS_CACHEABLES_.map(function (a) { return 'lect:' + a; })); } catch (e) {}
+}
+
+// Acciones de solo lectura (no se auditan ni invalidan cache).
+function esAccionDeLectura_(action) {
+  return /^(get|obtener|verify|consultar|historial|listar|login)/i.test(action);
 }

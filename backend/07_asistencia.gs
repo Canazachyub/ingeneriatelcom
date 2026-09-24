@@ -721,6 +721,12 @@ function registrarAsistenciaManual(data) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return { success: false, error: 'Fecha invalida (yyyy-mm-dd)' };
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) return { success: false, error: 'Hora invalida (HH:mm)' };
   if (!nota) return { success: false, error: 'La observacion es obligatoria (auditoria del registro manual)' };
+  // Sin fechas futuras: ademas de no tener sentido, la lectura por rango de
+  // getAsistenciasV2 asume que ninguna fila tiene fecha posterior a su
+  // momento de escritura (ver leerFilasAsistenciaDesde_).
+  if (fecha > Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd')) {
+    return { success: false, error: 'No se puede registrar una marca con fecha futura' };
+  }
 
   // nombre/cargo siempre desde el roster real, nunca desde el cliente.
   // Se incluyen los CESADOS a proposito: el admin tiene que poder registrar
@@ -793,12 +799,43 @@ function filtrarPorRango_(result, data) {
   return result;
 }
 
+// Devuelve { headers, rows } con TODAS las filas cuya fecha puede ser >= desde.
+// Crece desde el final hasta encontrar una marca del KIOSKO (foto_url no vacio)
+// escrita antes de `desde`: las marcas del kiosko se escriben en orden, y las
+// manuales nunca tienen fecha futura, asi que todo lo anterior a esa fila es
+// de antes de `desde`. Si no se puede asegurar, lee la hoja completa.
+function leerFilasAsistenciaDesde_(sheet, desde) {
+  var n = 800;
+  for (var intento = 0; intento < 6; intento++) {
+    var t = leerTramoFinal_(sheet, n);
+    if (t.completa) return t;
+    var cTs = t.headers.indexOf('timestamp');
+    var cFoto = t.headers.indexOf('foto_url');
+    if (cTs < 0 || cFoto < 0) break;
+    for (var i = 0; i < t.rows.length; i++) {
+      if (!t.rows[i][cFoto]) continue; // manual: no sirve para cortar
+      var ts = t.rows[i][cTs];
+      var d = (ts instanceof Date) ? ts : (ts ? new Date(ts) : null);
+      if (d && !isNaN(d.getTime()) &&
+          Utilities.formatDate(d, 'America/Lima', 'yyyy-MM-dd') < desde) {
+        return t; // hay una marca del kiosko anterior al rango dentro del tramo
+      }
+    }
+    n *= 3;
+  }
+  var todo = sheet.getDataRange().getValues();
+  return { headers: todo[0], rows: todo.slice(1), completa: true };
+}
+
 function getAsistenciasV2(data) {
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName('asistencias_v2');
   if (!sheet) return { success: true, data: [] };
 
-  var rows = sheet.getDataRange().getValues();
+  // Escalon 1: con `desde`, se lee solo el tramo final necesario (la hoja
+  // crece ~1,100 filas/mes y antes se leia completa en cada consulta).
+  var lect = (data && data.desde) ? leerFilasAsistenciaDesde_(sheet, String(data.desde)) : null;
+  var rows = lect ? [lect.headers].concat(lect.rows) : sheet.getDataRange().getValues();
   if (rows.length <= 1) return { success: true, data: [] };
 
   var headers = rows[0];
@@ -840,7 +877,23 @@ function getJustificaciones(data) {
   var sheet = ss.getSheetByName('justificaciones');
   if (!sheet) return { success: true, data: [] };
 
-  var rows = sheet.getDataRange().getValues();
+  // Escalon 1: las justificaciones solo las escribe el kiosko, en orden
+  // cronologico; con `desde` basta el tramo final que llega antes de esa fecha.
+  var rows;
+  if (data && data.desde) {
+    var n = 300, t = null;
+    for (var intento = 0; intento < 6; intento++) {
+      t = leerTramoFinal_(sheet, n);
+      var cF = t.headers.indexOf('fecha');
+      if (t.completa || cF < 0) break;
+      var primera = fechaISO_(t.rows[0][cF]);
+      if (primera && primera < String(data.desde)) break;
+      n *= 3;
+    }
+    rows = [t.headers].concat(t.rows);
+  } else {
+    rows = sheet.getDataRange().getValues();
+  }
   if (rows.length <= 1) return { success: true, data: [] };
 
   var headers = rows[0];

@@ -34,6 +34,8 @@ var FUNCIONES_REQUERIDAS = [
   'getConfigPlanillaAction', 'updateConfigPlanilla', 'getSueldos', 'updateSueldo', 'crearTrabajador',
   'darDeBajaTrabajador', 'reactivarTrabajador',
   'getIncidencias', 'revisarIncidencia', 'sincronizarIncidencias', 'getEstadoPlanilla', 'sincronizarIncidenciasProgramada',
+  'listarUsuarios', 'crearUsuario', 'actualizarUsuario', 'restablecerContrasena', 'getAuditoria',
+  'perfilUsuario_', 'puedeModulo_', 'registrarAuditoria_', 'leerConCache_', 'leerFilasAsistenciaDesde_',
   'autorizarSalida5pm', 'getAutorizaciones5pm', 'registrarMuestreo', 'getBolsaHoras',
   'getFeriados', 'agregarFeriado', 'eliminarFeriado', 'sembrarFeriadosPeru2026',
   'getCapacitaciones', 'getCapacitacionById', 'iniciarEvaluacion', 'submitEvaluacion',
@@ -225,6 +227,45 @@ function ejecutarTestSalud() {
       else ok();
     }
   } catch (e) { fail('Verificacion de convocatorias abiertas fallo: ' + e.message); }
+
+  // 9d. Escalon 1: la lectura por rango devuelve EXACTAMENTE lo mismo que la
+  // lectura completa filtrada (solo lectura). Si esto falla, NO desplegar.
+  try {
+    var desdeEq = Utilities.formatDate(new Date(Date.now() - 45 * 86400000), 'America/Lima', 'yyyy-MM-dd');
+    var clave = function (r) { return String(r.id); };
+    var completoA = (getAsistenciasV2({}).data || []).filter(function (r) { return String(r.fecha) >= desdeEq; }).map(clave).sort();
+    var rangoA = (getAsistenciasV2({ desde: desdeEq }).data || []).map(clave).sort();
+    if (completoA.join('|') !== rangoA.join('|')) {
+      fail('Lectura por rango de asistencias difiere de la completa (' + rangoA.length + ' vs ' + completoA.length + ')');
+    } else ok();
+    var completoJ = (getJustificaciones({}).data || []).filter(function (r) { return String(r.fecha) >= desdeEq; }).map(clave).sort();
+    var rangoJ = (getJustificaciones({ desde: desdeEq }).data || []).map(clave).sort();
+    if (completoJ.join('|') !== rangoJ.join('|')) {
+      fail('Lectura por rango de justificaciones difiere de la completa (' + rangoJ.length + ' vs ' + completoJ.length + ')');
+    } else ok();
+  } catch (e) { fail('Verificacion de lectura por rango fallo: ' + e.message); }
+
+  // 9e. Escalon 2: quien pierde acceso con los permisos por modulo. Los
+  // usuarios activos SIN rol de administracion ni permisos de modulo solo
+  // veran el Centro de actividades. Revisar ANTES de publicar la version.
+  try {
+    var filasU = SpreadsheetApp.openById(SHEET_ID).getSheetByName('usuarios').getDataRange().getValues();
+    var colsU = columnasUsuarios_(filasU[0]);
+    var admins = 0, sinModulos = [];
+    for (var u = 1; u < filasU.length; u++) {
+      if (!filasU[u][colsU.id]) continue;
+      var pu = filaAUsuario_(filasU[u], colsU);
+      if (!pu.activo) continue;
+      if (pu.esAdmin) { admins++; continue; }
+      var conModulo = pu.permisos.some(function (p) { return MODULOS_PANEL_[p] && !MODULOS_PANEL_[p].soloAdmin; });
+      if (!conModulo) sinModulos.push((pu.email || pu.id) + ' (rol ' + (pu.rol || '—') + ')');
+    }
+    if (admins === 0) fail('No hay ningun administrador activo en usuarios');
+    else ok();
+    if (sinModulos.length) {
+      warn(sinModulos.length + ' usuario(s) activo(s) sin rol admin ni permisos de modulo — solo veran el Centro de actividades: ' + sinModulos.join(', '));
+    }
+  } catch (e) { fail('Verificacion de permisos de usuarios fallo: ' + e.message); }
 
   // 10. CacheService operativo (via rapida del anti-duplicado)
   try {
