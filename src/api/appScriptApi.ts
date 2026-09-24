@@ -246,11 +246,35 @@ class AppScriptApi {
     return this.token
   }
 
+  // Lecturas: un reintento automático ante fallos pasajeros (sin respuesta,
+  // 404 de la URL intermedia de Apps Script, "Servidor/Sistema ocupado").
+  // Bajo carga Apps Script falla de a ratos y el panel mostraba errores que se
+  // resolvían con solo recargar. Las escrituras NO se reintentan aquí (podrían
+  // duplicar datos); el kiosko maneja sus propios reintentos.
   private async request<T>(
     action: string,
     method: 'GET' | 'POST' = 'GET',
     data?: Record<string, unknown>,
     timeoutMs = 0
+  ): Promise<ApiResponse<T>> {
+    // getTrabajadores queda fuera: el kiosko ya tiene reintentos calibrados
+    // para la ráfaga de las 07:30 (ver docs/KIOSKO_ASISTENCIA.md).
+    const esLectura = action !== 'getTrabajadores' && /^(get|obtener|verify|consultar|historial)/i.test(action)
+    if (!esLectura) return this.requestUnaVez<T>(action, method, data, timeoutMs, true)
+    const primero = await this.requestUnaVez<T>(action, method, data, timeoutMs, false)
+    const pasajero = !primero.success &&
+      (!!primero.transporte || /ocupado/i.test(primero.error || ''))
+    if (!pasajero) return primero
+    await new Promise((r) => setTimeout(r, 1500))
+    return this.requestUnaVez<T>(action, method, data, timeoutMs, true)
+  }
+
+  private async requestUnaVez<T>(
+    action: string,
+    method: 'GET' | 'POST',
+    data: Record<string, unknown> | undefined,
+    timeoutMs: number,
+    avisar: boolean
   ): Promise<ApiResponse<T>> {
     if (!this.baseUrl) {
       console.warn('Apps Script URL not configured')
@@ -302,7 +326,7 @@ class AppScriptApi {
           ? `El servidor respondió un formato inesperado (acción: ${action})`
           : `Error del servidor (HTTP ${response.status}) en la acción ${action}`
         console.error('API non-JSON response:', action, response.status, text.slice(0, 300))
-        this.notifyError(message, action)
+        if (avisar) this.notifyError(message, action)
         return { success: false, error: message, transporte: true }
       }
     } catch (error) {
@@ -311,7 +335,7 @@ class AppScriptApi {
       const message = esTimeout
         ? 'El servidor tardó demasiado en responder. Intenta de nuevo.'
         : 'Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.'
-      this.notifyError(message, action)
+      if (avisar) this.notifyError(message, action)
       return { success: false, error: message, transporte: true }
     } finally {
       if (timer) clearTimeout(timer)
@@ -509,8 +533,14 @@ class AppScriptApi {
     return this.request<JobApplication[]>('getApplicationsAdmin', 'POST', { jobId })
   }
 
-  async updateApplicationStatus(id: string, status: string, notes?: string): Promise<ApiResponse<JobApplication>> {
-    return this.request<JobApplication>('updateApplicationStatus', 'POST', { id, status, notes })
+  // notes: undefined = no tocar las notas. notificar: envía correo al postulante.
+  async updateApplicationStatus(
+    id: string,
+    status: string,
+    notes?: string,
+    notificar = false
+  ): Promise<ApiResponse<JobApplication>> {
+    return this.request<JobApplication>('updateApplicationStatus', 'POST', { id, status, notes, notificar })
   }
 
   // Jobs

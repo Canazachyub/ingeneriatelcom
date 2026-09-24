@@ -155,7 +155,12 @@ function handleRequest_(e) {
     } catch (errSecreto) {
       return jsonResponse({ success: false, error: 'Servidor ocupado, intenta de nuevo en unos segundos' });
     }
-    userId = parseToken_(token);
+    try {
+      userId = parseToken_(token);
+    } catch (errToken) {
+      // Fallo de Google al validar, no un token malo: el cliente reintenta
+      return jsonResponse({ success: false, error: 'Servidor ocupado, intenta de nuevo en unos segundos' });
+    }
     if (!userId) {
       return jsonResponse({ success: false, error: 'No autorizado' });
     }
@@ -169,6 +174,12 @@ function handleRequest_(e) {
     return jsonResponse(route.handler(ctx));
   } catch (error) {
     console.error('Error en accion ' + action + ':', error);
+    // Un fallo transitorio de Google dentro de la accion (p. ej. al re-validar
+    // el token en verifyToken) no debe llegar al cliente como un error que
+    // parezca rechazo de sesion: el panel lo trata como "ocupado" y reintenta.
+    if (String(error && error.message).indexOf('TOKEN_TRANSITORIO') !== -1) {
+      return jsonResponse({ success: false, error: 'Servidor ocupado, intenta de nuevo en unos segundos' });
+    }
     return jsonResponse({ success: false, error: error.message });
   }
 }

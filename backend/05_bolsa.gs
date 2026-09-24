@@ -416,35 +416,55 @@ function getApplicationById(id) {
   return { success: true, data: rowToObject(headers, app) };
 }
 
+// Estados validos del pipeline (los que usa ApplicationsPage -> statusToApi).
+var ESTADOS_POSTULACION_ = ['pendiente', 'en_revision', 'entrevista', 'contratado', 'rechazado'];
+
+// Cambia el estado (y opcionalmente las notas) de una postulacion.
+// Acepta `status` o `estado`: el panel envia `status`, y antes aqui solo se
+// leia `data.estado` -> se escribia VACIO en la hoja cada vez que el admin
+// cambiaba el estado (6 de 7 postulaciones quedaron sin estado).
+// `notificar: true` envia el correo al postulante.
 function updateApplicationStatus(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('postulaciones');
-  const apps = sheet.getDataRange().getValues();
-  const headers = apps[0];
-
-  // Encontrar indices dinamicamente
-  const statusCol = headers.indexOf('status');
-  const updatedAtCol = headers.indexOf('updatedAt');
-
-  for (let i = 1; i < apps.length; i++) {
-    if (apps[i][0] === data.id) {
-      // Actualizar estado (columna status, default col 13 = indice 12)
-      const statusColNum = statusCol >= 0 ? statusCol + 1 : 13;
-      sheet.getRange(i + 1, statusColNum).setValue(data.estado);
-
-      // Actualizar updatedAt si existe
-      if (updatedAtCol >= 0) {
-        sheet.getRange(i + 1, updatedAtCol + 1).setValue(new Date());
-      }
-
-      if (data.notificar) {
-        sendStatusUpdateEmail(rowToObject(headers, apps[i]), data.estado);
-      }
-
-      return { success: true, message: 'Estado actualizado' };
-    }
+  const nuevoEstado = String(data.status || data.estado || '').trim();
+  const cambiaNotas = data.notes !== undefined || data.observaciones !== undefined;
+  if (!nuevoEstado && !cambiaNotas) return { success: false, error: 'Falta el nuevo estado' };
+  if (nuevoEstado && ESTADOS_POSTULACION_.indexOf(nuevoEstado) === -1) {
+    return { success: false, error: 'Estado no valido: ' + nuevoEstado };
   }
 
-  return { success: false, error: 'Postulacion no encontrada' };
+  return withLock_(function () {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('postulaciones');
+    const apps = sheet.getDataRange().getValues();
+    const headers = apps[0];
+    const col = function (nombres) {
+      for (var k = 0; k < nombres.length; k++) { var c = headers.indexOf(nombres[k]); if (c >= 0) return c; }
+      return -1;
+    };
+    const statusCol = col(['status', 'estado']);
+    const notesCol = col(['notes', 'observaciones']);
+    const updatedAtCol = col(['updatedAt', 'fecha_actualizacion']);
+
+    for (let i = 1; i < apps.length; i++) {
+      if (String(apps[i][0]) === String(data.id)) {
+        if (nuevoEstado) {
+          if (statusCol < 0) return { success: false, error: 'La hoja postulaciones no tiene columna de estado' };
+          sheet.getRange(i + 1, statusCol + 1).setValue(nuevoEstado);
+        }
+        if (cambiaNotas && notesCol >= 0) {
+          sheet.getRange(i + 1, notesCol + 1).setValue(String(data.notes !== undefined ? data.notes : data.observaciones));
+        }
+        if (updatedAtCol >= 0) sheet.getRange(i + 1, updatedAtCol + 1).setValue(new Date());
+
+        var correo = null;
+        if (data.notificar && nuevoEstado) {
+          sendStatusUpdateEmail(rowToObject(headers, apps[i]), nuevoEstado);
+          correo = true;
+        }
+        return { success: true, message: 'Postulacion actualizada', data: { id: data.id, status: nuevoEstado || undefined, notificado: !!correo } };
+      }
+    }
+    return { success: false, error: 'Postulacion no encontrada' };
+  });
 }
 
 function hireApplicant(data) {

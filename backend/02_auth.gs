@@ -213,16 +213,39 @@ function generateToken(userId) {
 }
 
 // Devuelve el userId si el token es valido (firma correcta y < 24h); null si no.
+// Devuelve el userId, o null si el token es INVALIDO (mal formado, firma que
+// no coincide, expirado). Si falla un servicio de Google al calcular la firma
+// (pasa bajo carga) LANZA 'TOKEN_TRANSITORIO': antes esa excepcion se tragaba
+// y el router respondia "No autorizado" a sesiones validas (visto en la
+// auditoria del 24/09 con 19 consultas simultaneas).
 function parseToken_(token) {
   if (!token) return null;
-  try {
-    const parts = String(token).split('.');
-    if (parts.length !== 2) return null;
+  const parts = String(token).split('.');
+  if (parts.length !== 2) return null;
 
-    const payload = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString();
-    const expected = Utilities.base64EncodeWebSafe(
-      Utilities.computeHmacSha256Signature(payload, getTokenSecret_())
-    );
+  let payload;
+  try {
+    payload = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString();
+  } catch (e) {
+    return null; // no es base64 valido: token mal formado
+  }
+
+  let expected = null;
+  for (let intento = 0; intento < 3 && expected === null; intento++) {
+    try {
+      expected = Utilities.base64EncodeWebSafe(
+        Utilities.computeHmacSha256Signature(payload, getTokenSecret_())
+      );
+    } catch (e) {
+      if (intento === 2) {
+        console.error('parseToken_: fallo transitorio al firmar: ' + e.message);
+        throw new Error('TOKEN_TRANSITORIO');
+      }
+      Utilities.sleep(250 * (intento + 1));
+    }
+  }
+
+  try {
     if (expected !== parts[1]) return null;
 
     const pieces = payload.split('|');
