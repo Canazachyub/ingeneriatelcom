@@ -1,5 +1,31 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { lazy, Suspense, useEffect, useRef } from 'react'
+import { lazy as lazyReact, Suspense, useEffect, useRef, ComponentType } from 'react'
+
+// Carga diferida con recuperación tras un deploy. GitHub Pages deja el
+// index.html en caché ~10 min; si ese HTML viejo pide un archivo de la versión
+// anterior (ya borrado), la pantalla quedaba EN BLANCO. Ahora, si falla la
+// carga, se recarga la página una sola vez (marca en sessionStorage) y el
+// navegador toma la versión nueva. Además el deploy usa --add (no borra
+// archivos viejos). Ver docs/ADMIN.md §7.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function lazy<T extends ComponentType<any>>(cargar: () => Promise<{ default: T }>) {
+  return lazyReact(() =>
+    cargar().catch((err) => {
+      const CLAVE = 'recarga_tras_deploy'
+      let yaRecargo = false
+      try { yaRecargo = sessionStorage.getItem(CLAVE) === '1' } catch { /* sin storage */ }
+      if (!yaRecargo) {
+        try { sessionStorage.setItem(CLAVE, '1') } catch { /* sin storage */ }
+        window.location.reload()
+        return new Promise<{ default: T }>(() => { /* la página se recarga */ })
+      }
+      throw err
+    }).then((m) => {
+      try { sessionStorage.removeItem('recarga_tras_deploy') } catch { /* sin storage */ }
+      return m
+    })
+  )
+}
 import { api } from './api/appScriptApi'
 import Layout from './components/layout/Layout'
 import HomePage from './pages/HomePage'
