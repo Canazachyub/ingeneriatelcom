@@ -24,7 +24,7 @@ import {
 } from 'react-icons/fa'
 import AdminLayout from '../../components/admin/AdminLayout'
 import { useAuth } from '../../context/AuthContext'
-import { esAdmin, nombreDe } from '../../utils/roles'
+import { nombreDe, puede, Modulo } from '../../utils/roles'
 import {
   useDashboardStats,
   useAttendanceToday,
@@ -154,17 +154,17 @@ function Kpi({ etiqueta, valor, icono, cargando, error }: { etiqueta: string; va
   )
 }
 
-const ACCESOS: { nombre: string; href: string; icono: ReactNode; externo?: boolean; soloAdmin?: boolean }[] = [
-  { nombre: 'Asistencias', href: '/admin/asistencias', icono: <FaClock /> },
-  { nombre: 'Planilla', href: '/admin/planilla', icono: <FaFileInvoiceDollar />, soloAdmin: true },
-  { nombre: 'Empleados', href: '/admin/empleados', icono: <FaUsers /> },
-  { nombre: 'Proyectos', href: '/admin/proyectos', icono: <FaProjectDiagram /> },
-  { nombre: 'Bolsa de trabajo', href: '/admin/bolsa-trabajo', icono: <FaBriefcase /> },
-  { nombre: 'Postulaciones', href: '/admin/postulaciones', icono: <FaFileAlt /> },
-  { nombre: 'Mensajes', href: '/admin/mensajes', icono: <FaEnvelope /> },
-  { nombre: 'Cursos', href: '/admin/capacitaciones', icono: <FaGraduationCap /> },
-  { nombre: 'Evaluaciones', href: '/admin/evaluaciones', icono: <FaClipboardList /> },
-  { nombre: 'Reportes', href: '/admin/reportes', icono: <FaChartLine /> },
+const ACCESOS: { nombre: string; href: string; icono: ReactNode; externo?: boolean; modulo?: Modulo }[] = [
+  { nombre: 'Asistencias', href: '/admin/asistencias', icono: <FaClock />, modulo: 'asistencias' },
+  { nombre: 'Planilla', href: '/admin/planilla', icono: <FaFileInvoiceDollar />, modulo: 'planilla' },
+  { nombre: 'Empleados', href: '/admin/empleados', icono: <FaUsers />, modulo: 'personal' },
+  { nombre: 'Proyectos', href: '/admin/proyectos', icono: <FaProjectDiagram />, modulo: 'proyectos' },
+  { nombre: 'Bolsa de trabajo', href: '/admin/bolsa-trabajo', icono: <FaBriefcase />, modulo: 'bolsa' },
+  { nombre: 'Postulaciones', href: '/admin/postulaciones', icono: <FaFileAlt />, modulo: 'bolsa' },
+  { nombre: 'Mensajes', href: '/admin/mensajes', icono: <FaEnvelope />, modulo: 'mensajes' },
+  { nombre: 'Cursos', href: '/admin/capacitaciones', icono: <FaGraduationCap />, modulo: 'capacitaciones' },
+  { nombre: 'Evaluaciones', href: '/admin/evaluaciones', icono: <FaClipboardList />, modulo: 'capacitaciones' },
+  { nombre: 'Reportes', href: '/admin/reportes', icono: <FaChartLine />, modulo: 'reportes' },
   { nombre: 'Kiosko', href: '/asistencia', icono: <FaTabletAlt />, externo: true },
 ]
 
@@ -177,7 +177,15 @@ const ESTADO_PROYECTO: Record<string, { label: string; color: string }> = {
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const admin = esAdmin(user)
+
+  // Cada bloque solo se consulta y se muestra si el usuario tiene su módulo
+  // (mismo criterio que el backend: MODULO_POR_ACCION_). Así no se lanzan
+  // consultas que el servidor rechazaría con "Permisos insuficientes".
+  const verAsistencias = puede(user, 'asistencias')
+  const verBolsa = puede(user, 'bolsa')
+  const verMensajes = puede(user, 'mensajes')
+  const verCapacitaciones = puede(user, 'capacitaciones')
+  const verPlanilla = puede(user, 'planilla')
   const reducir = useReducedMotion()
 
   const hoy = new Date()
@@ -186,23 +194,23 @@ export default function DashboardPage() {
   const hoyISO = isoLocal(hoy)
 
   const stats = useDashboardStats()
-  const asistencia = useAttendanceToday()
+  const asistencia = useAttendanceToday(verAsistencias)
   // Carga escalonada: primero los indicadores y la asistencia de hoy; los
   // pendientes se piden cuando esa primera tanda terminó. Apps Script se pone
   // lento (y falla de a ratos) con 8+ consultas simultáneas del mismo usuario.
   const segundaTanda = !stats.isLoading && !asistencia.isLoading
-  const incidencias = useIncidenciasMes(inicioMes, hoyISO, admin && segundaTanda)
-  const estadoPlanilla = useEstadoPlanilla(admin && segundaTanda)
+  const incidencias = useIncidenciasMes(inicioMes, hoyISO, verPlanilla && segundaTanda)
+  const estadoPlanilla = useEstadoPlanilla(verPlanilla && segundaTanda)
   // Sin sincronizar hace más de 2 días (o nunca registrado): las incidencias
   // del mes NO están calculadas y "0 pendientes" sería engañoso.
   const ultimaSync = estadoPlanilla.data?.cuando ? new Date(estadoPlanilla.data.cuando) : null
   const diasSinSync = ultimaSync ? Math.floor((Date.now() - ultimaSync.getTime()) / 86400000) : null
   const syncAtrasada = estadoPlanilla.isSuccess && (diasSinSync === null || diasSinSync > 2)
-  const postulaciones = useApplicationsAdmin(segundaTanda)
-  const mensajes = useContacts(segundaTanda)
-  const justificaciones = useJustificacionesRecientes(hace7, segundaTanda)
-  const convocatorias = useJobsAdmin(segundaTanda)
-  const evaluaciones = useEvaluacionesAdmin(segundaTanda)
+  const postulaciones = useApplicationsAdmin(verBolsa && segundaTanda)
+  const mensajes = useContacts(verMensajes && segundaTanda)
+  const justificaciones = useJustificacionesRecientes(hace7, verAsistencias && segundaTanda)
+  const convocatorias = useJobsAdmin(verBolsa && segundaTanda)
+  const evaluaciones = useEvaluacionesAdmin(verCapacitaciones && segundaTanda)
 
   // ── Cálculos por bloque ──
   const totalHoy = asistencia.data?.totalEmpleados ?? 0
@@ -251,9 +259,9 @@ export default function DashboardPage() {
         {/* KPIs */}
         <section aria-label="Indicadores" className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <Kpi etiqueta="Empleados activos" valor={s?.totalEmployees} icono={<FaUsers />} cargando={stats.isLoading} error={stats.isError} />
-          <Kpi etiqueta="Presentes hoy" valor={presentesHoy} icono={<FaUserCheck />} cargando={asistencia.isLoading} error={asistencia.isError} />
+          {verAsistencias && <Kpi etiqueta="Presentes hoy" valor={presentesHoy} icono={<FaUserCheck />} cargando={asistencia.isLoading} error={asistencia.isError} />}
           <Kpi etiqueta="Proyectos activos" valor={s?.activeProjects} icono={<FaProjectDiagram />} cargando={stats.isLoading} error={stats.isError} />
-          <Kpi etiqueta="Convocatorias activas" valor={convActivas} icono={<FaBriefcase />} cargando={convocatorias.isLoading} error={convocatorias.isError} />
+          {verBolsa && <Kpi etiqueta="Convocatorias activas" valor={convActivas} icono={<FaBriefcase />} cargando={convocatorias.isLoading} error={convocatorias.isError} />}
         </section>
 
         {/* Requieren atención */}
@@ -264,21 +272,23 @@ export default function DashboardPage() {
             <span className="flex-1 h-px bg-gradient-to-r from-primary-700/70 to-transparent" />
           </h2>
           <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            <motion.div {...aparecer(0)}>
-              <Pendiente
-                titulo="Asistencia de hoy"
-                icono={<FaClock />}
-                href="/admin/asistencias"
-                consulta={asistencia}
-                valor={`${presentesHoy}/${totalHoy}`}
-                unidad="presentes"
-                alerta={ausentesHoy > 0}
-                detalle={ausentesHoy > 0 ? `${ausentesHoy} sin marcar aún` : 'Todo el personal marcó'}
-                accion="Ver marcas"
-              />
-            </motion.div>
+            {verAsistencias && (
+              <motion.div {...aparecer(0)}>
+                <Pendiente
+                  titulo="Asistencia de hoy"
+                  icono={<FaClock />}
+                  href="/admin/asistencias"
+                  consulta={asistencia}
+                  valor={`${presentesHoy}/${totalHoy}`}
+                  unidad="presentes"
+                  alerta={ausentesHoy > 0}
+                  detalle={ausentesHoy > 0 ? `${ausentesHoy} sin marcar aún` : 'Todo el personal marcó'}
+                  accion="Ver marcas"
+                />
+              </motion.div>
+            )}
 
-            {admin && (
+            {verPlanilla && (
               <motion.div {...aparecer(1)}>
                 <Pendiente
                   titulo="Incidencias pendientes"
@@ -298,79 +308,89 @@ export default function DashboardPage() {
               </motion.div>
             )}
 
-            <motion.div {...aparecer(2)}>
-              <Pendiente
-                titulo="Justificaciones (7 días)"
-                icono={<FaPaperclip />}
-                href="/admin/asistencias"
-                consulta={justificaciones}
-                valor={justRecientes.length}
-                unidad="recibidas"
-                alerta={justRecientes.length > 0}
-                detalle={
-                  justRecientes.length
-                    ? justRecientes.slice(-3).map((j) => String(j.nombre || j.dni)).join(' · ')
-                    : 'Ninguna en la última semana'
-                }
-                accion="Ver justificaciones"
-              />
-            </motion.div>
+            {verAsistencias && (
+              <motion.div {...aparecer(2)}>
+                <Pendiente
+                  titulo="Justificaciones (7 días)"
+                  icono={<FaPaperclip />}
+                  href="/admin/asistencias"
+                  consulta={justificaciones}
+                  valor={justRecientes.length}
+                  unidad="recibidas"
+                  alerta={justRecientes.length > 0}
+                  detalle={
+                    justRecientes.length
+                      ? justRecientes.slice(-3).map((j) => String(j.nombre || j.dni)).join(' · ')
+                      : 'Ninguna en la última semana'
+                  }
+                  accion="Ver justificaciones"
+                />
+              </motion.div>
+            )}
 
-            <motion.div {...aparecer(3)}>
-              <Pendiente
-                titulo="Postulaciones sin revisar"
-                icono={<FaFileAlt />}
-                href="/admin/postulaciones"
-                consulta={postulaciones}
-                valor={postSinRevisar}
-                unidad={`de ${(postulaciones.data || []).length}`}
-                alerta={postSinRevisar > 0}
-                detalle={postSinRevisar ? 'Pendientes o sin estado asignado' : 'Todas revisadas'}
-                accion="Revisar postulaciones"
-              />
-            </motion.div>
+            {verBolsa && (
+              <motion.div {...aparecer(3)}>
+                <Pendiente
+                  titulo="Postulaciones sin revisar"
+                  icono={<FaFileAlt />}
+                  href="/admin/postulaciones"
+                  consulta={postulaciones}
+                  valor={postSinRevisar}
+                  unidad={`de ${(postulaciones.data || []).length}`}
+                  alerta={postSinRevisar > 0}
+                  detalle={postSinRevisar ? 'Pendientes o sin estado asignado' : 'Todas revisadas'}
+                  accion="Revisar postulaciones"
+                />
+              </motion.div>
+            )}
 
-            <motion.div {...aparecer(4)}>
-              <Pendiente
-                titulo="Mensajes pendientes"
-                icono={<FaEnvelope />}
-                href="/admin/mensajes"
-                consulta={mensajes}
-                valor={msgPend}
-                unidad={`de ${(mensajes.data || []).length}`}
-                alerta={msgPend > 0}
-                detalle={msgPend ? 'Formulario de contacto sin responder' : 'Bandeja al día'}
-                accion="Abrir mensajes"
-              />
-            </motion.div>
+            {verMensajes && (
+              <motion.div {...aparecer(4)}>
+                <Pendiente
+                  titulo="Mensajes pendientes"
+                  icono={<FaEnvelope />}
+                  href="/admin/mensajes"
+                  consulta={mensajes}
+                  valor={msgPend}
+                  unidad={`de ${(mensajes.data || []).length}`}
+                  alerta={msgPend > 0}
+                  detalle={msgPend ? 'Formulario de contacto sin responder' : 'Bandeja al día'}
+                  accion="Abrir mensajes"
+                />
+              </motion.div>
+            )}
 
-            <motion.div {...aparecer(5)}>
-              <Pendiente
-                titulo="Evaluaciones por calificar"
-                icono={<FaClipboardList />}
-                href="/admin/evaluaciones"
-                consulta={evaluaciones}
-                valor={evalPorRevisar}
-                unidad="enviadas"
-                alerta={evalPorRevisar > 0}
-                detalle={evalPorRevisar ? 'Exámenes esperando nota y retroalimentación' : 'Sin exámenes por calificar'}
-                accion="Calificar"
-              />
-            </motion.div>
+            {verCapacitaciones && (
+              <motion.div {...aparecer(5)}>
+                <Pendiente
+                  titulo="Evaluaciones por calificar"
+                  icono={<FaClipboardList />}
+                  href="/admin/evaluaciones"
+                  consulta={evaluaciones}
+                  valor={evalPorRevisar}
+                  unidad="enviadas"
+                  alerta={evalPorRevisar > 0}
+                  detalle={evalPorRevisar ? 'Exámenes esperando nota y retroalimentación' : 'Sin exámenes por calificar'}
+                  accion="Calificar"
+                />
+              </motion.div>
+            )}
 
-            <motion.div {...aparecer(6)}>
-              <Pendiente
-                titulo="Bolsa de trabajo"
-                icono={<FaBriefcase />}
-                href="/admin/bolsa-trabajo"
-                consulta={convocatorias}
-                valor={convActivas}
-                unidad={`activas de ${convTotal}`}
-                alerta={convActivas === 0}
-                detalle={convActivas === 0 ? 'La web pública no muestra ninguna oferta' : 'Visibles en la web pública'}
-                accion="Gestionar convocatorias"
-              />
-            </motion.div>
+            {verBolsa && (
+              <motion.div {...aparecer(6)}>
+                <Pendiente
+                  titulo="Bolsa de trabajo"
+                  icono={<FaBriefcase />}
+                  href="/admin/bolsa-trabajo"
+                  consulta={convocatorias}
+                  valor={convActivas}
+                  unidad={`activas de ${convTotal}`}
+                  alerta={convActivas === 0}
+                  detalle={convActivas === 0 ? 'La web pública no muestra ninguna oferta' : 'Visibles en la web pública'}
+                  accion="Gestionar convocatorias"
+                />
+              </motion.div>
+            )}
           </div>
         </section>
 
@@ -442,7 +462,7 @@ export default function DashboardPage() {
             <span className="flex-1 h-px bg-gradient-to-r from-primary-700/70 to-transparent" />
           </h2>
           <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-            {ACCESOS.filter((a) => !a.soloAdmin || admin).map((a) => {
+            {ACCESOS.filter((a) => !a.modulo || puede(user, a.modulo)).map((a) => {
               const clase = 'group flex flex-col items-center gap-2 p-4 bg-primary-900/40 border border-primary-700/50 hover:border-accent-electric/50 hover:bg-accent-electric/5 transition-colors text-center'
               const contenido = (
                 <>

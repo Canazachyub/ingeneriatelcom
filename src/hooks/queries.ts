@@ -41,9 +41,10 @@ export function useDashboardStats() {
 }
 
 // Asistencia de hoy: staleTime corto porque es data del dia que cambia seguido.
-export function useAttendanceToday() {
+export function useAttendanceToday(enabled = true) {
   return useQuery({
     queryKey: queryKeys.attendanceToday,
+    enabled,
     queryFn: async () => {
       const result = await api.getAttendanceToday()
       if (!result.success) throw new Error(result.error)

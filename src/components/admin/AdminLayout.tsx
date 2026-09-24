@@ -20,9 +20,11 @@ import {
   FaFileInvoiceDollar,
   FaGlobe,
   FaLock,
+  FaUserShield,
+  FaHistory,
 } from 'react-icons/fa'
 import { useAuth } from '../../context/AuthContext'
-import { esAdmin, nombreDe, rolDe } from '../../utils/roles'
+import { MODULOS, Modulo, puede, nombreDe, rolDe } from '../../utils/roles'
 
 interface AdminLayoutProps {
   children: React.ReactNode
@@ -32,51 +34,58 @@ interface NavItem {
   name: string
   href: string
   icon: React.ComponentType<{ className?: string }>
-  // true = sus acciones son nivel 'admin' en backend/01_router.gs: solo se
-  // muestra a quien el backend deja operarla (esRolAdmin_). Así nadie ve una
-  // sección que al usarla responde "Permisos insuficientes".
-  soloAdmin?: boolean
+  // Módulo que exige el backend (MODULO_POR_ACCION_ / nivel admin en
+  // backend/01_router.gs). Solo se muestra a quien `puede` usarlo, así nadie
+  // ve una sección que al usarla responde "Permisos insuficientes".
+  // Sin módulo = visible para cualquier sesión (Centro de actividades).
+  modulo?: Modulo | 'soloAdmin'
 }
+
+// true si el ítem requiere rol de administración (candado en el menú)
+const requiereAdmin = (m?: Modulo | 'soloAdmin') =>
+  m === 'soloAdmin' || !!MODULOS.find((x) => x.clave === m && x.soloAdmin)
 
 const navigationSections: { title: string; items: NavItem[] }[] = [
   {
     title: 'Principal',
     items: [
       { name: 'Centro de actividades', href: '/admin', icon: FaHome },
-      { name: 'Asistencias', href: '/admin/asistencias', icon: FaClock },
-      { name: 'Planilla', href: '/admin/planilla', icon: FaFileInvoiceDollar, soloAdmin: true },
+      { name: 'Asistencias', href: '/admin/asistencias', icon: FaClock, modulo: 'asistencias' },
+      { name: 'Planilla', href: '/admin/planilla', icon: FaFileInvoiceDollar, modulo: 'planilla' },
     ],
   },
   {
     title: 'Gestión',
     items: [
-      { name: 'Empleados', href: '/admin/empleados', icon: FaUsers },
-      { name: 'Proyectos', href: '/admin/proyectos', icon: FaProjectDiagram },
+      { name: 'Empleados', href: '/admin/empleados', icon: FaUsers, modulo: 'personal' },
+      { name: 'Proyectos', href: '/admin/proyectos', icon: FaProjectDiagram, modulo: 'proyectos' },
     ],
   },
   {
     title: 'Reclutamiento',
     items: [
-      { name: 'Bolsa de trabajo', href: '/admin/bolsa-trabajo', icon: FaBriefcase },
-      { name: 'Postulaciones', href: '/admin/postulaciones', icon: FaFileAlt },
+      { name: 'Bolsa de trabajo', href: '/admin/bolsa-trabajo', icon: FaBriefcase, modulo: 'bolsa' },
+      { name: 'Postulaciones', href: '/admin/postulaciones', icon: FaFileAlt, modulo: 'bolsa' },
     ],
   },
   {
     title: 'Comunicación',
-    items: [{ name: 'Mensajes', href: '/admin/mensajes', icon: FaEnvelope }],
+    items: [{ name: 'Mensajes', href: '/admin/mensajes', icon: FaEnvelope, modulo: 'mensajes' }],
   },
   {
     title: 'Capacitaciones',
     items: [
-      { name: 'Gestión de cursos', href: '/admin/capacitaciones', icon: FaGraduationCap },
-      { name: 'Evaluaciones', href: '/admin/evaluaciones', icon: FaClipboardList },
+      { name: 'Gestión de cursos', href: '/admin/capacitaciones', icon: FaGraduationCap, modulo: 'capacitaciones' },
+      { name: 'Evaluaciones', href: '/admin/evaluaciones', icon: FaClipboardList, modulo: 'capacitaciones' },
     ],
   },
   {
     title: 'Sistema',
     items: [
-      { name: 'Reportes', href: '/admin/reportes', icon: FaChartLine },
-      { name: 'Test API', href: '/admin/api-test', icon: FaServer, soloAdmin: true },
+      { name: 'Reportes', href: '/admin/reportes', icon: FaChartLine, modulo: 'reportes' },
+      { name: 'Usuarios', href: '/admin/usuarios', icon: FaUserShield, modulo: 'usuarios' },
+      { name: 'Auditoría', href: '/admin/auditoria', icon: FaHistory, modulo: 'auditoria' },
+      { name: 'Test API', href: '/admin/api-test', icon: FaServer, modulo: 'soloAdmin' },
     ],
   },
 ]
@@ -130,13 +139,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     return <Navigate to="/admin/login" replace />
   }
 
-  const admin = esAdmin(user)
   const nombre = nombreDe(user) || 'Usuario'
   const rol = rolDe(user)
   const etiquetaRol = ETIQUETA_ROL[rol] || (rol ? rol.charAt(0).toUpperCase() + rol.slice(1) : 'Usuario')
 
   const secciones = navigationSections
-    .map((s) => ({ ...s, items: s.items.filter((i) => !i.soloAdmin || admin) }))
+    .map((s) => ({ ...s, items: s.items.filter((i) => !i.modulo || puede(user, i.modulo)) }))
     .filter((s) => s.items.length > 0)
 
   const esActivo = (href: string) =>
@@ -237,7 +245,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                         />
                         <item.icon className={`text-base shrink-0 ${activo ? 'text-accent-electric' : 'text-primary-500'}`} />
                         <span className="truncate">{item.name}</span>
-                        {item.soloAdmin && <FaLock className="ml-auto text-[10px] text-accent-energy/70" title="Solo administradores" />}
+                        {requiereAdmin(item.modulo) && <FaLock className="ml-auto text-[10px] text-accent-energy/70" title="Solo administradores" />}
                       </Link>
                     )
                   })}
