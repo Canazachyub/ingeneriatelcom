@@ -1,6 +1,6 @@
 # Panel Admin — cómo funciona hoy y cómo ampliarlo
 
-> Estado al **23/09/2026**, levantado del código real (`src/pages/admin/*`, `backend/*.gs`).
+> Estado al **24/09/2026** (revisado en vivo con sesión de supervisor), levantado del código real (`src/pages/admin/*`, `backend/*.gs`).
 > Complementa a `ARQUITECTURA.md` (julio 2026, parcialmente desactualizado).
 > URL: `https://ingeneriatelcom.com/admin` · Backend: Apps Script (una sola "implementación web").
 
@@ -45,8 +45,11 @@ Google Sheets (≈23 hojas)  +  Google Drive (fotos, CVs, PDFs)  +  MailApp (cor
 | `admin` | Rol en `admin, administrador, manager, supervisor, rrhh` o permiso `all`, y activo (`esRolAdmin_`, caché 5 min) | planilla y sueldos, feriados, borrar convocatorias/contactos/cursos, crear credenciales |
 
 - La columna `permisos` de `usuarios` (p. ej. `ver_perfil,ver_proyectos`) **se envía al cliente pero el backend no la evalúa** (salvo `all`).
-- El **menú no se filtra por rol**: todos ven todas las secciones; si no tienen permiso, la acción falla.
-- Único filtro de rol en el frontend: **Planilla** (`PlanillaPage.tsx`) exige `admin` o permiso `all`/`planilla` — *más estricto* que el backend (un `manager` ve "Acceso restringido" aunque el backend lo dejaría).
+- **Menú por rol** (`AdminLayout.tsx` + `src/utils/roles.ts`, que replica `esRolAdmin_`): Planilla y Test API
+  solo para roles de administración; el resto es visible para cualquier sesión (igual que el backend).
+- `verifyToken` devuelve también `permisos`, así el menú no cambia al recargar.
+- **Inicio optimista**: con token vigente y usuario guardado (`localStorage['auth_user']`) el panel se muestra
+  al instante y la verificación corre por detrás; el backend valida el token en cada consulta.
 
 ---
 
@@ -54,10 +57,16 @@ Google Sheets (≈23 hojas)  +  Google Drive (fotos, CVs, PDFs)  +  MailApp (cor
 
 > Formato: **qué puedes hacer** · acciones del backend · hojas. Todas las pantallas están en `src/pages/admin/`.
 
-### 3.1 Dashboard — `/admin` (`DashboardPage.tsx`)
-- Solo lectura: tarjetas (empleados activos, proyectos activos/completados, postulaciones pendientes),
-  empleados por ciudad, proyectos por estado, **asistencia de hoy** (% y presentes/ausentes), accesos rápidos.
-- `getDashboard`, `obtenerAsistenciasHoy` · hojas `sueldos`, `proyectos`, `postulaciones`, `asistencias_v2`.
+### 3.1 Centro de actividades — `/admin` (`DashboardPage.tsx`)
+- **KPIs**: empleados activos, presentes hoy, proyectos activos, convocatorias activas.
+- **Requieren atención** (cada tarjeta enlaza a su pantalla): asistencia de hoy (ausentes), incidencias
+  pendientes del mes (solo admin, con **aviso si la sincronización tiene más de 2 días**), justificaciones
+  de 7 días, postulaciones sin revisar, mensajes pendientes, evaluaciones por calificar, convocatorias activas.
+- Carga **escalonada** (primero KPIs y asistencia, luego pendientes) para no saturar Apps Script.
+  Si una fuente falla, su tarjeta dice "No se pudo cargar + Reintentar" — nunca un 0 engañoso.
+- Fuentes: `getDashboard`, `obtenerAsistenciasHoy`, `getIncidencias`, `getEstadoPlanilla`,
+  `getJustificaciones`, `getApplicationsAdmin`, `getContacts`, `getEvaluaciones`, `getJobsAdmin`
+  (hooks en `src/hooks/queries.ts`).
 
 ### 3.2 Asistencias — `/admin/asistencias` (`AttendancePage.tsx`)
 - **Registros**: filtros por trabajador, evento y fechas (atajos semana/semana pasada/mes); foto de cada
@@ -194,7 +203,11 @@ cambio de estado de postulación (postulante, opcional) · traslado (trabajador)
 
 ### 5.4 Tareas programadas y funciones de editor
 - **Activador diario 6–7 a. m.:** `precalentarRosterKiosko` (se configura a mano en Apps Script → Activadores).
-- `sincronizarIncidencias` **no** es automática: se ejecuta con el botón de Planilla.
+- **Activador nocturno (crear a mano):** `sincronizarIncidenciasProgramada`, diario 10–11 p. m. Revisa los
+  últimos 35 días (idempotente). Deja constancia en `ULTIMA_SYNC_INCIDENCIAS` (Propiedades del script),
+  que el Centro de actividades muestra vía `getEstadoPlanilla`. *No se usa código `ScriptApp` a propósito:
+  agregaría un permiso nuevo al proyecto y, sin reautorizar, la web dejaría de responder.*
+- El botón "Sincronizar incidencias" de Planilla sigue disponible (corre dentro del lock: evitar horas de marcación).
 - `ejecutarTestSalud` (solo lectura): correr antes/después de cada nueva versión. Criterio: 0 FAIL.
 - Funciones que borran/recrean hojas (`setupAllSheets`, `cargar*Prueba`, `migrarPlanillaV2`…) están bloqueadas
   salvo que la propiedad `ALLOW_DESTRUCTIVE_OPS` sea `true`. **Mantenerla apagada.**
@@ -207,25 +220,41 @@ cambio de estado de postulación (postulante, opcional) · traslado (trabajador)
 
 ---
 
-## 6. Deudas y riesgos conocidos (priorizados)
+## 6. Deudas y riesgos — estado al 24/09/2026
 
+### 6.1 Corregido el 23–24/09 (auditoría en vivo del admin)
+| Hallazgo | Efecto que tenía | Corrección |
+|---|---|---|
+| `updateApplicationStatus` leía `estado`; el panel envía `status` | **cada cambio de estado de postulación se guardaba vacío** (6 de 7) | acepta ambos, valida, guarda notas, con lock |
+| Correo de estado leía columnas por posición | el aviso se enviaba **al DNI** y nunca llegaba | usa cabeceras y valida el correo; `notificar` desde el panel |
+| `apply` no revisaba la convocatoria | se podía postular a ofertas **inactivas** (y subir CV) | `validarConvocatoriaAbierta_` antes de subir el CV |
+| `submitContact` escribía 8 valores en otro orden que las 9 columnas | **mensajes de clientes desordenados** (texto en "asunto", fecha en "mensaje") | escribe por cabecera; `getContacts` reacomoda las filas viejas al leer |
+| Fallo de Google al validar el token → "No autorizado" | falsos rechazos y **cierres de sesión** con carga | `parseToken_` distingue token inválido de fallo transitorio → "Servidor ocupado" |
+| Pantallas que mostraban "vacío" si la carga fallaba | Bolsa ofrecía "crear la primera convocatoria"; Mensajes mostraba 3 **mensajes falsos** de 2024 | `ErrorCarga` con Reintentar en todas; lecturas con 1 reintento automático |
+| Reportes sobre asistencia V1 | reporte de asistencia **siempre vacío** | usa `getAsistenciasV2` con rango real |
+| Spinner de 10–30 s al abrir cualquier URL del admin | panel "colgado" | inicio optimista (usuario guardado + vigencia local del token) |
+| Deploy borraba los archivos viejos | **pantallas en blanco** ~10 min tras publicar | `gh-pages --add` + recarga automática si falta un archivo |
+| Menú igual para todos; Planilla exigía solo `admin` | secciones inútiles para unos, bloqueadas para supervisor/RR. HH. | `src/utils/roles.ts` replica `esRolAdmin_`; menú por rol |
+| Incidencias sin sincronizar desde el 23/07 | **agosto y septiembre sin descuentos calculados**, 58 pendientes sin vencer | registro de última sincronización, aviso en el Centro de actividades y `sincronizarIncidenciasProgramada` para activador nocturno |
+
+### 6.2 Pendiente
 | # | Prioridad | Hallazgo | Dónde |
 |---|---|---|---|
-| 1 | **Alta** | Cualquier token válido (también rol `empleado`) usa las rutas `auth`: ve empleados, fotos de asistencia, CVs, mensajes. La columna `permisos` no se aplica. | `01_router.gs`, `02_auth.gs` |
-| 2 | **Alta** | CVs y subidas genéricas quedan públicos "con el enlace". | `00_nucleo.gs` (`uploadFile`), `05_bolsa.gs` |
-| 3 | **Alta** | `TOKEN_SECRET` < 32 caracteres (lo reporta el test de salud). Rotarlo cierra todas las sesiones. | Propiedades del script |
-| 4 | Media | Correo de cambio de estado toma nombre/correo por **posición de columna**; con el esquema en inglés de `postulaciones` podría ir a otra columna. | `05_bolsa.gs` (`sendStatusUpdateEmail`) |
-| 5 | Media | **Reportes** usa la asistencia vieja (V1) y su rango de fechas no llega al backend; los estados de postulación no coinciden con los que usa Postulaciones. | `ReportsPage.tsx` |
-| 6 | Media | **Mensajes** muestra 3 mensajes de ejemplo (2024) si la carga falla, y no avisa cuando una actualización falla. | `MessagesPage.tsx` |
-| 7 | Media | Las justificaciones del kiosko solo se ven: no se aprueban ni se vinculan a la incidencia. | `AttendancePage.tsx`, `IncidenciasPanel` |
-| 8 | Media | La contraseña temporal de "crear credenciales" se muestra en un `alert()`. | `EmployeesPage.tsx` |
-| 9 | Baja | Menú igual para todos; Planilla filtra rol distinto que el backend. | `AdminLayout.tsx`, `PlanillaPage.tsx` |
-| 10 | Baja | Capacitaciones y Evaluaciones usan tema claro y no el `AdminLayout`; en Evaluaciones `revisado_por` es siempre "Admin" (sin trazabilidad). | páginas respectivas |
-| 11 | Baja | Postulaciones muestra notas pero no permite escribirlas. | `ApplicationsPage.tsx` |
-| 12 | Baja | Listas fijas en el frontend (ciudades, áreas, cargos, categorías). | varias páginas |
-| 13 | Baja | Test API crea un contacto real en cada ejecución. | `ApiTestPage.tsx` |
-| 14 | Baja | `upload`/`uploadJobPdf` no validan tamaño/tipo; proyectos escribe sin bloqueo. | `00_nucleo.gs`, `04_proyectos.gs` |
-| 15 | Baja | Hojas y funciones legado (V1 `Asistencias`, `empleados`, `hireApplicant`, etc.). | varios |
+| 1 | **Alta** | Rutas `auth` abiertas a cualquier token (también rol `empleado`); columna `permisos` no se aplica en el backend. | `01_router.gs` |
+| 2 | **Alta** | CVs y subidas genéricas públicos "con el enlace". | `00_nucleo.gs`, `05_bolsa.gs` |
+| 3 | **Alta** | `TOKEN_SECRET` < 32 caracteres. | Propiedades del script |
+| 4 | **Alta (negocio)** | Sincronizar agosto–septiembre: generará omisiones/tardanzas reales → descuentos. Revisar antes (ver §6.3). | Planilla |
+| 5 | Media | Justificaciones del kiosko no se vinculan a la incidencia. | Asistencias / Planilla |
+| 6 | Baja | Datos: un proyecto con estado "tacna" (ciudad en la columna estado); convocatorias de prueba de 2024. | hojas `proyectos`, `convocatorias` |
+| 7 | Baja | Listas fijas en el frontend (ciudades, áreas, cargos). | varias páginas |
+| 8 | Baja | `upload`/`uploadJobPdf` sin validar tamaño/tipo; proyectos sin lock. | `00_nucleo.gs`, `04_proyectos.gs` |
+
+### 6.3 Antes de sincronizar agosto y septiembre
+El reporte de septiembre (Reportes → Asistencias) muestra ~2 de 4 marcas diarias por persona:
+al sincronizar, las marcas faltantes serán **omisiones** con descuento (valor de un día cada una).
+Confirmar primero si es un hábito real (no marcan salida/ingreso de mediodía) o si hay que
+avisar al personal, y decidir desde qué fecha aplicar. La sincronización corre **dentro del lock**:
+hacerla fuera del horario de marcación (o dejarla al activador nocturno).
 
 ---
 
@@ -249,7 +278,9 @@ cambio de estado de postulación (postulante, opcional) · traslado (trabajador)
    1. pegar `appscript.js` en Apps Script → *Implementar → Gestionar implementaciones → ✏️ → Nueva versión*
       (**nunca** "Nueva implementación": cambia la URL);
    2. `ejecutarTestSalud` en el editor (0 FAIL) y `npm run test:prod` (SIN FALLAS);
-   3. `npm run deploy` (frontend a GitHub Pages).
+   3. `npm run deploy` (frontend a GitHub Pages; usa `--add` para **no borrar** los archivos de la versión
+      anterior — GitHub Pages cachea el `index.html` ~10 min y, sin eso, las pantallas quedaban en blanco).
+   4. **Orden:** si el frontend nuevo depende de un cambio del backend, publicar **primero el backend**.
 
 ---
 
@@ -292,3 +323,42 @@ cambio de estado de postulación (postulante, opcional) · traslado (trabajador)
 > Límite a vigilar al crecer: Apps Script + Sheets aguanta bien la escala actual (12 trabajadores,
 > ~50 marcas/día). Si se suman muchos usuarios simultáneos o reportes pesados, evaluar mover la base a un
 > servicio dedicado (p. ej. Supabase/Firestore) manteniendo la misma interfaz `api.*` del frontend.
+
+---
+
+## 10. Escalado — hacia el centro de actividades de la empresa
+
+### 10.1 Dónde está el techo hoy (medido el 24/09/2026)
+| Recurso | Situación actual | Síntoma al crecer |
+|---|---|---|
+| Apps Script | 2–30 s por consulta; 19 consultas simultáneas → respuestas de 30–40 s y errores 404 de Google | pantallas lentas, reintentos, ráfaga de las 07:30 |
+| Google Sheets | `asistencias_v2` ~1,100 filas/mes; `getAsistenciasV2` y `getJustificaciones` leen la hoja **entera** | cada mes más lento |
+| Lock global | toda escritura (kiosko, planilla, sincronización) comparte un único bloqueo | una sincronización larga frena las marcas |
+| Cuotas Google | ejecución máx. 6 min; ~30 ejecuciones simultáneas; correos/día limitados | fallas en picos |
+
+### 10.2 Escalones (en orden, cada uno sin romper el anterior)
+1. **Optimizar lo actual (sin cambiar de plataforma)** — *semanas*
+   - Lecturas por rango en `getAsistenciasV2`/`getJustificaciones` (como ya hace el anti-duplicado con `leerTramoFinal_`).
+   - Caché de lecturas del panel en `CacheService` (1–5 min) para roster, convocatorias, feriados.
+   - Archivar por año: `asistencias_v2_2026`, etc., con índice por mes.
+   - Mover la sincronización al activador nocturno (ya preparado) y sacar lo pesado del horario de marcación.
+2. **Permisos y auditoría reales (Fase A §9)** — antes de dar acceso a más personas.
+   - Matriz rol → módulo en el router; hoja `auditoria` (quién, qué, cuándo, antes/después).
+3. **Separar la base de datos** — *cuando haya >30 trabajadores, varias sedes o reportes pesados*
+   - Migrar los datos a una base real (p. ej. Supabase/PostgreSQL o Firestore) manteniendo la **misma
+     interfaz `api.*`** del frontend: se cambia `appScriptApi.ts` por otro cliente y las pantallas no se tocan.
+   - Apps Script puede quedar solo para lo que hace bien: correos, Drive y activadores.
+   - Fotos y CVs a un almacenamiento con URLs firmadas (privadas por defecto).
+4. **Aplicaciones por rol**
+   - Portal del trabajador (sus marcas, incidencias, bolsa de horas, boletas).
+   - App de supervisor de obra (asistencia de campo por proyecto, avances con foto).
+   - Tablero gerencial con indicadores históricos.
+
+### 10.3 Reglas para que escale sin romperse
+- Toda pantalla distingue **"falló la carga"** de **"no hay datos"** (`ErrorCarga`).
+- Toda escritura nueva va con `withLock_` y valida en el backend (el frontend no es una barrera).
+- Toda columna se lee **por nombre de cabecera**, nunca por posición (tres fallos de hoy fueron eso).
+- Toda acción nueva entra en `ROUTES` con el nivel mínimo, en `FUNCIONES_REQUERIDAS` del test de salud y,
+  si es de solo lectura o se puede rechazar sin escribir, en `tools/test-produccion.mjs`.
+- Nada nuevo del admin se importa en el kiosko `/asistencia` (debe seguir liviano).
+
