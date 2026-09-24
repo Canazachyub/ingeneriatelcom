@@ -37,19 +37,53 @@ Google Sheets (≈23 hojas)  +  Google Drive (fotos, CVs, PDFs)  +  MailApp (cor
 | Logout | `api.logout()` | Solo borra el token local (no hay revocación en el servidor). |
 | Contraseñas | `02_auth.gs` | Guardadas como `sha256:` + SHA-256(`userId:password`). Si una fila aún tiene texto plano, se convierte en el primer login. |
 
-### 2.2 Roles y permisos (lo que REALMENTE se aplica)
-| Nivel de ruta | Quién pasa | Ejemplos |
-|---|---|---|
-| `publico` | Cualquiera, sin token | kiosko, bolsa pública, contacto, capacitaciones |
-| `auth` | **Cualquier usuario con token válido** (incluye rol `empleado`) | empleados, proyectos, asistencias, postulaciones, mensajes, dashboard |
-| `admin` | Rol en `admin, administrador, manager, supervisor, rrhh` o permiso `all`, y activo (`esRolAdmin_`, caché 5 min) | planilla y sueldos, feriados, borrar convocatorias/contactos/cursos, crear credenciales |
+### 2.2 Roles y permisos por módulo (escalón 2, desde el 24/09/2026)
 
-- La columna `permisos` de `usuarios` (p. ej. `ver_perfil,ver_proyectos`) **se envía al cliente pero el backend no la evalúa** (salvo `all`).
-- **Menú por rol** (`AdminLayout.tsx` + `src/utils/roles.ts`, que replica `esRolAdmin_`): Planilla y Test API
-  solo para roles de administración; el resto es visible para cualquier sesión (igual que el backend).
-- `verifyToken` devuelve también `permisos`, así el menú no cambia al recargar.
-- **Inicio optimista**: con token vigente y usuario guardado (`localStorage['auth_user']`) el panel se muestra
-  al instante y la verificación corre por detrás; el backend valida el token en cada consulta.
+**Regla única** (backend `puedeModulo_` en `backend/13_usuarios.gs`, replicada en el frontend por
+`puede()` en `src/utils/roles.ts`):
+
+1. Rol de administración (`admin, administrador, manager, supervisor, rrhh`) o permiso `all` → **todos
+   los módulos** (igual que antes del cambio).
+2. Cualquier otro rol → solo los módulos listados en la columna `permisos` de la hoja `usuarios`
+   (separados por coma, p. ej. `asistencias,reportes`).
+3. Los módulos **solo admin** no se conceden por permiso.
+4. Cuenta **inactiva** → rechazada en cada consulta (antes su token seguía sirviendo hasta expirar).
+
+| Módulo (`permisos`) | Pantallas | Acciones del backend |
+|---|---|---|
+| `asistencias` | Asistencias | `getAsistenciasV2`, `getJustificaciones`, `registrarAsistenciaManual`, `obtenerAsistenciasHoy`, `getAttendances` |
+| `personal` | Empleados | `getEmployees`, `getEmployee`, `createEmployee`, `updateEmployee`, `transferEmployee` |
+| `proyectos` | Proyectos | `getProjects`, `getProject`, `createProject`, `updateProject`, `getAssignments`, `assignEmployee`, `removeAssignment` |
+| `bolsa` | Bolsa de trabajo, Postulaciones | `getJobsAdmin`, `createJob`, `updateJob`, `uploadJobPdf`, `getApplicationsAdmin`, `updateApplicationStatus`, `upload` |
+| `mensajes` | Mensajes | `getContacts`, `updateContactStatus` |
+| `capacitaciones` | Gestión de cursos, Evaluaciones | cursos, preguntas, `getEvaluaciones`, `revisarEvaluacion` |
+| `reportes` | Reportes | `getAsistenciasV2` (la pestaña Postulaciones/Empleados además pide `bolsa`/`personal`) |
+| **solo admin** `planilla` | Planilla | sueldos, incidencias, feriados (escritura), bolsa de horas, configuración |
+| **solo admin** `usuarios` | Usuarios | `listarUsuarios`, `crearUsuario`, `actualizarUsuario`, `restablecerContrasena` |
+| **solo admin** `auditoria` | Auditoría | `getAuditoria` |
+| (cualquier sesión) | Centro de actividades | `verifyToken`, `getDashboard`, `getFeriados` |
+
+- `getArchivo` (visor de fotos, CVs, adjuntos) exige **alguno** de `asistencias`, `bolsa` o `capacitaciones`.
+- Borrados (`deleteJob`, `deleteContact`, `eliminarCapacitacion`) y `createCredentials` siguen siendo **solo admin**.
+- El mapa acción → módulo está en `MODULO_POR_ACCION_` (`backend/01_router.gs`). **Toda acción nueva de
+  nivel `auth` debe agregarse ahí**; si no, cualquier sesión válida podrá usarla.
+- Caché: el perfil (rol/permisos/estado) se guarda 2 min; un cambio de permisos tarda como máximo eso.
+  Un fallo al leer el perfil responde "Servidor ocupado" (no "sin permisos").
+- **Protecciones anti-bloqueo** (`actualizarUsuario`): nadie se quita a sí mismo la administración ni se
+  desactiva, y siempre queda al menos un administrador activo.
+- Menú y Centro de actividades muestran solo lo permitido; **la barrera real es el backend**.
+- `verifyToken` devuelve `permisos`; con **inicio optimista** (token vigente + `localStorage['auth_user']`)
+  el panel aparece al instante y la verificación corre por detrás.
+
+### 2.3 Auditoría
+- Toda acción de **escritura** de nivel `auth`/`admin` queda en la hoja `auditoria` (se crea sola):
+  `id, timestamp, usuario_id, usuario, accion, resultado, detalle`.
+- `detalle` = datos enviados + respuesta, **sin** token, contraseñas, archivos en base64 ni contraseñas temporales
+  (ver `CAMPOS_OCULTOS_AUDITORIA_`), recortado a 4 000 caracteres.
+- No se auditan acciones públicas (kiosko, postulación, contacto): el kiosko debe seguir rápido y sus marcas
+  ya guardan foto y GPS. Las lecturas tampoco.
+- Consultar en **/admin/auditoria** (solo admin). Si la auditoría falla, la acción NO se bloquea (queda en el
+  registro de ejecuciones de Apps Script como `registrarAuditoria_ fallo`).
 
 ---
 
@@ -212,7 +246,15 @@ cambio de estado de postulación (postulante, opcional) · traslado (trabajador)
 - Funciones que borran/recrean hojas (`setupAllSheets`, `cargar*Prueba`, `migrarPlanillaV2`…) están bloqueadas
   salvo que la propiedad `ALLOW_DESTRUCTIVE_OPS` sea `true`. **Mantenerla apagada.**
 
-### 5.5 Límites
+### 5.5 Lecturas por rango (escalón 1)
+- `getAsistenciasV2` y `getJustificaciones` con `desde` leen solo el **tramo final** de la hoja
+  (`leerFilasAsistenciaDesde_`, `leerTramoFinal_`), ampliándolo hasta cubrir la fecha pedida.
+- Corte seguro: se usa el `timestamp` de las marcas del **kiosko** (se escriben en orden). Las marcas
+  manuales pueden ser de días pasados y quedar al final, por eso **no pueden tener fecha futura**.
+- `ejecutarTestSalud` compara rango vs. lectura completa (últimos 45 días): si difieren → FAIL, no publicar.
+- Sin `desde` la lectura sigue siendo completa (compatibilidad).
+
+### 5.6 Límites
 - Apps Script responde en 2–30 s (más lento justo tras publicar una versión y en la ráfaga de las 07:30).
 - Escrituras con bloqueo global (`withLock_`, espera máx. 30 s → "Sistema ocupado").
 - Límites por hora: postulación 5/DNI, contacto 10/email, marca 30/DNI, justificación 10/DNI.
@@ -240,7 +282,7 @@ cambio de estado de postulación (postulante, opcional) · traslado (trabajador)
 ### 6.2 Pendiente
 | # | Prioridad | Hallazgo | Dónde |
 |---|---|---|---|
-| 1 | **Alta** | Rutas `auth` abiertas a cualquier token (también rol `empleado`); columna `permisos` no se aplica en el backend. | `01_router.gs` |
+| 1 | ~~Alta~~ ✅ | ~~Rutas `auth` abiertas a cualquier token~~ → permisos por módulo el 24/09 (§2.2). | `01_router.gs` |
 | 2 | **Alta** | CVs y subidas genéricas públicos "con el enlace". | `00_nucleo.gs`, `05_bolsa.gs` |
 | 3 | **Alta** | `TOKEN_SECRET` < 32 caracteres. | Propiedades del script |
 | 4 | **Alta (negocio)** | Sincronizar agosto–septiembre: generará omisiones/tardanzas reales → descuentos. Revisar antes (ver §6.3). | Planilla |
@@ -265,7 +307,10 @@ hacerla fuera del horario de marcación (o dejarla al activador nocturno).
    - escrituras dentro de `withLock_(function(){ … })`; lecturas grandes con `leerTramoFinal_` si la hoja crece;
    - si crea una hoja, agregarla a `HOJAS_REQUERIDAS` en `11_salud.gs` (y la función a `FUNCIONES_REQUERIDAS`).
 2. **Router** — registrar en `ROUTES` de `backend/01_router.gs` con el **nivel mínimo** necesario
-   (`admin` si toca sueldos o datos personales sensibles).
+   (`admin` si toca sueldos o datos personales sensibles). Si es nivel `auth`, **agregarla a
+   `MODULO_POR_ACCION_`** con su módulo (si no, cualquier sesión podrá usarla). Las escrituras quedan
+   auditadas solas; si es una lectura frecuente y sin parámetros, puede ir en `LECTURAS_CACHEABLES_`.
+   Nombra las lecturas con `get…`/`listar…`/`obtener…` (el router trata el resto como escrituras).
 3. **Generar** — `npm run build:backend` (regenera `appscript.js`; **nunca editarlo a mano**).
 4. **Cliente API** — método en `src/api/appScriptApi.ts`: `this.request('miAccion', 'POST', datos)`.
    Si es una acción pública del kiosko, agregarla a `ACCIONES_SIN_TOAST` en `src/App.tsx`.
@@ -337,12 +382,12 @@ hacerla fuera del horario de marcación (o dejarla al activador nocturno).
 | Cuotas Google | ejecución máx. 6 min; ~30 ejecuciones simultáneas; correos/día limitados | fallas en picos |
 
 ### 10.2 Escalones (en orden, cada uno sin romper el anterior)
-1. **Optimizar lo actual (sin cambiar de plataforma)** — *semanas*
+1. **Optimizar lo actual (sin cambiar de plataforma)** — ✅ *hecho el 24/09: lecturas por rango, caché de lecturas y sincronización nocturna preparada; falta archivar por año cuando la hoja supere ~20 000 filas*
    - Lecturas por rango en `getAsistenciasV2`/`getJustificaciones` (como ya hace el anti-duplicado con `leerTramoFinal_`).
    - Caché de lecturas del panel en `CacheService` (1–5 min) para roster, convocatorias, feriados.
    - Archivar por año: `asistencias_v2_2026`, etc., con índice por mes.
    - Mover la sincronización al activador nocturno (ya preparado) y sacar lo pesado del horario de marcación.
-2. **Permisos y auditoría reales (Fase A §9)** — antes de dar acceso a más personas.
+2. **Permisos y auditoría reales (Fase A §9)** — ✅ *hecho el 24/09: permisos por módulo, pantalla Usuarios, auditoría automática (§2.2, §2.3)*
    - Matriz rol → módulo en el router; hoja `auditoria` (quién, qué, cuándo, antes/después).
 3. **Separar la base de datos** — *cuando haya >30 trabajadores, varias sedes o reportes pesados*
    - Migrar los datos a una base real (p. ej. Supabase/PostgreSQL o Firestore) manteniendo la **misma
@@ -362,3 +407,67 @@ hacerla fuera del horario de marcación (o dejarla al activador nocturno).
   si es de solo lectura o se puede rechazar sin escribir, en `tools/test-produccion.mjs`.
 - Nada nuevo del admin se importa en el kiosko `/asistencia` (debe seguir liviano).
 
+---
+
+## 11. Soporte y operación (manual rápido)
+
+### 11.1 Dar acceso a una persona
+1. **/admin/usuarios → Nuevo usuario**: nombre, correo, rol y módulos.
+   - Para acceso total: rol `supervisor`, `rrhh`, `manager`, `administrador` o `admin`.
+   - Para acceso parcial: rol libre (p. ej. `operador`) + los módulos que necesita.
+2. La contraseña temporal se muestra **una vez** y se envía por correo.
+3. Los cambios de rol/permisos se aplican en ≤ 2 min.
+
+### 11.2 "No veo una sección" / "Permisos insuficientes (módulo X)"
+- Revisar en /admin/usuarios que tenga el módulo X (o un rol de administración) y que esté **activo**.
+- Esperar 2 min (caché del perfil) y recargar.
+
+### 11.3 Un administrador quedó bloqueado
+- El panel impide quitarse la administración a uno mismo y dejar el sistema sin admins.
+- Si aun así pasa (p. ej. editando la hoja a mano): en la hoja `usuarios`, poner su `rol` en `admin` y
+  `estado` en `activo`; o en el editor de Apps Script ejecutar `createDefaultAdmin` (crea/restablece
+  `supervisor1telcom@gmail.com` y envía una contraseña temporal por correo).
+
+### 11.4 Mensajes de error y qué significan
+| Mensaje | Qué pasa | Qué hacer |
+|---|---|---|
+| "Servidor ocupado, intenta de nuevo…" | Apps Script lento o sobrecargado | nada: el panel reintenta solo; si persiste, esperar unos minutos |
+| "No se pudieron cargar … + Reintentar" | la consulta falló (los datos **siguen** en el servidor) | Reintentar |
+| "Permisos insuficientes (módulo X)" | la cuenta no tiene ese módulo | §11.2 |
+| "No autorizado" / vuelve al login | sesión vencida (24 h) o cuenta desactivada | volver a entrar / reactivar en Usuarios |
+| Pantalla en blanco tras publicar | HTML viejo en caché | se recarga sola; si no, Ctrl+F5 |
+| Kiosko "Falta confirmar tu registro" | el servidor no respondió | "Comprobar registro" (no duplica). Ver `docs/KIOSKO_ASISTENCIA.md` |
+
+### 11.5 Publicar sin romper (checklist)
+1. **Horario**: nunca entre 07:00–08:00, 12:50–13:10, 13:50–14:10 ni ~17:50–18:10 (hora de Lima).
+2. Backend: `npm run build:backend` → pegar `appscript.js` → **Guardar** → ejecutar `ejecutarTestSalud`
+   **antes** de publicar la versión → revisar FAIL/WARN (p. ej. usuarios que perderían acceso) →
+   *Implementar → Gestionar implementaciones → ✏️ → Nueva versión*.
+3. `npm run test:prod` → "SIN FALLAS".
+4. Frontend: `npm run deploy` (con `--add`). Si el frontend depende del backend nuevo, publicar **después**.
+5. Revisar en producción las pantallas tocadas (con `?v=N` en la URL para esquivar la caché del navegador).
+
+### 11.6 Revertir (si algo sale mal)
+- **Backend**: Apps Script → *Implementar → Gestionar implementaciones → ✏️ → Versión:* elegir la anterior
+  → *Implementar*. Es inmediato y no cambia la URL.
+- **Frontend**: `git revert <commit>` → `npm run deploy`. (Con `--add` los archivos viejos siguen servidos.)
+- Datos: la hoja `auditoria` indica quién cambió qué y con qué valores, para corregir a mano si hace falta.
+
+### 11.7 Diagnóstico
+- `ejecutarTestSalud` (editor): configuración, hojas, admins activos, equivalencia de lecturas por rango,
+  usuarios sin módulos, anti-duplicado, roster del kiosko, convocatorias, "ya registrado con hora".
+- `npm run test:prod` (terminal): lecturas públicas, validaciones del kiosko, acciones protegidas sin token.
+- Registro de ejecuciones de Apps Script: errores con `console.error` (auditoría, correos, tokens).
+- Consola del navegador: `API non-JSON response` = error de Google (se reintenta).
+
+### 11.8 Cachés del sistema (para entender "por qué no se ve mi cambio")
+| Qué | Dónde | Duración | Se invalida |
+|---|---|---|---|
+| Convocatorias públicas, cursos, feriados, configuración de planilla | CacheService `lect:*` | 5 min | cualquier escritura por el panel |
+| Perfil de usuario (rol, permisos, activo) | CacheService `perfil:*` | 2 min | al editar el usuario en /admin/usuarios |
+| Roster del kiosko | CacheService + instantánea | 6 h / diaria | altas, bajas y ediciones de planilla |
+| Índice anti-duplicado del día | CacheService `asisdia:*` | 6 h | cada marca |
+| Usuario del panel en el navegador | `localStorage['auth_user']` | hasta que vence el token (24 h) | login / logout / verifyToken |
+| index.html | GitHub Pages | ~10 min | automático |
+
+Cambios hechos **a mano en la hoja** o desde el editor no pasan por el router: tardan hasta la duración de su caché.
