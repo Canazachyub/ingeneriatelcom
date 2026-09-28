@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, Navigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FaBook,
+import { FaChartArea, FaBook,
   FaHome,
   FaUsers,
   FaProjectDiagram,
@@ -86,6 +86,7 @@ const navigationSections: { title: string; items: NavItem[] }[] = [
     title: 'Sistema',
     items: [
       { name: 'Reportes', href: '/admin/reportes', icon: FaChartLine, modulo: 'reportes' },
+      { name: 'Analítica web', href: '/admin/analitica', icon: FaChartArea, modulo: 'reportes' },
       { name: 'Usuarios', href: '/admin/usuarios', icon: FaUserShield, modulo: 'usuarios' },
       { name: 'Auditoría', href: '/admin/auditoria', icon: FaHistory, modulo: 'auditoria' },
       { name: 'Test API', href: '/admin/api-test', icon: FaServer, modulo: 'soloAdmin' },

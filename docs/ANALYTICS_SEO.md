@@ -104,3 +104,49 @@ Prueba hecha el 28/09/2026 con un build de producción y un ID de prueba:
 | Vista de `/` | ✔ `page_view` |
 | Navegación a `/bolsa-trabajo` | ✔ `page_view` (vía React Router) |
 | `/asistencia` | ✔ sin script de Google ni `dataLayer` |
+
+---
+
+## 6. Analítica dentro del panel (`/admin/analitica`)
+
+Pantalla **Sistema → Analítica web** (módulo `reportes`): usuarios, sesiones, páginas vistas y
+tiempo medio (con variación frente al período anterior), usuarios por día, personas en la web
+ahora, resultados del negocio (postulaciones, contactos, clics a WhatsApp/teléfono, reclamos),
+canales, sitios de origen, ciudades, páginas y dispositivos. Rango: 7, 28 o 90 días.
+
+| Pieza | Dónde |
+|---|---|
+| Backend | `backend/15_analytics.gs` → acción `getAnalytics` (caché 10 min; el tiempo real no se cachea) |
+| Propiedad GA4 | `properties/409187886` (cuenta 287374688, propiedad "ingeneriatelcom") |
+| Pantalla | `src/pages/admin/AnaliticaPage.tsx` (gráficos SVG propios, sin librerías) |
+
+### Activación (una sola vez, en este orden)
+
+1. Pegar el nuevo `appscript.js` en el editor de Apps Script y **Guardar** (todavía NO publicar).
+2. En el editor: **Servicios (+)** → *Google Analytics Data API* → identificador `AnalyticsData`
+   → **Agregar**.
+3. **Dar acceso a la cuenta del script.** El script corre con la cuenta dueña de Apps Script
+   (**energysupervision13@gmail.com**) y la propiedad GA4 es de **canazach12@gmail.com**. En
+   Analytics (con canazach12): Administrar → Propiedad → **Gestión de accesos a la propiedad**
+   → **+** → Añadir usuarios → `energysupervision13@gmail.com` → rol **Lector** → Añadir.
+   *(Hecho el 28/09/2026.)* Sin esto, `probarAnalytics` da el error 403 "User does not have
+   sufficient permissions for this property".
+4. Elegir la función **`probarAnalytics`** → **Ejecutar** → aceptar el permiso nuevo ("Ver tus
+   datos de Google Analytics", solo lectura). En el registro debe salir `OK: … usuarios …`.
+   *(Verificado el 28/09/2026: `OK: 0 usuarios y 0 vistas en 7 días; en tiempo real: 1`.)*
+5. Recién entonces: Implementar → Administrar implementaciones → editar → **Nueva versión**.
+
+Por qué en este orden: el permiso nuevo debe estar autorizado antes de publicar. Si se publica
+sin autorizar, la web app podría pedir autorización y afectar al resto del sistema (kiosco).
+
+Si el servicio no está agregado, `getAnalytics` responde un error explicativo y nada más cambia.
+
+### Problemas frecuentes
+
+| Síntoma | Causa y solución |
+|---|---|
+| Error 403 "User does not have sufficient permissions" | La cuenta del script no tiene acceso a la propiedad: repetir el paso 3. Si se cambia la cuenta dueña del script, dar acceso de Lector a la nueva. |
+| Usuarios y vistas en 0, pero "en tiempo real" con gente | Normal los primeros días: GA4 tarda 24–48 h en pasar los datos a los informes diarios. |
+| "El servicio Google Analytics Data API no está habilitado" | Falta el paso 2 (servicio `AnalyticsData`). |
+| Los números no cambian al recargar | Caché de 10 min del backend (cuida la cuota de la API). El tiempo real sí se actualiza siempre. |
+| Error de cuota ("quota exceeded") | Demasiadas consultas en el día; se restablece solo. La caché lo evita en uso normal. |

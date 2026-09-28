@@ -48,6 +48,8 @@ var ROUTES = {
   registrarReclamo: { nivel: 'publico', handler: function (ctx) { return registrarReclamo(ctx.data); } },
   getReclamos: { nivel: 'auth', handler: function () { return getReclamos(); } },
   responderReclamo: { nivel: 'auth', handler: function (ctx) { return responderReclamo(ctx.data, ctx.userId); } },
+  // Analítica web GA4 (15_analytics.gs)
+  getAnalytics: { nivel: 'auth', handler: function (ctx) { return getAnalytics(ctx.data); } },
   getContacts: { nivel: 'auth', handler: function () { return getContacts(); } },
   updateContactStatus: { nivel: 'auth', handler: function (ctx) { return updateContactStatus(ctx.data); } },
   deleteContact: { nivel: 'admin', handler: function (ctx) { return deleteContact(ctx.data); } },
@@ -149,6 +151,7 @@ var MODULO_POR_ACCION_ = {
   getApplicationsAdmin: 'bolsa', updateApplicationStatus: 'bolsa', upload: 'bolsa',
   getContacts: 'mensajes', updateContactStatus: 'mensajes',
   getReclamos: 'mensajes', responderReclamo: 'mensajes',
+  getAnalytics: 'reportes',
   getEmployees: 'personal', getEmployee: 'personal', createEmployee: 'personal',
   updateEmployee: 'personal', transferEmployee: 'personal',
   getProjects: 'proyectos', getProject: 'proyectos', createProject: 'proyectos', updateProject: 'proyectos',

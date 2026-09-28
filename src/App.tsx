@@ -64,6 +64,7 @@ const PlanillaPage = lazy(() => import('./pages/admin/PlanillaPage'))
 const UsuariosPage = lazy(() => import('./pages/admin/UsuariosPage'))
 const AuditoriaPage = lazy(() => import('./pages/admin/AuditoriaPage'))
 const ReclamacionesPage = lazy(() => import('./pages/admin/ReclamacionesPage'))
+const AnaliticaPage = lazy(() => import('./pages/admin/AnaliticaPage'))
 
 import { useAuth } from './context/AuthContext'
 import { ToastProvider, useToast } from './context/ToastContext'
@@ -282,6 +283,16 @@ function App() {
           <Suspense fallback={<PageLoader />}>
             <ProtectedRoute>
               <ApplicationsPage />
+            </ProtectedRoute>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/analitica"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <AnaliticaPage />
             </ProtectedRoute>
           </Suspense>
         }

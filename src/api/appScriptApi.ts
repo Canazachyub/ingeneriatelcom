@@ -661,6 +661,11 @@ class AppScriptApi {
     return this.request('responderReclamo', 'POST', { id, respuesta })
   }
 
+  // Analítica web (GA4 leída desde el backend)
+  async getAnalytics(dias: number): Promise<ApiResponse<Record<string, unknown>>> {
+    return this.request<Record<string, unknown>>('getAnalytics', 'POST', { dias })
+  }
+
   // Contact Management (Admin)
   async getContacts(): Promise<ApiResponse<unknown[]>> {
     return this.request<unknown[]>('getContacts', 'POST')
