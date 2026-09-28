@@ -26,9 +26,10 @@ Estado al 28/09/2026. Qué hay, cómo se activa y qué revisar si algo deja de m
 - **Solo en producción.** En `npm run dev` no se carga, así las pruebas no ensucian los datos.
 - **Carga diferida.** El script de Google se inyecta en la primera vista pública; no está en
   `index.html`.
-- **Web de una sola página (SPA).** React Router cambia de página sin recargar el navegador,
-  por eso GA no vería las navegaciones solo. `config` va con `send_page_view: false` y
-  `AnalyticsRutas` manda un `page_view` por cada ruta.
+- **Web de una sola página (SPA).** React Router cambia de página sin recargar el navegador.
+  Las vistas las cuenta la **Medición mejorada** del flujo GA4 "TELCOM" (cambios de página según
+  el historial del navegador). El código **no** envía `page_view` a mano, porque se contarían
+  doble. Si alguien desactiva la medición mejorada, dejarán de contarse las navegaciones internas.
 - **Pantallas excluidas** (`RUTAS_INTERNAS`): `/admin…`, `/asistencia`, `/evaluacion/…`.
   - Si la primera página abierta es una de ellas, el script de Google **ni se descarga**.
   - El kiosko de asistencia queda igual de liviano que antes (ver `docs/KIOSKO_ASISTENCIA.md`).
@@ -37,7 +38,7 @@ Estado al 28/09/2026. Qué hay, cómo se activa y qué revisar si algo deja de m
 
 | Evento | Cuándo | Parámetros |
 |---|---|---|
-| `page_view` | Cada ruta pública | `page_path`, `page_title` |
+| `page_view` | Automático (medición mejorada) | — |
 | `generate_lead` | Formulario de contacto enviado con éxito | `formulario: contacto` |
 | `postulacion_enviada` | Postulación enviada con éxito | `puesto` (título de la oferta) |
 | `clic_contacto` | Clic en un enlace de WhatsApp, `tel:` o `mailto:` | `canal: whatsapp / telefono / correo` |
@@ -56,7 +57,7 @@ condiciones de Google y la Ley 29733. Para un evento nuevo, usar
    - URL: `https://ingeneriatelcom.com`.
    - Dejar activada la "Medición mejorada".
    - Copiar el **ID de medición** (`G-…`).
-3. Pegarlo en `.env`: `VITE_GA_ID=G-XXXXXXXXXX`.
+3. Pegarlo en `.env`: `VITE_GA_ID=G-XXXXXXXXXX`. **Activo desde 28/09/2026: `G-TNNL6YFQZ9` (flujo "TELCOM").**
 4. `npm run deploy` (fuera del horario de marcación).
 5. Verificar: GA → Informes → **Tiempo real**. Abrir la web en el celular; en menos de un
    minuto debe aparecer 1 usuario.

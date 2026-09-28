@@ -3,8 +3,11 @@
 //
 // · Se activa con VITE_GA_ID (ej. G-XXXXXXXXXX) en .env. Sin esa variable,
 //   o en `npm run dev`, no se carga nada.
-// · La web es una SPA (React Router): GA no ve los cambios de ruta solo,
-//   así que App.tsx llama a registrarVista() en cada navegación.
+// · La web es una SPA (React Router). Las vistas de página las cuenta la
+//   "Medición mejorada" del flujo de GA4 (cambios de página según el
+//   historial del navegador), activada en el flujo "TELCOM". Por eso aquí NO
+//   se envían page_view a mano: se contarían doble. App.tsx llama a
+//   registrarVista() solo para cargar gtag en la primera ruta pública.
 // · NO se mide ni se carga en el kiosko de asistencia, el panel admin ni las
 //   evaluaciones: son pantallas internas y el kiosko debe quedar liviano
 //   (ver docs/KIOSKO_ASISTENCIA.md).
@@ -38,8 +41,8 @@ function cargar() {
     window.dataLayer!.push(arguments)
   }
   window.gtag('js', new Date())
-  // send_page_view: false → las vistas se envían a mano en cada ruta
-  window.gtag('config', GA_ID, { send_page_view: false })
+  // La primera vista la envía config; las siguientes, la medición mejorada
+  window.gtag('config', GA_ID)
 
   const script = document.createElement('script')
   script.async = true
@@ -49,15 +52,10 @@ function cargar() {
   escucharEnlacesDeContacto()
 }
 
-/** Vista de página (llamar en cada cambio de ruta). */
+/** Carga GA en la primera ruta pública (llamar en cada cambio de ruta). */
 export function registrarVista(ruta: string) {
   if (!activo() || RUTAS_INTERNAS.test(ruta)) return
   cargar()
-  window.gtag!('event', 'page_view', {
-    page_path: ruta,
-    page_location: window.location.href,
-    page_title: document.title,
-  })
 }
 
 /** Evento personalizado (formularios, clics importantes). Nunca enviar datos personales. */
