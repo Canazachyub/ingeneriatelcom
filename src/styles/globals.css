@@ -295,3 +295,47 @@
   .org-activo .org-nodo,
   .org-activo .org-raiz { animation: none; }
 }
+
+/* ── Estilo "Terran": industrial, metálico y formal ─────────────
+   Placas de acero cepillado con remaches, franjas de peligro ámbar/negro
+   y rótulos tipo esténcil. Complementan al HUD cian: el cian queda para
+   datos y estados; el acero y el ámbar para la estructura. */
+
+/* Placa de acero cepillado con remaches en las 4 esquinas */
+.placa-acero {
+  position: relative;
+  background:
+    radial-gradient(circle at 9px 9px, #94a3b8 0 2px, #1e293b 2.5px, transparent 3.5px),
+    radial-gradient(circle at calc(100% - 9px) 9px, #94a3b8 0 2px, #1e293b 2.5px, transparent 3.5px),
+    radial-gradient(circle at 9px calc(100% - 9px), #94a3b8 0 2px, #1e293b 2.5px, transparent 3.5px),
+    radial-gradient(circle at calc(100% - 9px) calc(100% - 9px), #94a3b8 0 2px, #1e293b 2.5px, transparent 3.5px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(51, 65, 85, 0.92) 0%, rgba(30, 41, 59, 0.94) 45%, rgba(15, 23, 42, 0.96) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.45),
+    0 10px 30px -10px rgba(0, 0, 0, 0.8);
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px);
+}
+
+/* Franja de peligro ámbar/negro (bordes de placas, rieles, separadores) */
+.franja-peligro {
+  background: repeating-linear-gradient(-45deg, #f59e0b 0 10px, #111827 10px 20px);
+}
+
+/* Rótulo esténcil: mayúsculas espaciadas sobre fondo ámbar, como una placa
+   pintada en un vehículo o una estructura */
+.rotulo-esténcil,
+.rotulo-estencil {
+  display: inline-block;
+  padding: 2px 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: #111827;
+  background: #f59e0b;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+}

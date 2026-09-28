@@ -123,8 +123,8 @@ export default function JobsSection() {
           id="bolsa-trabajo"
           eyebrow="Únete al equipo"
           accent="energy"
-          title="Bolsa de Trabajo"
-          subtitle="Convocatorias abiertas en Ingeniería Telcom EIRL. Elige tu misión y postula en línea."
+          title="Bolsa de trabajo"
+          subtitle="Ingenieros, técnicos y personal administrativo para nuestros proyectos en el sur del Perú. Postula en línea en pocos minutos."
         />
 
         {/* Cargando: esqueletos con la misma forma que las tarjetas */}
@@ -250,8 +250,8 @@ export default function JobsSection() {
               Tu carrera empieza en el terreno
             </h3>
             <p className="text-primary-200 mb-6">
-              Buscamos talento técnico y profesional para proyectos de energía y
-              telecomunicaciones en el sur del Perú.
+              Buscamos talento técnico y profesional para proyectos de energía,
+              construcción y minería en el sur del Perú.
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <Link

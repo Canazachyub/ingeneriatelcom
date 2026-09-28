@@ -67,9 +67,9 @@ export default function MissionVisionSection() {
       <div ref={ref}>
         <SectionHeader
           id="mision-vision"
-          eyebrow="Nuestra filosofía"
-          title="Misión, Visión y Valores"
-          subtitle="Las directivas que orientan cada proyecto que ejecutamos, del diseño a la puesta en marcha."
+          eyebrow="Nuestro propósito"
+          title="Misión, visión y valores"
+          subtitle="Para qué existimos, hacia dónde vamos y los valores que no negociamos en ningún proyecto."
         />
 
         {/* Misión y Visión */}
@@ -108,7 +108,7 @@ export default function MissionVisionSection() {
         {/* Valores: módulos numerados */}
         <div className="flex items-center gap-3 mb-5 font-mono text-xs tracking-[0.3em] text-accent-success uppercase">
           <span className="w-2 h-2 rounded-full bg-accent-success animate-pulse" />
-          Valores corporativos
+          Nuestros valores
           <span className="flex-1 h-px bg-gradient-to-r from-accent-success/40 to-transparent" />
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
@@ -158,10 +158,10 @@ export default function MissionVisionSection() {
             </div>
             <div>
               <p className="font-mono text-[10px] md:text-xs tracking-[0.3em] text-accent-energy mb-1">
-                COMPROMISO · SISTEMA DE GESTIÓN
+                NUESTRO COMPROMISO
               </p>
               <h3 className="text-xl md:text-2xl font-display font-bold text-white mb-2">
-                Política de Calidad
+                Política de calidad
               </h3>
               <p className="text-primary-200 leading-relaxed">
                 {missionVision.qualityPolicy}

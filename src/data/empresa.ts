@@ -9,7 +9,10 @@ export const aniosExperiencia = (hoy: Date = new Date()) => hoy.getFullYear() - 
 
 export const PROYECTOS_EJECUTADOS = 27
 export const CLIENTES_ATENDIDOS = 15   // total histórico; en la sección Clientes se muestran los principales
-export const SATISFACCION = 100
+// Regiones del sur y oriente donde hemos trabajado (Tacna, Moquegua, Puno,
+// Cusco, Apurímac, Madre de Dios). Reemplaza al antiguo "100 % satisfacción",
+// que no tenía respaldo.
+export const REGIONES_ATENDIDAS = 6
 
 // Orden narrativo de la landing: quiénes somos → qué hacemos → prueba (obras y
 // clientes) → cómo somos (filosofía, ética, organización) → súmate → contacto.

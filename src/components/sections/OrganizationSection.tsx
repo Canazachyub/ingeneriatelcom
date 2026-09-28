@@ -207,8 +207,8 @@ export default function OrganizationSection() {
         <SectionHeader
           id="estructura-organizacional"
           eyebrow="Nuestra organización"
-          title="Estructura Organizacional"
-          subtitle="Una estructura diseñada para garantizar una gestión eficiente de todos nuestros proyectos y servicios."
+          title="Estructura organizacional"
+          subtitle="Una organización ligera: decisiones rápidas en la gerencia y equipos técnicos con autonomía en cada zona de trabajo."
         />
 
         {/* ── Escritorio: árbol horizontal con conectores medidos ── */}

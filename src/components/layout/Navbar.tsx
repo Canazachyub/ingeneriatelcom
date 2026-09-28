@@ -93,7 +93,7 @@ export default function Navbar() {
               estaActivo(item) ? 'text-accent-electric' : 'text-primary-200'
             }`}
           >
-            {item.label === 'Portal Empleados' && (
+            {item.label === 'Portal de empleados' && (
               <FaLock className="w-3 h-3 text-accent-energy" />
             )}
             {item.label}
@@ -185,7 +185,7 @@ export default function Navbar() {
             className="w-full flex items-center justify-between px-4 py-3 text-primary-200 hover:text-accent-electric hover:bg-primary-800/50 rounded-lg transition-all duration-200"
           >
             <span className="flex items-center gap-2">
-              {item.label === 'Portal Empleados' && (
+              {item.label === 'Portal de empleados' && (
                 <FaLock className="w-3 h-3 text-accent-energy" />
               )}
               {item.label}
@@ -294,7 +294,7 @@ export default function Navbar() {
           <button
             className="lg:hidden p-2 text-white hover:text-accent-electric transition-colors"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            aria-label="Toggle menu"
+            aria-label="Abrir o cerrar menú"
           >
             {isMobileMenuOpen ? <HiX className="w-6 h-6" /> : <HiMenu className="w-6 h-6" />}
           </button>

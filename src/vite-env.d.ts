@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_FB_ACCESS_TOKEN: string
   readonly VITE_CONTACT_EMAIL: string
   readonly VITE_DASHBOARD_URL: string
+  /** Google Analytics 4 (G-XXXXXXXXXX). Vacío = sin analítica. */
+  readonly VITE_GA_ID?: string
 }
 
 interface ImportMeta {

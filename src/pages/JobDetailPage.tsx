@@ -34,6 +34,7 @@ import {
 } from 'react-icons/fa'
 import Button from '../components/common/Button'
 import { api } from '../api/appScriptApi'
+import { registrarEvento } from '../utils/analytics'
 
 // Campos estilo terminal, coherentes con el formulario de Contacto
 const inputHud =
@@ -156,7 +157,7 @@ export default function JobDetailPage() {
       'jobBenefits': job.beneficios,
       'qualifications': job.requisitos,
       'directApply': true,
-      'url': `https://ingeneriatelcom.com/jobs/${job.id}`,
+      'url': `https://ingeneriatelcom.com/bolsa-trabajo/${job.id}`,
     }
 
     if (job.salario_min > 0) {
@@ -274,6 +275,7 @@ export default function JobDetailPage() {
       })
 
       if (result.success) {
+        registrarEvento('postulacion_enviada', { puesto: job.titulo })
         setIsSuccess(true)
       } else {
         setError(result.error || 'Error al enviar la postulación')

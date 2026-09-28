@@ -18,16 +18,16 @@ export const mainNavigation: NavItem[] = [
       { label: 'Organización', href: '#estructura-organizacional' },
     ],
   },
-  { label: 'Bolsa de Trabajo', href: '/bolsa-trabajo' },
+  { label: 'Bolsa de trabajo', href: '/bolsa-trabajo' },
   { label: 'Contacto', href: '#contacto' },
   {
-    label: 'Portal Empleados',
+    label: 'Portal de empleados',
     href: '#',
     children: [
-      { label: 'Marcar Asistencia', href: '/asistencia' },
+      { label: 'Marcar asistencia', href: '/asistencia' },
       { label: 'Capacitaciones', href: '/capacitaciones' },
-      { label: 'Consultar Postulación', href: '/mi-postulacion' },
-      { label: 'Dashboard', href: 'https://canazachyub.github.io/Telcomdashboard', isExternal: true },
+      { label: 'Consultar postulación', href: '/mi-postulacion' },
+      { label: 'Área de trabajo', href: 'https://canazachyub.github.io/Telcomdashboard', isExternal: true },
     ],
   },
 ]
@@ -36,18 +36,16 @@ export const footerNavigation = {
   quickLinks: [
     { label: 'Inicio', href: '#inicio' },
     { label: 'Servicios', href: '#servicios' },
-    { label: 'Bolsa de Trabajo', href: '/bolsa-trabajo' },
-    { label: 'Consultar Postulación', href: '/mi-postulacion' },
+    { label: 'Bolsa de trabajo', href: '/bolsa-trabajo' },
+    { label: 'Consultar postulación', href: '/mi-postulacion' },
     { label: 'Contacto', href: '#contacto' },
   ],
   empleados: [
-    { label: 'Marcar Asistencia', href: '/asistencia' },
+    { label: 'Marcar asistencia', href: '/asistencia' },
     { label: 'Capacitaciones', href: '/capacitaciones' },
-    { label: 'Consultar mi Postulación', href: '/mi-postulacion' },
-    { label: 'Dashboard', href: 'https://canazachyub.github.io/Telcomdashboard' },
   ],
   legal: [
-    { label: 'Términos y Condiciones', href: '/terminos' },
-    { label: 'Política de Privacidad', href: '/privacidad' },
+    { label: 'Términos y condiciones', href: '/terminos' },
+    { label: 'Política de privacidad', href: '/privacidad' },
   ],
 }

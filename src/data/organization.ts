@@ -2,107 +2,108 @@ export const departments = [
   {
     id: '1',
     name: 'Gerencia General',
-    description: 'La Gerencia General es la encargada de dirigir y supervisar las actividades de Ingeniería Telcom EIRL, garantizando la calidad y seguridad de nuestros servicios.',
+    description: 'La Gerencia General es la encargada de definir la estrategia, aprobar cada propuesta técnica y económica y responder ante el cliente por los resultados de Ingeniería Telcom EIRL.',
     icon: 'building',
   },
   {
     id: '2',
     name: 'Departamento de Operaciones',
-    description: 'El Departamento de Operaciones se encarga de coordinar, analizar y supervisar diversos proyectos, garantizando la calidad y seguridad en cada uno de nuestros servicios.',
+    description: 'El Departamento de Operaciones se encarga de planificar, ejecutar y supervisar los servicios en campo, con ingenieros residentes y supervisores en cada zona de trabajo.',
     icon: 'cog',
   },
   {
     id: '3',
     name: 'Departamento de Administración',
-    description: 'El Departamento de Administración se encarga de la gestión administrativa y financiera de Ingeniería Telcom EIRL.',
+    description: 'El Departamento de Administración se encarga de la logística, la contabilidad y el cumplimiento de las obligaciones contractuales y tributarias.',
     icon: 'calculator',
   },
   {
     id: '4',
     name: 'Departamento de Recursos Humanos',
-    description: 'El Departamento de Recursos Humanos se encarga de la gestión del talento humano de Ingeniería Telcom EIRL.',
+    description: 'El Departamento de Recursos Humanos se encarga de reclutar, capacitar y cuidar la seguridad y salud en el trabajo de nuestro personal.',
     icon: 'users',
   },
   {
     id: '5',
-    name: 'Departamento de Marketing',
-    description: 'El Departamento de Marketing se encarga de la gestión de la imagen corporativa de Ingeniería Telcom EIRL.',
+    name: 'Departamento de Comunicaciones',
+    description: 'El Departamento de Comunicaciones se encarga de la imagen de la empresa, las convocatorias laborales y la relación con la comunidad.',
     icon: 'megaphone',
   },
   {
     id: '6',
     name: 'Departamento de Tecnología',
-    description: 'El Departamento de Tecnología se encarga de la gestión de la infraestructura tecnológica de Ingeniería Telcom EIRL.',
+    description: 'El Departamento de Tecnología se encarga de desarrollar el software propio de la empresa: aplicaciones de campo, reportes automáticos y sistemas de gestión.',
     icon: 'computer',
   },
 ]
-
 export const ethicsValues = [
   {
     id: '1',
     title: 'Integridad',
-    description: 'Actuamos con honestidad, transparencia y responsabilidad en todas nuestras operaciones y relaciones comerciales.',
+    description: 'Decimos lo que hacemos y hacemos lo que decimos. Nuestros informes reflejan lo que encontramos en campo, aunque no sea lo que alguien quiere leer.',
     icon: 'shield-check',
   },
   {
     id: '2',
     title: 'Respeto',
-    description: 'Tratamos a nuestros clientes, proveedores y colaboradores con respeto y dignidad, valorando la diversidad y promoviendo un ambiente de trabajo inclusivo.',
+    description: 'Tratamos con respeto a clientes, usuarios, proveedores y compañeros, y cuidamos a las comunidades donde trabajamos.',
     icon: 'heart',
   },
   {
     id: '3',
-    title: 'Compromiso',
-    description: 'Nos comprometemos a ofrecer un servicio de calidad, cumpliendo con los plazos establecidos y superando las expectativas de nuestros clientes.',
-    icon: 'handshake',
+    title: 'Seguridad primero',
+    description: 'Ningún plazo justifica un riesgo. Trabajamos con equipo de protección, procedimientos claros y el derecho de cada trabajador a detener una tarea insegura.',
+    icon: 'hard-hat',
   },
   {
     id: '4',
     title: 'Lealtad',
-    description: 'Actuamos con lealtad hacia nuestros clientes, proveedores y colaboradores, construyendo relaciones de confianza a largo plazo.',
+    description: 'Construimos relaciones de largo plazo con clientes y proveedores, cumpliendo lo pactado de principio a fin.',
     icon: 'users',
   },
   {
     id: '5',
     title: 'Confidencialidad',
-    description: 'Respetamos la confidencialidad de la información de nuestros clientes y proveedores, protegiendo sus datos y utilizándolos únicamente para los fines acordados.',
+    description: 'La información de nuestros clientes y de sus usuarios se usa solo para el servicio contratado y se guarda con acceso restringido.',
     icon: 'lock',
   },
   {
     id: '6',
-    title: 'Profesionalismo',
-    description: 'Actuamos con profesionalismo, compromiso y eficiencia en cada proyecto que emprendemos, buscando siempre la excelencia en nuestros servicios.',
+    title: 'Responsabilidad',
+    description: 'Respondemos por nuestro trabajo: cumplimos plazos, corregimos a tiempo lo que haya que corregir y lo dejamos documentado.',
     icon: 'briefcase',
   },
 ]
-
 export const missionVision = {
-  mission: 'Gestionar proyectos y servicios en el ámbito de las telecomunicaciones y electricidad con transparencia, imparcialidad y excelencia; asegurando la calidad y seguridad del suministro, y proporcionando soluciones económicas y eficientes a nuestros clientes.',
-  vision: 'Ser reconocidos a nivel nacional como la autoridad técnica preeminente y el principal referente en soluciones avanzadas de telecomunicaciones y servicios eléctricos en Perú.',
+  mission: 'Brindar servicios de ingeniería, construcción, supervisión y tecnología que permitan a nuestros clientes operar con calidad, seguridad y dentro de la norma, con un equipo comprometido y soluciones eficientes.',
+  vision: 'Ser la empresa de ingeniería de referencia en el sur del Perú para los sectores eléctrico, minero y de construcción, reconocida por la calidad de su supervisión y por su tecnología propia.',
   values: [
-    { title: 'Cliente Primero', description: 'Nuestros clientes, internos y externos, son nuestra prioridad.' },
-    { title: 'Desarrollo', description: 'Contribuimos activamente al desarrollo económico de Perú.' },
-    { title: 'Transparencia', description: 'Compartimos de manera clara y abierta nuestras acciones.' },
-    { title: 'Profesionalismo', description: 'Garantizamos imparcialidad y excelencia en nuestra labor.' },
-    { title: 'Mejora Continua', description: 'Nos esforzamos por perfeccionar nuestro trabajo diariamente.' },
-    { title: 'Innovación', description: 'Buscamos constantemente nuevas soluciones y formas de trabajar.' },
+    { title: 'Cliente primero', description: 'Entendemos lo que el cliente necesita cumplir y trabajamos para que lo logre.' },
+    { title: 'Imparcialidad', description: 'Informamos lo que encontramos en campo, con evidencia y sin favorecer a nadie.' },
+    { title: 'Seguridad', description: 'Cada trabajador vuelve a casa sano: ese es el primer resultado de cualquier proyecto.' },
+    { title: 'Transparencia', description: 'Comunicamos avances, problemas y resultados de forma clara y a tiempo.' },
+    { title: 'Mejora continua', description: 'Revisamos cada servicio para hacer el siguiente mejor y más rápido.' },
+    { title: 'Innovación', description: 'Creamos nuestras propias herramientas digitales para trabajar con más precisión.' },
   ],
-  // Texto oficial (antes vivía en el componente, sin tildes).
-  qualityPolicy: 'En Ingeniería Telcom EIRL nos comprometemos a brindar servicios de telecomunicaciones y electricidad de calidad, cumpliendo con los requisitos de nuestros clientes y las normas legales vigentes. Para ello, nos esforzamos por mejorar continuamente nuestros procesos y la eficacia de nuestro sistema de gestión de calidad.',
+  // Texto oficial de la política de calidad.
+  qualityPolicy: 'En Ingeniería Telcom EIRL nos comprometemos a brindar servicios de ingeniería, supervisión, construcción y tecnología que cumplan los requisitos de nuestros clientes, la normativa técnica y legal vigente y las normas de seguridad y salud en el trabajo. Para lograrlo, capacitamos a nuestro personal, medimos los resultados de cada servicio y mejoramos continuamente nuestros procesos.',
 }
-
 // Normas del Código de Ética (texto oficial, con tildes corregidas).
 export const ethicsNorms = [
   {
     title: 'Ámbito de aplicación',
-    description: 'Este código establece pautas básicas de comportamiento ético, complementando las disposiciones legales y reglamentarias vigentes.',
+    description: 'Este código rige para todo el personal de Ingeniería Telcom EIRL, sin importar su cargo o modalidad de contrato, y para quienes trabajan en nuestro nombre. Complementa la ley y los reglamentos vigentes.',
   },
   {
     title: 'Pautas de comportamiento',
-    description: 'Esperamos que nuestros empleados actúen conforme a los valores de la empresa, evitando conflictos de interés y actuando con lealtad.',
+    description: 'Esperamos que cada colaborador actúe conforme a nuestros principios: evitar conflictos de interés, no aceptar regalos que comprometan su imparcialidad, proteger la información del cliente y reportar cualquier condición insegura.',
+  },
+  {
+    title: 'Canal de denuncias',
+    description: 'Cualquier persona puede informar un posible incumplimiento a la Gerencia General o al área de Recursos Humanos. Las denuncias se tratan con reserva y sin represalias para quien las presenta de buena fe.',
   },
   {
     title: 'Medidas disciplinarias',
-    description: 'Frente a cualquier acto que viole este Código, el área de RR. HH. tomará las medidas disciplinarias correspondientes.',
+    description: 'Frente a cualquier acto que viole este código, el área de Recursos Humanos aplicará las medidas disciplinarias que correspondan, de acuerdo con el reglamento interno y la legislación laboral.',
   },
 ]

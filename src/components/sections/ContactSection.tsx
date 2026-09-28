@@ -4,7 +4,7 @@ import { useInView } from 'react-intersection-observer'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import {
+import { FaTiktok,
   FaPhone, FaEnvelope, FaMapMarkerAlt, FaClock, FaFacebookF, FaPaperPlane, FaSpinner,
   FaCheckCircle, FaExclamationTriangle, FaArrowRight,
 } from 'react-icons/fa'
@@ -14,6 +14,7 @@ import TiltCard from '../common/TiltCard'
 import HudFrame from '../effects/HudFrame'
 import { config } from '../../config/env'
 import { api } from '../../api/appScriptApi'
+import { registrarEvento } from '../../utils/analytics'
 
 const contactSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
@@ -63,6 +64,7 @@ export default function ContactSection() {
       })
 
       if (result.success) {
+        registrarEvento('generate_lead', { formulario: 'contacto' })
         setIsSuccess(true)
         reset()
         setTimeout(() => setIsSuccess(false), 5000)
@@ -101,6 +103,14 @@ export default function ContactSection() {
       accion: 'Ver página',
       externo: true,
     },
+    {
+      icon: <FaTiktok />,
+      label: 'TikTok',
+      value: '@ingeneriatelcom',
+      href: config.companyInfo.tiktok,
+      accion: 'Ver videos',
+      externo: true,
+    },
   ]
 
   return (
@@ -108,13 +118,13 @@ export default function ContactSection() {
       <div ref={ref}>
         <SectionHeader
           id="contacto"
-          eyebrow="Canal abierto"
+          eyebrow="Hablemos"
           title="Contáctanos"
-          subtitle="¿Tienes un proyecto o una consulta? Elige el canal que prefieras o déjanos un mensaje."
+          subtitle="¿Necesitas una propuesta técnica o una cotización? Escríbenos y te respondemos a la brevedad."
         />
 
         {/* Canales directos */}
-        <div className="grid sm:grid-cols-3 gap-4 mb-8">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {canales.map((c, i) => (
             <motion.div
               key={c.label}
@@ -134,7 +144,7 @@ export default function ContactSection() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block font-mono text-[10px] tracking-[0.25em] uppercase text-primary-400">{c.label}</span>
-                    <span className="block text-white text-sm font-semibold truncate">{c.value}</span>
+                    <span className="block text-white text-sm font-semibold break-all">{c.value}</span>
                     <span className="mt-1 inline-flex items-center gap-1 text-xs text-accent-electric">
                       {c.accion}
                       <FaArrowRight className="text-[10px] group-hover:translate-x-1 transition-transform duration-300" />
@@ -237,13 +247,13 @@ export default function ContactSection() {
                   </div>
                   <div>
                     <label htmlFor="c-subject" className={labelHud}>Asunto (opcional)</label>
-                    <input id="c-subject" {...register('subject')} type="text" className={inputHud} placeholder="Ej: Consulta sobre servicios" />
+                    <input id="c-subject" {...register('subject')} type="text" className={inputHud} placeholder="Ej.: Cotización de supervisión eléctrica" />
                   </div>
                 </div>
 
                 <div>
                   <label htmlFor="c-message" className={labelHud}>Mensaje *</label>
-                  <textarea id="c-message" {...register('message')} rows={5} className={`${inputHud} resize-none`} placeholder="Cuéntanos sobre tu proyecto o consulta..." />
+                  <textarea id="c-message" {...register('message')} rows={5} className={`${inputHud} resize-none`} placeholder="Cuéntanos qué necesitas, dónde y para cuándo..." />
                   {errors.message && <p className="mt-1 text-sm text-red-400">{errors.message.message}</p>}
                 </div>
 

@@ -52,3 +52,40 @@ Bolsa de trabajo, detalle de oferta + postulación, Consultar postulación y Cap
 cambió la presentación; las llamadas `api.*`, los campos del formulario (`register`) y los handlers se
 verificaron idénticos a la versión anterior. El kiosko `/asistencia` tiene marco de terminal en
 escritorio (solo CSS, sin efectos de mouse).
+
+---
+
+## Contenido y cifras (actualizado 28/09/2026)
+
+**Mensaje:** empresa de ingeniería eléctrica, construcción, minería y software, **especialista en
+supervisión técnica del sector eléctrico** (lo que más se factura). La especialidad va en un
+bloque destacado al inicio de *Servicios* (`especialidad` en `src/data/services.ts`).
+
+**Reglas para no dar ventaja a la competencia** (el público incluye a otros postores de
+licitaciones):
+- No publicar montos, números de contrato, procesos de selección, fechas de conformidad ni
+  cantidad de personal por contrato.
+- Describir el *tipo* de servicio (supervisión de contraste de medidores, NTCSE, reclamos), no
+  el contrato.
+- Las cifras públicas salen solo de `src/data/empresa.ts`: fundación 2017, 27 proyectos,
+  15+ clientes, 6 regiones. No escribir cifras en los componentes ni en `index.html`.
+- Correo público único: `energysupervision13@gmail.com` (`src/config/env.ts`).
+- Nombre: siempre "Ingeniería Telcom EIRL". Sede: Tacna.
+
+**Fotos nuevas (Codex image_gen):** `operaciones/ESP1.webp` (supervisión de medidor, bloque de
+especialidad) y `operaciones/S5.webp` (minería). Los PNG originales están en
+`public/assets/images/fotos generadas/`.
+
+## Hero cinemático y estilo Terran (28/09/2026)
+
+- **Hero** (`HeroSection.tsx`): una foto a pantalla completa por frente (`FRENTES`: energía,
+  construcción, minería, software), texto a la izquierda y selector abajo con barra de progreso
+  (8 s por frente; se pausa con el mouse encima). En móvil el selector usa `corto`
+  ("OBRAS" en vez de "CONSTRUCCIÓN") para no superponerse.
+- **Fotos** `public/assets/images/hero/h-*.webp`: Codex image_gen con prompt de *fotografía
+  documental real* (sin neón ni efectos), escaladas a 2560 px con Lanczos + enfoque fino.
+  Originales en `fotos generadas/HERO-*.png`. image_gen entrega ~1672 px: no existe "8K" real.
+  Para regenerar, el tercio izquierdo debe quedar oscuro (va el texto encima).
+- **Estilo Terran** (`globals.css`): `.placa-acero` (acero cepillado con remaches),
+  `.franja-peligro` (ámbar/negro) y `.rotulo-estencil`. Regla: el cian es para datos y
+  estados; acero y ámbar para la estructura.

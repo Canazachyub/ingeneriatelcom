@@ -97,10 +97,10 @@ export default function JobsPage() {
     document.title = 'Bolsa de Trabajo | Ingeniería Telcom EIRL — Empleos en Ingeniería, Software y TIC'
     const metaDesc = document.querySelector('meta[name="description"]')
     if (metaDesc) {
-      metaDesc.setAttribute('content', 'Bolsa de trabajo de Ingeniería Telcom EIRL. Encuentra empleos en ingeniería eléctrica, software, TIC, minería y construcción en Tacna, Puno y todo el Perú. Postula en línea.')
+      metaDesc.setAttribute('content', 'Bolsa de trabajo de Ingeniería Telcom EIRL. Encuentra empleos en ingeniería eléctrica, construcción, minería y software en Tacna, Cusco, Puno y el sur del Perú. Postula en línea.')
     }
     return () => {
-      document.title = 'Ingeniería Telcom EIRL | Software, Ingeniería Eléctrica, Minería y Soluciones TIC para el Perú'
+      document.title = 'Ingeniería Telcom EIRL | Ingeniería eléctrica, construcción, minería y software'
       if (metaDesc) {
         metaDesc.setAttribute('content', 'Ingeniería Telcom EIRL — Software, Ingeniería Eléctrica, Minería y Soluciones TIC para el Perú. Bolsa de trabajo activa: empleos en ingeniería, tecnología y construcción.')
       }
@@ -198,7 +198,7 @@ export default function JobsPage() {
     <div className="min-h-screen bg-primary-950">
       <PageHeader
         eyebrow="Únete al equipo"
-        title="Bolsa de Trabajo"
+        title="Bolsa de trabajo"
         subtitle="Encuentra tu próxima oportunidad laboral en Ingeniería Telcom. Únete a nuestro equipo de profesionales."
         migas={[{ label: 'Inicio', to: '/' }, { label: 'Bolsa de trabajo' }]}
         accent="energy"

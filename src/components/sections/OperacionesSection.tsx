@@ -269,9 +269,9 @@ export default function OperacionesSection() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <SectionHeader
           id="operaciones"
-          eyebrow="Trabajo real en terreno"
-          title="Nuestras Operaciones"
-          subtitle="Ingeniería eléctrica, telecomunicaciones y supervisión de obras en el sur del Perú, del altiplano de Puno al desierto de Tacna."
+          eyebrow="En el terreno"
+          title="Nuestras operaciones"
+          subtitle="Supervisión eléctrica, obras y mantenimiento en el sur del Perú, del altiplano de Puno al desierto de Tacna."
         />
 
         {reducedMotion ? (

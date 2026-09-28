@@ -21,11 +21,11 @@ export default function NotFoundPage() {
         </h1>
 
         <h2 className="text-2xl md:text-3xl font-display font-semibold text-primary-200 mb-4">
-          Pagina no encontrada
+          Página no encontrada
         </h2>
 
         <p className="text-primary-400 max-w-md mx-auto mb-8">
-          Lo sentimos, la pagina que buscas no existe o ha sido movida.
+          Lo sentimos, la página que buscas no existe o ha sido movida.
         </p>
 
         <Link

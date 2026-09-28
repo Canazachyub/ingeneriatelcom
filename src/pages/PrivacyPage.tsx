@@ -28,7 +28,7 @@ export default function PrivacyPage() {
         </div>
         <Breadcrumb items={[{ label: 'Inicio', href: '/' }, { label: 'Política de Privacidad' }]} />
         <p className="text-primary-400 mb-12">
-          Última actualización: mayo de 2025 — Telcom EIRL
+          Última actualización: septiembre de 2026 — Ingeniería Telcom EIRL
         </p>
 
         <div className="space-y-10">
@@ -38,7 +38,7 @@ export default function PrivacyPage() {
               1. Responsable del Tratamiento
             </h2>
             <p className="text-primary-200 leading-relaxed">
-              <strong className="text-white">Telcom EIRL</strong>, con domicilio en la ciudad de Tacna, Perú,
+              <strong className="text-white">Ingeniería Telcom EIRL</strong> (RUC 20602277900), con domicilio en la ciudad de Tacna, Perú,
               es la empresa responsable del tratamiento de sus datos personales recopilados a través de este
               sitio web, en cumplimiento de la{' '}
               <strong className="text-white">
@@ -99,7 +99,7 @@ export default function PrivacyPage() {
               Sus datos personales son tratados con las siguientes finalidades:
             </p>
             <ul className="list-disc list-inside text-primary-200 space-y-2 pl-2">
-              <li>Gestionar y evaluar su postulación a puestos de trabajo ofrecidos por Telcom EIRL.</li>
+              <li>Gestionar y evaluar su postulación a puestos de trabajo ofrecidos por Ingeniería Telcom EIRL.</li>
               <li>Registrar y controlar la asistencia del personal en los proyectos asignados.</li>
               <li>Responder consultas y solicitudes enviadas a través del formulario de contacto.</li>
               <li>Mejorar la funcionalidad, seguridad y experiencia de uso del Sitio.</li>
@@ -122,7 +122,7 @@ export default function PrivacyPage() {
             <ul className="list-disc list-inside text-primary-200 space-y-2 pl-2 mt-3">
               <li>Su <strong className="text-white">consentimiento expreso</strong> al completar formularios en el Sitio.</li>
               <li>La <strong className="text-white">ejecución de una relación laboral o precontractual</strong> (postulaciones y asistencia).</li>
-              <li>El cumplimiento de <strong className="text-white">obligaciones legales</strong> a cargo de Telcom EIRL.</li>
+              <li>El cumplimiento de <strong className="text-white">obligaciones legales</strong> a cargo de Ingeniería Telcom EIRL.</li>
             </ul>
           </section>
 
@@ -132,7 +132,7 @@ export default function PrivacyPage() {
               5. Transferencia de Datos
             </h2>
             <p className="text-primary-200 leading-relaxed">
-              Telcom EIRL no vende, alquila ni cede sus datos personales a terceros con fines comerciales.
+              Ingeniería Telcom EIRL no vende, alquila ni cede sus datos personales a terceros con fines comerciales.
               Únicamente podremos compartir sus datos con proveedores de servicios tecnológicos que actúen
               como encargados del tratamiento bajo estrictas obligaciones de confidencialidad, o cuando sea
               requerido por autoridad competente en virtud de mandato legal o judicial.
@@ -209,16 +209,43 @@ export default function PrivacyPage() {
               8. Seguridad
             </h2>
             <p className="text-primary-200 leading-relaxed">
-              Telcom EIRL adopta medidas técnicas y organizativas adecuadas para proteger sus datos personales
+              Ingeniería Telcom EIRL adopta medidas técnicas y organizativas adecuadas para proteger sus datos personales
               contra pérdida, acceso no autorizado, divulgación, alteración o destrucción accidental o ilícita.
               No obstante, ninguna transmisión de datos por Internet puede garantizarse como absolutamente segura.
             </p>
           </section>
 
-          {/* 9 */}
+          {/* 9 — Cookies y analítica */}
           <section>
             <h2 className="text-2xl font-display font-semibold text-white mb-4 border-b border-primary-700 pb-2">
-              9. Contacto
+              9. Cookies y Analítica Web
+            </h2>
+            <p className="text-primary-200 leading-relaxed">
+              Usamos <strong className="text-white">Google Analytics 4</strong> (Google LLC) para conocer de forma
+              estadística cuántas personas visitan el Sitio, qué páginas consultan y cómo llegan a él. Para ello
+              Google guarda cookies propias (<code className="text-accent-electric">_ga</code>,{' '}
+              <code className="text-accent-electric">_ga_*</code>) en su navegador. Esta información es agregada:
+              no incluye su nombre, DNI, correo ni el contenido de los formularios que envía.
+            </p>
+            <p className="text-primary-200 leading-relaxed mt-3">
+              La analítica no se usa en el registro de asistencia ni en el panel interno. Puede bloquear estas
+              cookies desde la configuración de su navegador o con el{' '}
+              <a
+                href="https://tools.google.com/dlpage/gaoptout"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent-electric hover:underline"
+              >
+                complemento de inhabilitación de Google Analytics
+              </a>
+              , sin que ello afecte el uso del Sitio.
+            </p>
+          </section>
+
+          {/* 10 */}
+          <section>
+            <h2 className="text-2xl font-display font-semibold text-white mb-4 border-b border-primary-700 pb-2">
+              10. Contacto
             </h2>
             <p className="text-primary-200 leading-relaxed mb-4">
               Para consultas, ejercicio de derechos ARCO o cualquier asunto relacionado con el tratamiento de
@@ -227,7 +254,7 @@ export default function PrivacyPage() {
             <div className="bg-primary-800 rounded-xl p-6 border border-primary-700 space-y-2 text-primary-200">
               <p>
                 <span className="text-primary-400">Empresa:</span>{' '}
-                <strong className="text-white">Telcom EIRL</strong>
+                <strong className="text-white">Ingeniería Telcom EIRL</strong>
               </p>
               <p>
                 <span className="text-primary-400">Ubicación:</span>{' '}
@@ -235,7 +262,7 @@ export default function PrivacyPage() {
               </p>
               <p>
                 <span className="text-primary-400">Contacto:</span>{' '}
-                <span>Disponible en la sección de Contacto del sitio web</span>
+                <span>energysupervision13@gmail.com · +51 946 728 495</span>
               </p>
             </div>
             <p className="text-primary-400 text-sm mt-4">
@@ -251,7 +278,7 @@ export default function PrivacyPage() {
 
         {/* Footer note */}
         <div className="mt-16 pt-8 border-t border-primary-700 text-primary-400 text-sm text-center">
-          &copy; {new Date().getFullYear()} Telcom EIRL — Todos los derechos reservados.
+          &copy; {new Date().getFullYear()} Ingeniería Telcom EIRL — Todos los derechos reservados.
         </div>
       </div>
     </div>

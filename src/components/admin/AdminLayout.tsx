@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, Navigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
+import { FaBook,
   FaHome,
   FaUsers,
   FaProjectDiagram,
@@ -70,7 +70,10 @@ const navigationSections: { title: string; items: NavItem[] }[] = [
   },
   {
     title: 'Comunicación',
-    items: [{ name: 'Mensajes', href: '/admin/mensajes', icon: FaEnvelope, modulo: 'mensajes' }],
+    items: [
+      { name: 'Mensajes', href: '/admin/mensajes', icon: FaEnvelope, modulo: 'mensajes' },
+      { name: 'Libro de Reclamaciones', href: '/admin/reclamaciones', icon: FaBook, modulo: 'mensajes' },
+    ],
   },
   {
     title: 'Capacitaciones',

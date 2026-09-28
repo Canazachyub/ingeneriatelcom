@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { registrarVista } from './utils/analytics'
 import { lazy as lazyReact, Suspense, useEffect, useRef, ComponentType } from 'react'
 
 // Carga diferida con recuperación tras un deploy. GitHub Pages deja el
@@ -40,6 +41,7 @@ import AsistenciaPage from './pages/AsistenciaPage'
 // Paginas legales (lazy)
 const TermsPage = lazy(() => import('./pages/TermsPage'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
+const LibroReclamacionesPage = lazy(() => import('./pages/LibroReclamacionesPage'))
 
 // Capacitaciones (lazy: pesadas por webcam/proctoring)
 const CapacitacionesPage = lazy(() => import('./pages/CapacitacionesPage'))
@@ -61,6 +63,7 @@ const EvaluacionesAdminPage = lazy(() => import('./pages/admin/EvaluacionesPage'
 const PlanillaPage = lazy(() => import('./pages/admin/PlanillaPage'))
 const UsuariosPage = lazy(() => import('./pages/admin/UsuariosPage'))
 const AuditoriaPage = lazy(() => import('./pages/admin/AuditoriaPage'))
+const ReclamacionesPage = lazy(() => import('./pages/admin/ReclamacionesPage'))
 
 import { useAuth } from './context/AuthContext'
 import { ToastProvider, useToast } from './context/ToastContext'
@@ -74,7 +77,7 @@ import { ToastProvider, useToast } from './context/ToastContext'
 // caso con su propio mensaje. Un toast rojo "El servidor tardó demasiado"
 // mientras el registro sigue reintentando hacía creer al trabajador que había
 // fallado (y volvía a marcar), aunque la marca sí se guardaba.
-const ACCIONES_SIN_TOAST = new Set(['registrarAsistenciaFoto', 'getTrabajadores', 'subirJustificacion'])
+const ACCIONES_SIN_TOAST = new Set(['registrarAsistenciaFoto', 'getTrabajadores', 'subirJustificacion', 'registrarReclamo'])
 
 function ApiErrorBridge() {
   const toast = useToast()
@@ -121,10 +124,18 @@ function PageLoader() {
   )
 }
 
+// Envía una vista a Google Analytics en cada cambio de ruta (SPA)
+function AnalyticsRutas() {
+  const { pathname } = useLocation()
+  useEffect(() => { registrarVista(pathname) }, [pathname])
+  return null
+}
+
 function App() {
   return (
     <ToastProvider>
     <ApiErrorBridge />
+    <AnalyticsRutas />
     <Routes>
       {/* Public Routes */}
       <Route
@@ -170,6 +181,16 @@ function App() {
           <Layout>
             <Suspense fallback={<PageLoader />}>
               <TermsPage />
+            </Suspense>
+          </Layout>
+        }
+      />
+      <Route
+        path="/libro-reclamaciones"
+        element={
+          <Layout>
+            <Suspense fallback={<PageLoader />}>
+              <LibroReclamacionesPage />
             </Suspense>
           </Layout>
         }
@@ -261,6 +282,16 @@ function App() {
           <Suspense fallback={<PageLoader />}>
             <ProtectedRoute>
               <ApplicationsPage />
+            </ProtectedRoute>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/reclamaciones"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <ReclamacionesPage />
             </ProtectedRoute>
           </Suspense>
         }

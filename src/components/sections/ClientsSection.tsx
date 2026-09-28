@@ -73,8 +73,8 @@ export default function ClientsSection() {
         <SectionHeader
           id="clientes"
           eyebrow="Confían en nosotros"
-          title="Nuestros Clientes"
-          subtitle="Empresas del sector eléctrico y entidades públicas que ya trabajan con nosotros en el sur y el oriente del Perú."
+          title="Nuestros clientes"
+          subtitle="Empresas del sector eléctrico y entidades públicas del sur y oriente del Perú que confían en nuestro trabajo."
         />
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-5">
@@ -114,7 +114,7 @@ export default function ClientsSection() {
           className="mt-6 flex items-center justify-center gap-2 text-sm text-primary-300 text-center"
         >
           <FaCheckCircle className="text-accent-success shrink-0" />
-          Software, soporte TIC e ingeniería eléctrica para el sector público y privado.
+          Ingeniería, supervisión y software para el sector público y privado.
         </motion.p>
       </div>
     </SectionWrapper>

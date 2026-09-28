@@ -9,9 +9,10 @@ export const config = {
   companyInfo: {
     name: 'Ingeniería Telcom EIRL',
     phone: '+51 946 728 495',
-    email: 'ingeneriatelcomeirl@gmail.com',
-    address: 'Mza. 550 Lote. 05 A.V. Paseo de los Héroes, Crnl. Gregorio Albarracín Lanchipa, Tacna, Perú',
+    email: 'energysupervision13@gmail.com',
+    address: 'Mz. 550 Lote 05, A. V. Paseo de los Héroes, Crnl. Gregorio Albarracín Lanchipa, Tacna, Perú',
     facebook: 'https://www.facebook.com/profile.php?id=61586657451703',
+    tiktok: 'https://www.tiktok.com/@ingeneriatelcom',
     schedule: 'Lunes a sábado, 07:30 a. m. – 06:00 p. m.',
   },
 }

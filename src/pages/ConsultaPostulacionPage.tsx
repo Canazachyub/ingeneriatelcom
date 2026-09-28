@@ -83,7 +83,7 @@ export default function ConsultaPostulacionPage() {
     <div className="min-h-screen bg-primary-950 pb-16">
       <PageHeader
         eyebrow="Seguimiento de postulación"
-        title="Consulta tu Postulación"
+        title="Consulta tu postulación"
         subtitle="Ingresa tu DNI para ver el estado de tu postulación."
         migas={[{ label: 'Inicio', to: '/' }, { label: 'Bolsa de trabajo', to: '/bolsa-trabajo' }, { label: 'Consultar postulación' }]}
         accent="energy"

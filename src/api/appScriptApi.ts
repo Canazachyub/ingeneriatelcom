@@ -648,6 +648,19 @@ class AppScriptApi {
     return this.request<{ id: string }>('contact', 'POST', contact as unknown as Record<string, unknown>)
   }
 
+  // Libro de Reclamaciones (público: registrar; panel: listar y responder)
+  async registrarReclamo(datos: Record<string, unknown>): Promise<ApiResponse<{ id: string; fecha: string; fechaLimite: string; constanciaEnviada: boolean }>> {
+    return this.request('registrarReclamo', 'POST', datos)
+  }
+
+  async getReclamos(): Promise<ApiResponse<Record<string, unknown>[]>> {
+    return this.request<Record<string, unknown>[]>('getReclamos', 'POST')
+  }
+
+  async responderReclamo(id: string, respuesta: string): Promise<ApiResponse<{ id: string; correoEnviado: boolean }>> {
+    return this.request('responderReclamo', 'POST', { id, respuesta })
+  }
+
   // Contact Management (Admin)
   async getContacts(): Promise<ApiResponse<unknown[]>> {
     return this.request<unknown[]>('getContacts', 'POST')

@@ -38,7 +38,7 @@ export default function CapacitacionesPage() {
     <div className="min-h-screen bg-primary-950 pb-16">
       <PageHeader
         eyebrow="Portal de capacitaciones"
-        title="Capacitaciones Disponibles"
+        title="Capacitaciones disponibles"
         subtitle="Rinde tu evaluación en línea. El resultado llegará a tu correo tras la revisión del administrador."
         migas={[{ label: 'Inicio', to: '/' }, { label: 'Capacitaciones' }]}
         metrica={

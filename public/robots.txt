@@ -1,13 +1,13 @@
+# robots.txt — ingeneriatelcom.com
+# Páginas públicas: se indexan. Pantallas internas (panel, kiosko de
+# asistencia, evaluaciones, consulta personal de postulación): no.
+# Detalle en docs/ANALYTICS_SEO.md
+
 User-agent: *
 Allow: /
-Allow: /jobs
-Allow: /jobs/
-Allow: /terminos
-Allow: /privacidad
-
-# Bloquear panel admin de indexación
 Disallow: /admin
-Disallow: /admin/
+Disallow: /asistencia
+Disallow: /evaluacion/
+Disallow: /mi-postulacion
 
-# Sitemap
 Sitemap: https://ingeneriatelcom.com/sitemap.xml

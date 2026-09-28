@@ -44,6 +44,10 @@ var ROUTES = {
 
   // === CONTACTO ===
   contact: { nivel: 'publico', handler: function (ctx) { return submitContact(ctx.data); } },
+  // Libro de Reclamaciones (14_reclamaciones.gs)
+  registrarReclamo: { nivel: 'publico', handler: function (ctx) { return registrarReclamo(ctx.data); } },
+  getReclamos: { nivel: 'auth', handler: function () { return getReclamos(); } },
+  responderReclamo: { nivel: 'auth', handler: function (ctx) { return responderReclamo(ctx.data, ctx.userId); } },
   getContacts: { nivel: 'auth', handler: function () { return getContacts(); } },
   updateContactStatus: { nivel: 'auth', handler: function (ctx) { return updateContactStatus(ctx.data); } },
   deleteContact: { nivel: 'admin', handler: function (ctx) { return deleteContact(ctx.data); } },
@@ -144,6 +148,7 @@ var MODULO_POR_ACCION_ = {
   getJobsAdmin: 'bolsa', createJob: 'bolsa', updateJob: 'bolsa', uploadJobPdf: 'bolsa',
   getApplicationsAdmin: 'bolsa', updateApplicationStatus: 'bolsa', upload: 'bolsa',
   getContacts: 'mensajes', updateContactStatus: 'mensajes',
+  getReclamos: 'mensajes', responderReclamo: 'mensajes',
   getEmployees: 'personal', getEmployee: 'personal', createEmployee: 'personal',
   updateEmployee: 'personal', transferEmployee: 'personal',
   getProjects: 'proyectos', getProject: 'proyectos', createProject: 'proyectos', updateProject: 'proyectos',

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useInView } from 'react-intersection-observer'
-import { FaShieldAlt, FaHeart, FaHandshake, FaUsers, FaLock, FaBriefcase, FaChevronRight, FaTerminal } from 'react-icons/fa'
+import { FaShieldAlt, FaHeart, FaHandshake, FaHardHat, FaUsers, FaLock, FaBriefcase, FaChevronRight, FaTerminal } from 'react-icons/fa'
 import SectionWrapper from '../common/SectionWrapper'
 import SectionHeader from '../common/SectionHeader'
 import TiltCard from '../common/TiltCard'
@@ -11,6 +11,7 @@ const iconMap: Record<string, React.ReactNode> = {
   'shield-check': <FaShieldAlt />,
   'heart': <FaHeart />,
   'handshake': <FaHandshake />,
+  'hard-hat': <FaHardHat />,
   'users': <FaUsers />,
   'lock': <FaLock />,
   'briefcase': <FaBriefcase />,
@@ -27,8 +28,8 @@ export default function EthicsSection() {
         <SectionHeader
           id="codigo-etica"
           eyebrow="Nuestros principios"
-          title="Código de Ética"
-          subtitle="En Ingeniería Telcom EIRL nos comprometemos a cumplir con los más altos estándares éticos en todas nuestras actividades."
+          title="Código de ética"
+          subtitle="Seis principios que cumple todo nuestro personal, en la oficina y en campo, con clientes, usuarios y proveedores."
         />
 
         {/* Principios: módulos con índice */}
