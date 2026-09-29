@@ -82,8 +82,9 @@ function Sello({ ok, texto }: { ok: boolean; texto: string }) {
 export default function EmployeesPage() {
   const qc = useQueryClient()
   const empleadosQ = useQuery({ queryKey: ['empleadosTodos'], queryFn: async () => { const r = await api.getEmployeesTodos(); if (!r.success) throw new Error(r.error); return r.data || [] } })
-  const resumenQ = useQuery({ queryKey: ['rrhhResumen'], queryFn: async () => { const r = await api.rrhhResumen(); return r.success ? r.data || {} : {} } })
-  const asigQ = useQuery({ queryKey: ['asignacionesTodas'], queryFn: async () => { const r = await api.getAssignments(); return r.success ? r.data || [] : [] } })
+  // Si Google responde mal, se lanza error para que React Query reintente (antes quedaba en 0/12)
+  const resumenQ = useQuery({ queryKey: ['rrhhResumen'], queryFn: async () => { const r = await api.rrhhResumen(); if (!r.success) throw new Error(r.error); return r.data || {} }, retry: 3 })
+  const asigQ = useQuery({ queryKey: ['asignacionesTodas'], queryFn: async () => { const r = await api.getAssignments(); if (!r.success) throw new Error(r.error); return r.data || [] }, retry: 3 })
   const proyQ = useQuery({ queryKey: queryKeys.projects, queryFn: async () => { const r = await api.getProjects(); return r.success ? r.data || [] : [] } })
 
   const [q, setQ] = useState('')
