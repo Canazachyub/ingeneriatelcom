@@ -24,7 +24,7 @@ import TableSkeleton from '../../components/common/TableSkeleton'
 import EmptyState from '../../components/common/EmptyState'
 import { useToast } from '../../context/ToastContext'
 
-const cities = ['Tacna', 'Puno', 'Arequipa', 'Lima', 'Cusco', 'Juliaca']
+const cities = ['Cusco', 'Puerto Maldonado', 'Abancay', 'Tacna', 'Puno', 'Juliaca', 'Arequipa', 'Pucallpa', 'Lima']
 const departments = ['Software', 'Ingenieria Electrica', 'TIC', 'Mineria', 'Administracion']
 const positions = ['Desarrollador', 'Ingeniero', 'Tecnico', 'Supervisor', 'Gerente', 'Asistente']
 

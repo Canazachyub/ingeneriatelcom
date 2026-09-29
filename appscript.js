@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-29T08:05:21.987Z con tools/build-backend.mjs
+// Generado: 2026-09-29T09:06:52.815Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -462,6 +462,7 @@ var ROUTES = {
   getProject: { nivel: 'auth', handler: function (ctx) { return getProjectById(arg_(ctx, 'id')); } },
   createProject: { nivel: 'auth', handler: function (ctx) { return createProject(ctx.data); } },
   updateProject: { nivel: 'auth', handler: function (ctx) { return updateProject(ctx.data); } },
+  deleteProject: { nivel: 'admin', handler: function (ctx) { return deleteProject(ctx.data); } },
   getAssignments: { nivel: 'auth', handler: function (ctx) { return getAssignments(arg_(ctx, 'projectId')); } },
   assignEmployee: { nivel: 'auth', handler: function (ctx) { return assignEmployeeToProject(ctx.data); } },
   removeAssignment: { nivel: 'auth', handler: function (ctx) { return removeAssignment(ctx.data); } },
@@ -582,7 +583,7 @@ var MODULO_POR_ACCION_ = {
   getAnalytics: 'reportes',
   getEmployees: 'personal', getEmployee: 'personal', createEmployee: 'personal',
   updateEmployee: 'personal', transferEmployee: 'personal',
-  getProjects: 'proyectos', getProject: 'proyectos', createProject: 'proyectos', updateProject: 'proyectos',
+  getProjects: 'proyectos', getProject: 'proyectos', createProject: 'proyectos', updateProject: 'proyectos', deleteProject: 'proyectos',
   getAssignments: 'proyectos', assignEmployee: 'proyectos', removeAssignment: 'proyectos',
   getAttendances: 'asistencias', obtenerAsistenciasHoy: 'asistencias', getAsistenciasV2: ['asistencias', 'reportes'],
   getJustificaciones: 'asistencias', registrarAsistenciaManual: 'asistencias',
@@ -1332,22 +1333,23 @@ function getEmployeeById(id) {
   return { success: true, data: emp };
 }
 
+// Trabajadores con asignación activa al proyecto (columnas por nombre, ver
+// 04_proyectos.gs). Los del roster real (SUE-<dni>) salen de 'sueldos'; los
+// ids legacy EMP0xx, de la hoja 'empleados' si existe.
 function getEmployeesByProject(projectId) {
-  const assignSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('asignaciones');
-  const empSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('empleados');
-  
-  const assignments = assignSheet.getDataRange().getValues();
-  const employees = empSheet.getDataRange().getValues();
-  const empHeaders = employees[0];
-  
-  const employeeIds = assignments.slice(1)
-    .filter(row => row[1] === projectId && row[5] === 'activa')
-    .map(row => row[2]);
-  
-  const result = employees.slice(1)
-    .filter(row => employeeIds.includes(row[0]))
-    .map(row => rowToObject(empHeaders, row));
-  
+  var a = tablaPorCabecera_('asignaciones');
+  var ids = a.datos.slice(1)
+    .filter(function (r) { return String(r[a.h.projectId]) === String(projectId) && asignacionActiva_(a, r); })
+    .map(function (r) { return String(r[a.h.employeeId]); });
+  var roster = leerRosterReal_(true).map(trabajadorRosterAEmployee_);
+  var result = roster.filter(function (e) { return ids.indexOf(e.id) >= 0; });
+  var legacy = ids.filter(function (id) { return !dniDesdeIdRoster_(id); });
+  var hojaLegacy = legacy.length ? SpreadsheetApp.openById(SHEET_ID).getSheetByName('empleados') : null;
+  if (hojaLegacy) {
+    var emp = hojaLegacy.getDataRange().getValues();
+    emp.slice(1).filter(function (r) { return legacy.indexOf(String(r[0])) >= 0; })
+      .forEach(function (r) { result.push(rowToObject(emp[0], r)); });
+  }
   return { success: true, data: result };
 }
 
@@ -1671,254 +1673,263 @@ Ingenieria Telcom EIRL
 // PROYECTOS — proyectos y asignaciones
 // Fuente modular del backend GAS. NO editar appscript.js a mano:
 // se regenera con `npm run build:backend`.
+//
+// Todas las lecturas/escrituras van POR NOMBRE DE COLUMNA (cabecera de la
+// hoja), no por posición: la versión anterior asumía otro orden de columnas
+// y escribía los datos corridos (nombre en descripción, estado en ciudad…).
+// Columnas reales:
+//   proyectos:    id, nombre, descripcion, cliente, ciudad, estado, fecha_inicio,
+//                 fecha_fin, presupuesto, createdAt, updatedAt
+//   asignaciones: id, employeeId, employeeName, projectId, projectName, role,
+//                 startDate, endDate, status (active|completed), createdAt
 // ============================================================
+
+var ESTADOS_PROYECTO_ = {
+  planning: 'planning', planificacion: 'planning',
+  in_progress: 'in_progress', activo: 'in_progress', en_progreso: 'in_progress',
+  on_hold: 'on_hold', en_espera: 'on_hold', pausado: 'on_hold',
+  completed: 'completed', cerrado: 'completed', completado: 'completed', finalizado: 'completed'
+};
+
+// { hoja, datos, h: {columna: índice} } — h acepta alias (fecha_fin_estimada → fecha_fin)
+function tablaPorCabecera_(nombreHoja) {
+  var hoja = SpreadsheetApp.openById(SHEET_ID).getSheetByName(nombreHoja);
+  var datos = hoja.getDataRange().getValues();
+  var h = {};
+  (datos[0] || []).forEach(function (c, i) { if (c !== '' && h[c] === undefined) h[c] = i; });
+  return { hoja: hoja, datos: datos, h: h };
+}
+
+function asignacionActiva_(t, fila) {
+  var s = String(fila[t.h.status] || '').toLowerCase();
+  return s === 'active' || s === 'activa';
+}
+
 // ============================================
 // GESTION DE PROYECTOS
 // ============================================
 function getProjects() {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('proyectos');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  
-  const projects = data.slice(1)
-    .filter(row => row[0] !== '')
-    .map(row => {
-      const project = rowToObject(headers, row);
-      project.empleados_asignados = countProjectEmployees(project.id);
+  var t = tablaPorCabecera_('proyectos');
+  var headers = t.datos[0];
+  var conteo = conteoAsignacionesActivas_();
+  var projects = t.datos.slice(1)
+    .filter(function (row) { return row[0] !== ''; })
+    .map(function (row) {
+      var project = rowToObject(headers, row);
+      project.empleados_asignados = conteo[project.id] || 0;
       return project;
     });
-  
   return { success: true, data: projects };
 }
 
 function getActiveProjects() {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('proyectos');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  
-  const projects = data.slice(1)
-    .filter(row => row[0] !== '' && row[8] === 'activo')
-    .map(row => {
-      const project = rowToObject(headers, row);
-      project.empleados_asignados = countProjectEmployees(project.id);
-      return project;
-    });
-  
-  return { success: true, data: projects };
+  var todos = getProjects().data;
+  return { success: true, data: todos.filter(function (p) { return ESTADOS_PROYECTO_[String(p.estado || '').toLowerCase()] === 'in_progress'; }) };
 }
 
 function getProjectById(id) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('proyectos');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  
-  const project = data.slice(1).find(row => row[0] === id);
-  
-  if (!project) {
-    return { success: false, error: 'Proyecto no encontrado' };
-  }
-  
-  const proj = rowToObject(headers, project);
+  var t = tablaPorCabecera_('proyectos');
+  var row = t.datos.slice(1).filter(function (r) { return String(r[0]) === String(id); })[0];
+  if (!row) return { success: false, error: 'Proyecto no encontrado' };
+  var proj = rowToObject(t.datos[0], row);
   proj.empleados = getEmployeesByProject(id).data;
-  
   return { success: true, data: proj };
 }
 
+// data: nombre, descripcion, cliente, ciudad, fecha_inicio, fecha_fin(_estimada), presupuesto, estado?
 function createProject(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('proyectos');
-  const id = generateSequentialId('proyectos', 'PROY');
-  
-  const row = [
-    id,
-    data.codigo,
-    data.nombre,
-    data.cliente,
-    data.descripcion,
-    data.ciudad,
-    data.fecha_inicio,
-    data.fecha_fin_estimada || '',
-    'activo',
-    data.presupuesto || '',
-    data.supervisor || '',
-    new Date()
-  ];
-  
-  sheet.appendRow(row);
-  
-  return { success: true, data: { id: id }, message: 'Proyecto creado' };
+  data = data || {};
+  if (!String(data.nombre || '').trim()) return { success: false, error: 'Falta el nombre del proyecto' };
+  return withLock_(function () {
+    var t = tablaPorCabecera_('proyectos');
+    var id = generateSequentialId('proyectos', 'PROY');
+    var ahora = new Date();
+    var valores = {
+      id: id,
+      nombre: data.nombre,
+      descripcion: data.descripcion || '',
+      cliente: data.cliente || '',
+      ciudad: data.ciudad || '',
+      estado: ESTADOS_PROYECTO_[String(data.estado || '').toLowerCase()] || 'in_progress',
+      fecha_inicio: data.fecha_inicio || '',
+      fecha_fin: data.fecha_fin || data.fecha_fin_estimada || '',
+      presupuesto: data.presupuesto || '',
+      createdAt: ahora,
+      updatedAt: ahora
+    };
+    var fila = t.datos[0].map(function (c) { return valores[c] !== undefined ? valores[c] : ''; });
+    t.hoja.appendRow(fila);
+    return { success: true, data: { id: id }, message: 'Proyecto creado' };
+  });
 }
 
 function updateProject(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('proyectos');
-  const projects = sheet.getDataRange().getValues();
-  
-  for (let i = 1; i < projects.length; i++) {
-    if (projects[i][0] === data.id) {
-      if (data.nombre) sheet.getRange(i + 1, 3).setValue(data.nombre);
-      if (data.descripcion) sheet.getRange(i + 1, 5).setValue(data.descripcion);
-      if (data.ciudad) sheet.getRange(i + 1, 6).setValue(data.ciudad);
-      if (data.fecha_fin_estimada) sheet.getRange(i + 1, 8).setValue(data.fecha_fin_estimada);
-      if (data.presupuesto) sheet.getRange(i + 1, 10).setValue(data.presupuesto);
-      if (data.supervisor) sheet.getRange(i + 1, 11).setValue(data.supervisor);
-      
+  data = data || {};
+  return withLock_(function () {
+    var t = tablaPorCabecera_('proyectos');
+    for (var i = 1; i < t.datos.length; i++) {
+      if (String(t.datos[i][0]) !== String(data.id)) continue;
+      var cambios = {
+        nombre: data.nombre, descripcion: data.descripcion, cliente: data.cliente, ciudad: data.ciudad,
+        fecha_inicio: data.fecha_inicio, fecha_fin: data.fecha_fin || data.fecha_fin_estimada, presupuesto: data.presupuesto
+      };
+      if (data.estado) {
+        var est = ESTADOS_PROYECTO_[String(data.estado).toLowerCase()];
+        if (!est) return { success: false, error: 'Estado no válido: ' + data.estado };
+        cambios.estado = est;
+      }
+      Object.keys(cambios).forEach(function (c) {
+        if (cambios[c] === undefined || cambios[c] === null || cambios[c] === '') return;
+        if (t.h[c] !== undefined) t.hoja.getRange(i + 1, t.h[c] + 1).setValue(cambios[c]);
+      });
+      if (t.h.updatedAt !== undefined) t.hoja.getRange(i + 1, t.h.updatedAt + 1).setValue(new Date());
       return { success: true, message: 'Proyecto actualizado' };
     }
-  }
-  
-  return { success: false, error: 'Proyecto no encontrado' };
+    return { success: false, error: 'Proyecto no encontrado' };
+  });
+}
+
+// Borra un proyecto y sus asignaciones. Se niega si tiene trabajadores REALES
+// (roster de sueldos: SUE-<dni>) con asignación activa, para no perder la
+// asistencia por proyecto de nadie: en ese caso, marcarlo como Completado.
+function deleteProject(data) {
+  data = data || {};
+  var id = String(data.id || '');
+  if (!id) return { success: false, error: 'Falta el proyecto' };
+  return withLock_(function () {
+    var a = tablaPorCabecera_('asignaciones');
+    var reales = a.datos.slice(1).filter(function (r) {
+      return String(r[a.h.projectId]) === id && asignacionActiva_(a, r) && dniDesdeIdRoster_(r[a.h.employeeId]);
+    });
+    if (reales.length) {
+      return { success: false, error: 'Este proyecto tiene ' + reales.length + ' trabajador(es) asignados. Quítalos del equipo o márcalo como Completado en vez de borrarlo.' };
+    }
+    var p = tablaPorCabecera_('proyectos');
+    var fila = -1;
+    for (var i = 1; i < p.datos.length; i++) { if (String(p.datos[i][0]) === id) { fila = i; break; } }
+    if (fila < 0) return { success: false, error: 'Proyecto no encontrado' };
+    var borradas = 0;
+    for (var j = a.datos.length - 1; j >= 1; j--) {
+      if (String(a.datos[j][a.h.projectId]) === id) { a.hoja.deleteRow(j + 1); borradas++; }
+    }
+    p.hoja.deleteRow(fila + 1);
+    return { success: true, message: 'Proyecto eliminado' + (borradas ? ' (con ' + borradas + ' asignaciones de ejemplo)' : '') };
+  });
 }
 
 function closeProject(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('proyectos');
-  const projects = sheet.getDataRange().getValues();
-  
-  for (let i = 1; i < projects.length; i++) {
-    if (projects[i][0] === data.projectId) {
-      sheet.getRange(i + 1, 9).setValue('cerrado');
-      
-      // Cerrar todas las asignaciones del proyecto
-      closeProjectAssignments(data.projectId);
-      
-      return { success: true, message: 'Proyecto cerrado' };
-    }
-  }
-  
-  return { success: false, error: 'Proyecto no encontrado' };
+  var r = updateProject({ id: data.projectId || data.id, estado: 'completed' });
+  if (r.success) closeProjectAssignments(data.projectId || data.id);
+  return r.success ? { success: true, message: 'Proyecto cerrado' } : r;
+}
+
+function conteoAsignacionesActivas_() {
+  var a = tablaPorCabecera_('asignaciones');
+  var c = {};
+  a.datos.slice(1).forEach(function (r) {
+    if (asignacionActiva_(a, r)) c[r[a.h.projectId]] = (c[r[a.h.projectId]] || 0) + 1;
+  });
+  return c;
 }
 
 function countProjectEmployees(projectId) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('asignaciones');
-  const data = sheet.getDataRange().getValues();
-  
-  return data.slice(1).filter(row => row[1] === projectId && row[5] === 'activa').length;
+  return conteoAsignacionesActivas_()[projectId] || 0;
 }
 
 // ============================================
 // GESTION DE ASIGNACIONES
 // ============================================
 function getAssignments() {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('asignaciones');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  
-  const assignments = data.slice(1)
-    .filter(row => row[0] !== '')
-    .map(row => rowToObject(headers, row));
-  
+  var a = tablaPorCabecera_('asignaciones');
+  var assignments = a.datos.slice(1)
+    .filter(function (row) { return row[0] !== ''; })
+    .map(function (row) { return rowToObject(a.datos[0], row); });
   return { success: true, data: assignments };
 }
 
 function getAssignmentsByEmployee(employeeId) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('asignaciones');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  
-  const assignments = data.slice(1)
-    .filter(row => row[2] === employeeId)
-    .map(row => rowToObject(headers, row));
-  
+  var a = tablaPorCabecera_('asignaciones');
+  var assignments = a.datos.slice(1)
+    .filter(function (row) { return String(row[a.h.employeeId]) === String(employeeId); })
+    .map(function (row) { return rowToObject(a.datos[0], row); });
   return { success: true, data: assignments };
 }
 
+// data: projectId, employeeId (SUE-<dni>), role|rol
 function assignEmployeeToProject(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('asignaciones');
-  const id = generateSequentialId('asignaciones', 'ASIG');
-  
-  // Verificar si ya esta asignado
-  const existing = sheet.getDataRange().getValues().slice(1)
-    .find(row => row[1] === data.projectId && row[2] === data.employeeId && row[5] === 'activa');
-  
-  if (existing) {
-    return { success: false, error: 'El empleado ya esta asignado a este proyecto' };
-  }
-  
-  const row = [
-    id,
-    data.projectId,
-    data.employeeId,
-    data.rol || 'miembro',
-    new Date(),
-    'activa',
-    ''
-  ];
-  
-  sheet.appendRow(row);
-  
-  // Actualizar ciudad del empleado si el proyecto es en otra ciudad
-  if (data.actualizarCiudad) {
-    const projectCity = getProjectCity(data.projectId);
-    if (projectCity) {
-      transferEmployee({
-        empleadoId: data.employeeId,
-        nuevaCiudad: projectCity,
-        motivo: 'Asignacion a proyecto'
-      });
+  data = data || {};
+  if (!data.projectId || !data.employeeId) return { success: false, error: 'Falta el proyecto o el empleado' };
+  return withLock_(function () {
+    var a = tablaPorCabecera_('asignaciones');
+    var existe = a.datos.slice(1).some(function (r) {
+      return String(r[a.h.projectId]) === String(data.projectId) && String(r[a.h.employeeId]) === String(data.employeeId) && asignacionActiva_(a, r);
+    });
+    if (existe) return { success: false, error: 'El empleado ya esta asignado a este proyecto' };
+
+    var proyecto = getProjectById(data.projectId);
+    if (!proyecto.success) return proyecto;
+    var dni = dniDesdeIdRoster_(data.employeeId);
+    var trabajador = dni ? leerRosterReal_(true).filter(function (t) { return t.dni === dni; })[0] : null;
+    var id = generateSequentialId('asignaciones', 'ASIG');
+    var ahora = new Date();
+    var valores = {
+      id: id,
+      employeeId: data.employeeId,
+      employeeName: trabajador ? trabajador.nombre : (data.employeeName || ''),
+      projectId: data.projectId,
+      projectName: proyecto.data.nombre || '',
+      role: data.role || data.rol || 'miembro',
+      startDate: data.startDate || Utilities.formatDate(ahora, 'America/Lima', 'yyyy-MM-dd'),
+      endDate: '',
+      status: 'active',
+      createdAt: ahora
+    };
+    a.hoja.appendRow(a.datos[0].map(function (c) { return valores[c] !== undefined ? valores[c] : ''; }));
+
+    if (data.actualizarCiudad && proyecto.data.ciudad) {
+      transferEmployee({ empleadoId: data.employeeId, nuevaCiudad: proyecto.data.ciudad, motivo: 'Asignacion a proyecto' });
     }
+    return { success: true, data: { id: id }, message: 'Empleado asignado al proyecto' };
+  });
+}
+
+function finalizarAsignacionesDonde_(condicion) {
+  var a = tablaPorCabecera_('asignaciones');
+  var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
+  var n = 0;
+  for (var i = 1; i < a.datos.length; i++) {
+    if (!condicion(a, a.datos[i])) continue;
+    a.hoja.getRange(i + 1, a.h.status + 1).setValue('completed');
+    if (a.h.endDate !== undefined) a.hoja.getRange(i + 1, a.h.endDate + 1).setValue(hoy);
+    n++;
   }
-  
-  return { success: true, data: { id: id }, message: 'Empleado asignado al proyecto' };
+  return n;
 }
 
 function removeAssignment(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('asignaciones');
-  const assignments = sheet.getDataRange().getValues();
-  
-  for (let i = 1; i < assignments.length; i++) {
-    if (assignments[i][0] === data.assignmentId) {
-      sheet.getRange(i + 1, 6).setValue('finalizada');
-      sheet.getRange(i + 1, 7).setValue(new Date());
-      return { success: true, message: 'Asignacion finalizada' };
-    }
-  }
-  
-  return { success: false, error: 'Asignacion no encontrada' };
+  var n = finalizarAsignacionesDonde_(function (a, r) { return String(r[0]) === String(data.assignmentId) && asignacionActiva_(a, r); });
+  return n ? { success: true, message: 'Asignacion finalizada' } : { success: false, error: 'Asignacion no encontrada' };
 }
 
 function bulkAssignEmployees(data) {
-  const results = [];
-  
-  for (const employeeId of data.employeeIds) {
-    const result = assignEmployeeToProject({
-      projectId: data.projectId,
-      employeeId: employeeId,
-      rol: data.rol,
-      actualizarCiudad: data.actualizarCiudad
-    });
-    results.push({ employeeId, success: result.success });
-  }
-  
+  var results = (data.employeeIds || []).map(function (employeeId) {
+    var result = assignEmployeeToProject({ projectId: data.projectId, employeeId: employeeId, role: data.role || data.rol, actualizarCiudad: data.actualizarCiudad });
+    return { employeeId: employeeId, success: result.success };
+  });
   return { success: true, data: results, message: 'Asignacion masiva completada' };
 }
 
 function closeProjectAssignments(projectId) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('asignaciones');
-  const data = sheet.getDataRange().getValues();
-  
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][1] === projectId && data[i][5] === 'activa') {
-      sheet.getRange(i + 1, 6).setValue('finalizada');
-      sheet.getRange(i + 1, 7).setValue(new Date());
-    }
-  }
+  finalizarAsignacionesDonde_(function (a, r) { return String(r[a.h.projectId]) === String(projectId) && asignacionActiva_(a, r); });
 }
 
 function closeEmployeeAssignments(employeeId) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('asignaciones');
-  const data = sheet.getDataRange().getValues();
-  
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][2] === employeeId && data[i][5] === 'activa') {
-      sheet.getRange(i + 1, 6).setValue('finalizada');
-      sheet.getRange(i + 1, 7).setValue(new Date());
-    }
-  }
+  finalizarAsignacionesDonde_(function (a, r) { return String(r[a.h.employeeId]) === String(employeeId) && asignacionActiva_(a, r); });
 }
 
 function getProjectCity(projectId) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('proyectos');
-  const data = sheet.getDataRange().getValues();
-  const project = data.slice(1).find(row => row[0] === projectId);
-  return project ? project[5] : null;
+  var p = getProjectById(projectId);
+  return p.success ? (p.data.ciudad || null) : null;
 }
 
 // ============================================================
@@ -6435,7 +6446,7 @@ var FUNCIONES_REQUERIDAS = [
   'licPersonal', 'licContratos', 'licActualizarPersona', 'licActualizarContrato', 'licActualizarFactura',
   'licPropuestas', 'licCarpetaDrive', 'licIndexarDrive', 'licArchivosDrive', 'licSubirFoto',
   'licSubirDocumento', 'licGuardar', 'licArchivar', 'licHistorial', 'licDeshacer', 'licServicios',
-  'licAsistenciaServicio', 'licArmarZip', 'licPrepararHojas'
+  'licAsistenciaServicio', 'licArmarZip', 'licPrepararHojas', 'deleteProject'
 ];
 
 function ejecutarTestSalud() {
@@ -8664,13 +8675,14 @@ function licAsistenciaServicio(data) {
   var pr = getProjectById(id);
   if (!pr || !pr.success || !pr.data) return { success: false, error: 'No se encontró el proyecto ' + id + ' en Gestión > Proyectos' };
 
-  var asig = SpreadsheetApp.openById(SHEET_ID).getSheetByName('asignaciones').getDataRange().getValues().slice(1)
-    .filter(function (r) { return String(r[1]) === id && r[5] === 'activa'; });
+  var tA = tablaPorCabecera_('asignaciones');
+  var asig = tA.datos.slice(1)
+    .filter(function (r) { return String(r[tA.h.projectId]) === id && asignacionActiva_(tA, r); });
   var roster = {};
   leerRosterReal_(true).forEach(function (t) { roster[String(t.dni)] = t; });
   var dnis = [];
   asig.forEach(function (r) {
-    var dni = dniDesdeIdRoster_(r[2]);
+    var dni = dniDesdeIdRoster_(r[tA.h.employeeId]);
     if (dni && dnis.indexOf(dni) < 0) dnis.push(dni);
   });
 

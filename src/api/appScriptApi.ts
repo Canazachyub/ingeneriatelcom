@@ -778,7 +778,13 @@ class AppScriptApi {
       fecha_inicio: project.startDate,
       fecha_fin_estimada: project.endDate,
       presupuesto: project.budget,
+      // El backend guarda el estado en español
+      estado: project.status ? ({ planning: 'planificacion', in_progress: 'activo', on_hold: 'en_espera', completed: 'cerrado' } as Record<string, string>)[project.status] : undefined,
     }
+  }
+
+  async deleteProject(id: string): Promise<ApiResponse<void>> {
+    return this.request<void>('deleteProject', 'POST', { id })
   }
 
   async createProject(project: Partial<Project>): Promise<ApiResponse<Project>> {

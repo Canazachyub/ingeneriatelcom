@@ -20,7 +20,7 @@ import AdminLayout from '../../components/admin/AdminLayout'
 import TableSkeleton from '../../components/common/TableSkeleton'
 import EmptyState from '../../components/common/EmptyState'
 
-const cities = ['Tacna', 'Puno', 'Arequipa', 'Lima', 'Cusco', 'Juliaca']
+const cities = ['Cusco', 'Puerto Maldonado', 'Abancay', 'Tacna', 'Puno', 'Juliaca', 'Arequipa', 'Pucallpa', 'Lima']
 const statuses = [
   { value: 'planning', label: 'Planificacion' },
   { value: 'in_progress', label: 'En Progreso' },
@@ -66,12 +66,22 @@ export default function ProjectsPage() {
     role: '',
   })
   const [isSaving, setIsSaving] = useState(false)
+  // Proyecto que se está por eliminar (confirmación en la tarjeta)
+  const [borrando, setBorrando] = useState<string | null>(null)
+  const eliminarProyecto = async (project: Project) => {
+    setIsSaving(true)
+    const r = await api.deleteProject(project.id)
+    setIsSaving(false)
+    setBorrando(null)
+    setMessage(r.success ? { type: 'success', text: r.message || 'Proyecto eliminado' } : { type: 'error', text: r.error || 'No se pudo eliminar' })
+    if (r.success) queryClient.invalidateQueries({ queryKey: queryKeys.projects })
+  }
   const [message, setMessage] = useState({ type: '', text: '' })
 
   const loadAssignments = async (projectId: string) => {
     const result = await api.getAssignments(projectId)
     if (result.success && result.data) {
-      setAssignments(result.data)
+      setAssignments(result.data.filter((a) => a.projectId === projectId && String(a.status) === 'active'))
     } else {
       setAssignments([])
     }
@@ -94,8 +104,8 @@ export default function ProjectsPage() {
         client: project.client,
         city: project.city,
         status: project.status,
-        startDate: project.startDate,
-        endDate: project.endDate || '',
+        startDate: String(project.startDate || '').slice(0, 10),
+        endDate: String(project.endDate || '').slice(0, 10),
         budget: project.budget?.toString() || '',
       })
     } else {
@@ -318,7 +328,7 @@ export default function ProjectsPage() {
                   </div>
                   <div>
                     <span className="text-primary-500">Inicio:</span>
-                    <span className="text-white ml-2">{project.startDate}</span>
+                    <span className="text-white ml-2">{String(project.startDate || '').slice(0, 10) || '—'}</span>
                   </div>
                   {project.budget && (
                     <div>
@@ -329,7 +339,7 @@ export default function ProjectsPage() {
                   {project.endDate && (
                     <div>
                       <span className="text-primary-500">Fin:</span>
-                      <span className="text-white ml-2">{project.endDate}</span>
+                      <span className="text-white ml-2">{String(project.endDate).slice(0, 10)}</span>
                     </div>
                   )}
                 </div>
@@ -348,7 +358,24 @@ export default function ProjectsPage() {
                     <FaUsers />
                     Equipo
                   </button>
+                  <button
+                    onClick={() => setBorrando(project.id)}
+                    title="Eliminar proyecto"
+                    className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-red-300 transition-colors"
+                  >
+                    <FaTrash />
+                  </button>
                 </div>
+                {borrando === project.id && (
+                  <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/40 text-sm text-red-200 flex flex-wrap items-center gap-3">
+                    <FaExclamationTriangle />
+                    <span className="flex-1">¿Eliminar «{project.name}»? No se puede deshacer. Si tiene trabajadores asignados, no se borrará (márcalo como Completado).</span>
+                    <button onClick={() => setBorrando(null)} className="px-3 py-1.5 rounded border border-primary-600 text-primary-200">Cancelar</button>
+                    <button onClick={() => eliminarProyecto(project)} disabled={isSaving} className="px-3 py-1.5 rounded bg-red-500 text-white font-semibold disabled:opacity-60">
+                      {isSaving ? <FaSpinner className="animate-spin" /> : 'Sí, eliminar'}
+                    </button>
+                  </div>
+                )}
               </motion.div>
             ))}
           </div>

@@ -14,13 +14,14 @@ function licAsistenciaServicio(data) {
   var pr = getProjectById(id);
   if (!pr || !pr.success || !pr.data) return { success: false, error: 'No se encontró el proyecto ' + id + ' en Gestión > Proyectos' };
 
-  var asig = SpreadsheetApp.openById(SHEET_ID).getSheetByName('asignaciones').getDataRange().getValues().slice(1)
-    .filter(function (r) { return String(r[1]) === id && r[5] === 'activa'; });
+  var tA = tablaPorCabecera_('asignaciones');
+  var asig = tA.datos.slice(1)
+    .filter(function (r) { return String(r[tA.h.projectId]) === id && asignacionActiva_(tA, r); });
   var roster = {};
   leerRosterReal_(true).forEach(function (t) { roster[String(t.dni)] = t; });
   var dnis = [];
   asig.forEach(function (r) {
-    var dni = dniDesdeIdRoster_(r[2]);
+    var dni = dniDesdeIdRoster_(r[tA.h.employeeId]);
     if (dni && dnis.indexOf(dni) < 0) dnis.push(dni);
   });
 

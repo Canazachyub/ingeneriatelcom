@@ -138,22 +138,23 @@ function getEmployeeById(id) {
   return { success: true, data: emp };
 }
 
+// Trabajadores con asignación activa al proyecto (columnas por nombre, ver
+// 04_proyectos.gs). Los del roster real (SUE-<dni>) salen de 'sueldos'; los
+// ids legacy EMP0xx, de la hoja 'empleados' si existe.
 function getEmployeesByProject(projectId) {
-  const assignSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('asignaciones');
-  const empSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('empleados');
-  
-  const assignments = assignSheet.getDataRange().getValues();
-  const employees = empSheet.getDataRange().getValues();
-  const empHeaders = employees[0];
-  
-  const employeeIds = assignments.slice(1)
-    .filter(row => row[1] === projectId && row[5] === 'activa')
-    .map(row => row[2]);
-  
-  const result = employees.slice(1)
-    .filter(row => employeeIds.includes(row[0]))
-    .map(row => rowToObject(empHeaders, row));
-  
+  var a = tablaPorCabecera_('asignaciones');
+  var ids = a.datos.slice(1)
+    .filter(function (r) { return String(r[a.h.projectId]) === String(projectId) && asignacionActiva_(a, r); })
+    .map(function (r) { return String(r[a.h.employeeId]); });
+  var roster = leerRosterReal_(true).map(trabajadorRosterAEmployee_);
+  var result = roster.filter(function (e) { return ids.indexOf(e.id) >= 0; });
+  var legacy = ids.filter(function (id) { return !dniDesdeIdRoster_(id); });
+  var hojaLegacy = legacy.length ? SpreadsheetApp.openById(SHEET_ID).getSheetByName('empleados') : null;
+  if (hojaLegacy) {
+    var emp = hojaLegacy.getDataRange().getValues();
+    emp.slice(1).filter(function (r) { return legacy.indexOf(String(r[0])) >= 0; })
+      .forEach(function (r) { result.push(rowToObject(emp[0], r)); });
+  }
   return { success: true, data: result };
 }
 

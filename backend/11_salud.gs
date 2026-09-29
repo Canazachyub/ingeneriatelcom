@@ -50,7 +50,7 @@ var FUNCIONES_REQUERIDAS = [
   'licPersonal', 'licContratos', 'licActualizarPersona', 'licActualizarContrato', 'licActualizarFactura',
   'licPropuestas', 'licCarpetaDrive', 'licIndexarDrive', 'licArchivosDrive', 'licSubirFoto',
   'licSubirDocumento', 'licGuardar', 'licArchivar', 'licHistorial', 'licDeshacer', 'licServicios',
-  'licAsistenciaServicio', 'licArmarZip', 'licPrepararHojas'
+  'licAsistenciaServicio', 'licArmarZip', 'licPrepararHojas', 'deleteProject'
 ];
 
 function ejecutarTestSalud() {
