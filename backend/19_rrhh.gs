@@ -43,16 +43,12 @@ function rrhhSubcarpeta_(carpeta, nombre, crear) {
 }
 
 // Historial por nombre de columna (hoja historial_empleados)
+// Historial: usa addHistoryRecord (por nombre de columna, ver 03_empleados.gs)
 function rrhhHistorial_(dni, tipo, antes, despues, descripcion, userId) {
-  var t = tablaPorCabecera_('historial_empleados');
-  var valores = {
-    id: generateSequentialId('historial_empleados', 'HIST'),
-    empleado_id: 'SUE-' + dni, tipo: tipo,
-    ubicacion_anterior: antes || '', ubicacion_nueva: despues || '',
-    descripcion: descripcion || '', fecha: new Date(),
-    usuario: userId ? licNombreUsuario_(userId) : 'sistema'
-  };
-  t.hoja.appendRow(t.datos[0].map(function (c) { return valores[c] !== undefined ? valores[c] : ''; }));
+  var titulos = { cargo: 'Cambio de cargo', sede: 'Cambio de sede', cese: 'Baja (último día ' + (despues || '') + ')', reactivacion: 'Reactivado', documento: 'Documento' };
+  var desc = tipo === 'cese' || tipo === 'reactivacion' || tipo === 'documento' ? (titulos[tipo] + (tipo === 'documento' ? ': ' + (descripcion || '') : '')) : titulos[tipo] || tipo;
+  addHistoryRecord('SUE-' + dni, tipo, tipo === 'cese' ? '' : antes, tipo === 'cese' ? '' : despues, desc,
+    userId ? licNombreUsuario_(userId) : 'sistema', tipo === 'documento' ? '' : (descripcion || ''));
 }
 
 function rrhhInvalidar_() {

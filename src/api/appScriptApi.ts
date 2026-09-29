@@ -436,7 +436,7 @@ export interface FichaTrabajador {
   foto: string | null
   carpeta_url: string
   asignaciones: { id: string; projectId: string; projectName: string; role: string; startDate: string; endDate: string; status: string }[]
-  historial: { id: string; tipo: string; ubicacion_anterior: string; ubicacion_nueva: string; descripcion: string; fecha: string; usuario: string }[]
+  historial: { id: string; tipo: string; ubicacion_anterior: string; ubicacion_nueva: string; descripcion: string; notas?: string; fecha: string; usuario: string }[]
 }
 
 export interface Project {

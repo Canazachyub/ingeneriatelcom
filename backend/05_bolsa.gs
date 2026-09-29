@@ -185,25 +185,32 @@ function updateJob(data) {
       return idx >= 0 ? idx + 1 : -1;
     };
 
+    // La hoja no tiene 'prioridad': la prioridad alta se guarda como 'urgente'
+    if (data.urgente === undefined && data.prioridad !== undefined) {
+      data.urgente = ['alta', 'urgente'].indexOf(String(data.prioridad).toLowerCase()) >= 0;
+    }
+    // Campos que la hoja no tenga se ignoran (antes escribía en la columna -1 y fallaba)
+    const poner = (fila, nombre, valor) => { const c = getColNum(nombre); if (c > 0) sheet.getRange(fila, c).setValue(valor); };
+
     for (let i = 1; i < jobs.length; i++) {
       if (jobs[i][0] === data.id) {
         // Actualizar campos usando nombres de columna
-        if (data.titulo !== undefined) sheet.getRange(i + 1, getColNum('titulo')).setValue(data.titulo);
-        if (data.categoria !== undefined) sheet.getRange(i + 1, getColNum('categoria')).setValue(data.categoria);
-        if (data.descripcion !== undefined) sheet.getRange(i + 1, getColNum('descripcion')).setValue(data.descripcion);
-        if (data.requisitos !== undefined) sheet.getRange(i + 1, getColNum('requisitos')).setValue(data.requisitos);
-        if (data.beneficios !== undefined) sheet.getRange(i + 1, getColNum('beneficios')).setValue(data.beneficios);
-        if (data.ubicacion !== undefined) sheet.getRange(i + 1, getColNum('ubicacion')).setValue(data.ubicacion);
-        if (data.modalidad !== undefined) sheet.getRange(i + 1, getColNum('modalidad')).setValue(data.modalidad);
-        if (data.salario_min !== undefined) sheet.getRange(i + 1, getColNum('salario_min')).setValue(data.salario_min);
-        if (data.salario_max !== undefined) sheet.getRange(i + 1, getColNum('salario_max')).setValue(data.salario_max);
-        if (data.vacantes !== undefined) sheet.getRange(i + 1, getColNum('vacantes')).setValue(data.vacantes);
-        if (data.fecha_inicio !== undefined) sheet.getRange(i + 1, getColNum('fecha_inicio')).setValue(data.fecha_inicio);
-        if (data.fecha_cierre !== undefined) sheet.getRange(i + 1, getColNum('fecha_cierre')).setValue(data.fecha_cierre);
-        if (data.estado !== undefined) sheet.getRange(i + 1, getColNum('estado')).setValue(data.estado);
-        if (data.urgente !== undefined) sheet.getRange(i + 1, getColNum('urgente')).setValue(data.urgente);
-        if (data.imagen !== undefined) sheet.getRange(i + 1, getColNum('imagen')).setValue(data.imagen);
-        if (data.pdf_url !== undefined) sheet.getRange(i + 1, getColNum('pdf_url')).setValue(data.pdf_url);
+        if (data.titulo !== undefined) poner(i + 1, 'titulo', data.titulo);
+        if (data.categoria !== undefined) poner(i + 1, 'categoria', data.categoria);
+        if (data.descripcion !== undefined) poner(i + 1, 'descripcion', data.descripcion);
+        if (data.requisitos !== undefined) poner(i + 1, 'requisitos', data.requisitos);
+        if (data.beneficios !== undefined) poner(i + 1, 'beneficios', data.beneficios);
+        if (data.ubicacion !== undefined) poner(i + 1, 'ubicacion', data.ubicacion);
+        if (data.modalidad !== undefined) poner(i + 1, 'modalidad', data.modalidad);
+        if (data.salario_min !== undefined) poner(i + 1, 'salario_min', data.salario_min);
+        if (data.salario_max !== undefined) poner(i + 1, 'salario_max', data.salario_max);
+        if (data.vacantes !== undefined) poner(i + 1, 'vacantes', data.vacantes);
+        if (data.fecha_inicio !== undefined) poner(i + 1, 'fecha_inicio', data.fecha_inicio);
+        if (data.fecha_cierre !== undefined) poner(i + 1, 'fecha_cierre', data.fecha_cierre);
+        if (data.estado !== undefined) poner(i + 1, 'estado', data.estado);
+        if (data.urgente !== undefined) poner(i + 1, 'urgente', data.urgente);
+        if (data.imagen !== undefined) poner(i + 1, 'imagen', data.imagen);
+        if (data.pdf_url !== undefined) poner(i + 1, 'pdf_url', data.pdf_url);
 
         // Actualizar updatedAt
         const updatedAtCol = getColNum('updatedAt');

@@ -425,33 +425,40 @@ function deactivateEmployee(data) {
   return { success: false, error: 'Empleado no encontrado' };
 }
 
+// Historial por nombre de columna. La hoja real usa
+//   id | employeeId | tipo | descripcion | fecha | responsable | notas | createdAt
+// (la versión de setupAllSheets usaba empleado_id/ubicacion_*/usuario): se leen ambas.
 function getEmployeeHistory(employeeId) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('historial_empleados');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  
-  const history = data.slice(1)
-    .filter(row => row[1] === employeeId)
-    .map(row => rowToObject(headers, row))
-    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-  
-  return { success: true, data: history };
+  var t = tablaPorCabecera_('historial_empleados');
+  var cEmp = t.h.employeeId !== undefined ? t.h.employeeId : t.h.empleado_id;
+  var lista = t.datos.slice(1)
+    .filter(function (r) { return cEmp !== undefined && String(r[cEmp]) === String(employeeId); })
+    .map(function (r) {
+      var o = rowToObject(t.datos[0], r);
+      return {
+        id: o.id, tipo: o.tipo, fecha: o.fecha || o.createdAt,
+        descripcion: o.descripcion || '', notas: o.notas || '',
+        ubicacion_anterior: o.ubicacion_anterior || '', ubicacion_nueva: o.ubicacion_nueva || '',
+        usuario: o.responsable || o.usuario || ''
+      };
+    })
+    .sort(function (a, b) { return String(b.fecha).localeCompare(String(a.fecha)); });
+  return { success: true, data: lista };
 }
 
-function addHistoryRecord(employeeId, tipo, ubicacionAnterior, ubicacionNueva, descripcion) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('historial_empleados');
-  const id = generateSequentialId('historial_empleados', 'HIST');
-
-  sheet.appendRow([
-    id,
-    employeeId,
-    tipo,
-    ubicacionAnterior || '',
-    ubicacionNueva || '',
-    descripcion,
-    new Date(),
-    Session.getActiveUser().getEmail() || 'sistema'
-  ]);
+function addHistoryRecord(employeeId, tipo, ubicacionAnterior, ubicacionNueva, descripcion, usuario, notas) {
+  var t = tablaPorCabecera_('historial_empleados');
+  var cambio = (ubicacionAnterior || ubicacionNueva) ? ' (' + (ubicacionAnterior || '—') + ' → ' + (ubicacionNueva || '—') + ')' : '';
+  var ahora = new Date();
+  var quien = usuario || (function () { try { return Session.getActiveUser().getEmail(); } catch (e) { return ''; } })() || 'sistema';
+  var valores = {
+    id: generateSequentialId('historial_empleados', 'HIST'),
+    employeeId: employeeId, empleado_id: employeeId, tipo: tipo,
+    descripcion: (descripcion || '') + (t.h.ubicacion_anterior === undefined ? cambio : ''),
+    ubicacion_anterior: ubicacionAnterior || '', ubicacion_nueva: ubicacionNueva || '',
+    fecha: ahora, responsable: quien, usuario: quien, notas: notas || '', createdAt: ahora
+  };
+  t.hoja.appendRow(t.datos[0].map(function (c) { return valores[c] !== undefined ? valores[c] : ''; }));
 }
 
 function sendTransferNotification(email, nombre, ciudadAnterior, nuevaCiudad) {

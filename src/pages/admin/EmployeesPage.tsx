@@ -560,7 +560,8 @@ function Historial({ ficha }: { ficha: FichaTrabajador }) {
           {(h.ubicacion_anterior || h.ubicacion_nueva) && (
             <p className="text-xs mt-1"><span className="text-red-300/80">{h.ubicacion_anterior || '—'}</span> <span className="text-slate-500">→</span> <span className="text-green-300">{h.ubicacion_nueva || '—'}</span></p>
           )}
-          {h.descripcion && <p className="text-xs text-slate-400 mt-1">{h.descripcion}</p>}
+          {h.descripcion && <p className="text-xs text-slate-300 mt-1">{h.descripcion}</p>}
+          {h.notas && <p className="text-xs text-slate-500 mt-0.5">Motivo: {h.notas}</p>}
         </li>
       ))}
     </ol>

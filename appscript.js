@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-29T09:58:24.568Z con tools/build-backend.mjs
+// Generado: 2026-09-29T10:23:02.552Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -1632,33 +1632,40 @@ function deactivateEmployee(data) {
   return { success: false, error: 'Empleado no encontrado' };
 }
 
+// Historial por nombre de columna. La hoja real usa
+//   id | employeeId | tipo | descripcion | fecha | responsable | notas | createdAt
+// (la versión de setupAllSheets usaba empleado_id/ubicacion_*/usuario): se leen ambas.
 function getEmployeeHistory(employeeId) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('historial_empleados');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  
-  const history = data.slice(1)
-    .filter(row => row[1] === employeeId)
-    .map(row => rowToObject(headers, row))
-    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-  
-  return { success: true, data: history };
+  var t = tablaPorCabecera_('historial_empleados');
+  var cEmp = t.h.employeeId !== undefined ? t.h.employeeId : t.h.empleado_id;
+  var lista = t.datos.slice(1)
+    .filter(function (r) { return cEmp !== undefined && String(r[cEmp]) === String(employeeId); })
+    .map(function (r) {
+      var o = rowToObject(t.datos[0], r);
+      return {
+        id: o.id, tipo: o.tipo, fecha: o.fecha || o.createdAt,
+        descripcion: o.descripcion || '', notas: o.notas || '',
+        ubicacion_anterior: o.ubicacion_anterior || '', ubicacion_nueva: o.ubicacion_nueva || '',
+        usuario: o.responsable || o.usuario || ''
+      };
+    })
+    .sort(function (a, b) { return String(b.fecha).localeCompare(String(a.fecha)); });
+  return { success: true, data: lista };
 }
 
-function addHistoryRecord(employeeId, tipo, ubicacionAnterior, ubicacionNueva, descripcion) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('historial_empleados');
-  const id = generateSequentialId('historial_empleados', 'HIST');
-
-  sheet.appendRow([
-    id,
-    employeeId,
-    tipo,
-    ubicacionAnterior || '',
-    ubicacionNueva || '',
-    descripcion,
-    new Date(),
-    Session.getActiveUser().getEmail() || 'sistema'
-  ]);
+function addHistoryRecord(employeeId, tipo, ubicacionAnterior, ubicacionNueva, descripcion, usuario, notas) {
+  var t = tablaPorCabecera_('historial_empleados');
+  var cambio = (ubicacionAnterior || ubicacionNueva) ? ' (' + (ubicacionAnterior || '—') + ' → ' + (ubicacionNueva || '—') + ')' : '';
+  var ahora = new Date();
+  var quien = usuario || (function () { try { return Session.getActiveUser().getEmail(); } catch (e) { return ''; } })() || 'sistema';
+  var valores = {
+    id: generateSequentialId('historial_empleados', 'HIST'),
+    employeeId: employeeId, empleado_id: employeeId, tipo: tipo,
+    descripcion: (descripcion || '') + (t.h.ubicacion_anterior === undefined ? cambio : ''),
+    ubicacion_anterior: ubicacionAnterior || '', ubicacion_nueva: ubicacionNueva || '',
+    fecha: ahora, responsable: quien, usuario: quien, notas: notas || '', createdAt: ahora
+  };
+  t.hoja.appendRow(t.datos[0].map(function (c) { return valores[c] !== undefined ? valores[c] : ''; }));
 }
 
 function sendTransferNotification(email, nombre, ciudadAnterior, nuevaCiudad) {
@@ -2133,25 +2140,32 @@ function updateJob(data) {
       return idx >= 0 ? idx + 1 : -1;
     };
 
+    // La hoja no tiene 'prioridad': la prioridad alta se guarda como 'urgente'
+    if (data.urgente === undefined && data.prioridad !== undefined) {
+      data.urgente = ['alta', 'urgente'].indexOf(String(data.prioridad).toLowerCase()) >= 0;
+    }
+    // Campos que la hoja no tenga se ignoran (antes escribía en la columna -1 y fallaba)
+    const poner = (fila, nombre, valor) => { const c = getColNum(nombre); if (c > 0) sheet.getRange(fila, c).setValue(valor); };
+
     for (let i = 1; i < jobs.length; i++) {
       if (jobs[i][0] === data.id) {
         // Actualizar campos usando nombres de columna
-        if (data.titulo !== undefined) sheet.getRange(i + 1, getColNum('titulo')).setValue(data.titulo);
-        if (data.categoria !== undefined) sheet.getRange(i + 1, getColNum('categoria')).setValue(data.categoria);
-        if (data.descripcion !== undefined) sheet.getRange(i + 1, getColNum('descripcion')).setValue(data.descripcion);
-        if (data.requisitos !== undefined) sheet.getRange(i + 1, getColNum('requisitos')).setValue(data.requisitos);
-        if (data.beneficios !== undefined) sheet.getRange(i + 1, getColNum('beneficios')).setValue(data.beneficios);
-        if (data.ubicacion !== undefined) sheet.getRange(i + 1, getColNum('ubicacion')).setValue(data.ubicacion);
-        if (data.modalidad !== undefined) sheet.getRange(i + 1, getColNum('modalidad')).setValue(data.modalidad);
-        if (data.salario_min !== undefined) sheet.getRange(i + 1, getColNum('salario_min')).setValue(data.salario_min);
-        if (data.salario_max !== undefined) sheet.getRange(i + 1, getColNum('salario_max')).setValue(data.salario_max);
-        if (data.vacantes !== undefined) sheet.getRange(i + 1, getColNum('vacantes')).setValue(data.vacantes);
-        if (data.fecha_inicio !== undefined) sheet.getRange(i + 1, getColNum('fecha_inicio')).setValue(data.fecha_inicio);
-        if (data.fecha_cierre !== undefined) sheet.getRange(i + 1, getColNum('fecha_cierre')).setValue(data.fecha_cierre);
-        if (data.estado !== undefined) sheet.getRange(i + 1, getColNum('estado')).setValue(data.estado);
-        if (data.urgente !== undefined) sheet.getRange(i + 1, getColNum('urgente')).setValue(data.urgente);
-        if (data.imagen !== undefined) sheet.getRange(i + 1, getColNum('imagen')).setValue(data.imagen);
-        if (data.pdf_url !== undefined) sheet.getRange(i + 1, getColNum('pdf_url')).setValue(data.pdf_url);
+        if (data.titulo !== undefined) poner(i + 1, 'titulo', data.titulo);
+        if (data.categoria !== undefined) poner(i + 1, 'categoria', data.categoria);
+        if (data.descripcion !== undefined) poner(i + 1, 'descripcion', data.descripcion);
+        if (data.requisitos !== undefined) poner(i + 1, 'requisitos', data.requisitos);
+        if (data.beneficios !== undefined) poner(i + 1, 'beneficios', data.beneficios);
+        if (data.ubicacion !== undefined) poner(i + 1, 'ubicacion', data.ubicacion);
+        if (data.modalidad !== undefined) poner(i + 1, 'modalidad', data.modalidad);
+        if (data.salario_min !== undefined) poner(i + 1, 'salario_min', data.salario_min);
+        if (data.salario_max !== undefined) poner(i + 1, 'salario_max', data.salario_max);
+        if (data.vacantes !== undefined) poner(i + 1, 'vacantes', data.vacantes);
+        if (data.fecha_inicio !== undefined) poner(i + 1, 'fecha_inicio', data.fecha_inicio);
+        if (data.fecha_cierre !== undefined) poner(i + 1, 'fecha_cierre', data.fecha_cierre);
+        if (data.estado !== undefined) poner(i + 1, 'estado', data.estado);
+        if (data.urgente !== undefined) poner(i + 1, 'urgente', data.urgente);
+        if (data.imagen !== undefined) poner(i + 1, 'imagen', data.imagen);
+        if (data.pdf_url !== undefined) poner(i + 1, 'pdf_url', data.pdf_url);
 
         // Actualizar updatedAt
         const updatedAtCol = getColNum('updatedAt');
@@ -8844,16 +8858,12 @@ function rrhhSubcarpeta_(carpeta, nombre, crear) {
 }
 
 // Historial por nombre de columna (hoja historial_empleados)
+// Historial: usa addHistoryRecord (por nombre de columna, ver 03_empleados.gs)
 function rrhhHistorial_(dni, tipo, antes, despues, descripcion, userId) {
-  var t = tablaPorCabecera_('historial_empleados');
-  var valores = {
-    id: generateSequentialId('historial_empleados', 'HIST'),
-    empleado_id: 'SUE-' + dni, tipo: tipo,
-    ubicacion_anterior: antes || '', ubicacion_nueva: despues || '',
-    descripcion: descripcion || '', fecha: new Date(),
-    usuario: userId ? licNombreUsuario_(userId) : 'sistema'
-  };
-  t.hoja.appendRow(t.datos[0].map(function (c) { return valores[c] !== undefined ? valores[c] : ''; }));
+  var titulos = { cargo: 'Cambio de cargo', sede: 'Cambio de sede', cese: 'Baja (último día ' + (despues || '') + ')', reactivacion: 'Reactivado', documento: 'Documento' };
+  var desc = tipo === 'cese' || tipo === 'reactivacion' || tipo === 'documento' ? (titulos[tipo] + (tipo === 'documento' ? ': ' + (descripcion || '') : '')) : titulos[tipo] || tipo;
+  addHistoryRecord('SUE-' + dni, tipo, tipo === 'cese' ? '' : antes, tipo === 'cese' ? '' : despues, desc,
+    userId ? licNombreUsuario_(userId) : 'sistema', tipo === 'documento' ? '' : (descripcion || ''));
 }
 
 function rrhhInvalidar_() {
