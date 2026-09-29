@@ -16,7 +16,7 @@ import { exportarExcel } from '../../utils/excel'
 import {
   TIPO_LABELS, ESTADO_LABELS, mesActualISO, finDeMes, inicioTrimestre, hoyISO, nombreMes, Fila,
 } from './planilla/planilla.types'
-import ConfigPlanillaForm from './planilla/ConfigPlanillaForm'
+import ConfigPlanillaForm, { validarConfig } from './planilla/ConfigPlanillaForm'
 import FeriadosPanel from './planilla/FeriadosPanel'
 import SueldosTable from './planilla/SueldosTable'
 import IncidenciasPanel from './planilla/IncidenciasPanel'
@@ -38,6 +38,10 @@ export default function PlanillaPage() {
   const [showConfig, setShowConfig] = useState(false)
   const [configDraft, setConfigDraft] = useState<Record<string, string>>({})
   const [savingConfig, setSavingConfig] = useState(false)
+  // Confirmaciones en pantalla (sin window.confirm)
+  const [confirmSync, setConfirmSync] = useState(false)
+  const [confirmReactivar, setConfirmReactivar] = useState<SueldoTrabajador | null>(null)
+  const [reactivando, setReactivando] = useState(false)
 
   // Modal revisión de incidencia
   const [revisando, setRevisando] = useState<Incidencia | null>(null)
@@ -98,6 +102,7 @@ export default function PlanillaPage() {
   useEffect(() => { loadData() }, [mes])
 
   const handleSincronizar = async () => {
+    setConfirmSync(false)
     setSyncing(true)
     const hasta = finDeMes(mes) < hoyISO() ? finDeMes(mes) : hoyISO()
     const res = await api.sincronizarIncidencias(`${mes}-01`, hasta)
@@ -260,7 +265,10 @@ export default function PlanillaPage() {
   }
 
   const reactivarHandler = async (trabajador: SueldoTrabajador) => {
+    setReactivando(true)
     const res = await api.reactivarTrabajador(trabajador.dni)
+    setReactivando(false)
+    setConfirmReactivar(null)
     if (res.success) {
       toast.success(`${trabajador.nombre} reactivado — vuelve a aparecer en el kiosko`)
       loadData()
@@ -269,9 +277,29 @@ export default function PlanillaPage() {
     }
   }
 
+  // Valores vigentes en texto: el formulario muestra "de A a B" antes de guardar
+  const configOriginal: Record<string, string> = {
+    ingreso_manana: String(config.ingreso_manana),
+    salida_manana: String(config.salida_manana),
+    ingreso_tarde: String(config.ingreso_tarde),
+    salida_tarde: String(config.salida_tarde),
+    tolerancia_manana_min: String(config.tolerancia_manana_min),
+    tolerancia_tarde_min: String(config.tolerancia_tarde_min),
+    tardanza_grave_min: String(config.tardanza_grave_min),
+    jornada_horas: String(config.jornada_horas),
+    factor_descanso_semanal: String(config.factor_descanso_semanal),
+    plazo_sustento_horas: String(config.plazo_sustento_horas),
+    divisor_mes: String(config.divisor_mes),
+    rmv: String(config.rmv),
+    salida_autorizada: String(config.salida_autorizada),
+  }
+
   const guardarConfig = async () => {
+    if (Object.keys(validarConfig(configDraft)).length) { toast.error('Corrige los campos en rojo'); return }
     setSavingConfig(true)
-    const res = await api.updateConfigPlanilla(configDraft)
+    // Coma decimal → punto (el backend guarda texto y lo lee con parseFloat)
+    const limpio = Object.fromEntries(Object.entries(configDraft).map(([k, v]) => [k, String(v).trim().replace(',', '.')]))
+    const res = await api.updateConfigPlanilla(limpio)
     setSavingConfig(false)
     if (res.success && res.data) {
       setConfig({ ...CONFIG_DEFAULT, ...(res.data as unknown as Partial<ConfigPlanilla>) })
@@ -404,7 +432,7 @@ export default function PlanillaPage() {
               className="px-3 py-2 bg-primary-900 border border-primary-800 rounded-xl text-sm text-white focus:outline-none focus:border-accent-electric"
             />
             <button
-              onClick={handleSincronizar}
+              onClick={() => setConfirmSync(true)}
               disabled={syncing}
               className="inline-flex items-center gap-2 px-4 py-2 bg-accent-electric/20 border border-accent-electric/40 text-accent-electric rounded-lg text-sm font-medium hover:bg-accent-electric/30 transition-colors disabled:opacity-50"
             >
@@ -427,21 +455,7 @@ export default function PlanillaPage() {
             </button>
             <button
               onClick={() => {
-                setConfigDraft({
-                  ingreso_manana: String(config.ingreso_manana),
-                  salida_manana: String(config.salida_manana),
-                  ingreso_tarde: String(config.ingreso_tarde),
-                  salida_tarde: String(config.salida_tarde),
-                  tolerancia_manana_min: String(config.tolerancia_manana_min),
-                  tolerancia_tarde_min: String(config.tolerancia_tarde_min),
-                  tardanza_grave_min: String(config.tardanza_grave_min),
-                  jornada_horas: String(config.jornada_horas),
-                  factor_descanso_semanal: String(config.factor_descanso_semanal),
-                  plazo_sustento_horas: String(config.plazo_sustento_horas),
-                  divisor_mes: String(config.divisor_mes),
-                  rmv: String(config.rmv),
-                  salida_autorizada: String(config.salida_autorizada),
-                })
+                setConfigDraft({ ...configOriginal })
                 setShowConfig(!showConfig)
               }}
               className="inline-flex items-center gap-2 px-3 py-2 bg-primary-900 border border-primary-800 text-primary-300 rounded-lg text-sm hover:text-white transition-colors"
@@ -451,11 +465,28 @@ export default function PlanillaPage() {
           </div>
         </div>
 
+        {/* Confirmación: sincronizar incidencias */}
+        {confirmSync && (
+          <div className="p-4 rounded-2xl border border-amber-500/50 bg-amber-500/10 text-sm text-amber-100">
+            <p className="font-semibold flex items-center gap-2"><FaExclamationTriangle /> ¿Sincronizar las incidencias de {nombreMes(mes)}?</p>
+            <ul className="mt-2 text-xs list-disc ml-5 space-y-1">
+              <li>Revisa las marcas del kiosko y crea las <b>faltas, tardanzas y omisiones</b> que falten.</li>
+              <li>Las incidencias pendientes cuyo plazo de sustento ({config.plazo_sustento_horas} h) ya venció pasan a <b>injustificadas</b> (cuentan para descuento).</li>
+              <li>No borra nada ni duplica lo que ya existe. Lo ya revisado no se toca.</li>
+            </ul>
+            <div className="flex justify-end gap-2 mt-3">
+              <button onClick={() => setConfirmSync(false)} className="px-4 py-2 text-sm text-primary-300 hover:text-white">Cancelar</button>
+              <button onClick={handleSincronizar} className="px-4 py-2 bg-amber-500 text-[#111827] rounded-lg text-sm font-bold hover:bg-amber-400">Sí, sincronizar</button>
+            </div>
+          </div>
+        )}
+
         {/* Config editable */}
         <ConfigPlanillaForm
           show={showConfig}
           configDraft={configDraft}
           setConfigDraft={setConfigDraft}
+          original={configOriginal}
           savingConfig={savingConfig}
           onCancel={() => setShowConfig(false)}
           onGuardar={guardarConfig}
@@ -497,7 +528,7 @@ export default function PlanillaPage() {
             onAbrir5pm={(trabajador) => { setModal5pm(trabajador); setFecha5pm(hoyISO()) }}
             onAbrirMuestreo={(trabajador) => setModalMuestreo(trabajador)}
             onAbrirBaja={(trabajador) => { setModalBaja(trabajador); setFechaFinDraft(hoyISO()) }}
-            onReactivar={reactivarHandler}
+            onReactivar={(t) => setConfirmReactivar(t)}
             imprimirTrabajador={imprimirTrabajador}
           />
         )}
@@ -546,6 +577,25 @@ export default function PlanillaPage() {
           onCerrar={() => setModalNuevo(false)}
           onCrear={crearTrabajadorHandler}
         />
+
+        {/* ── Confirmación: reactivar trabajador ── */}
+        {confirmReactivar && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget && !reactivando) setConfirmReactivar(null) }}>
+            <div className="w-full max-w-md bg-primary-900 border border-primary-700 rounded-2xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-2">¿Reactivar a {confirmReactivar.nombre}?</h3>
+              <p className="text-sm text-primary-300">
+                Se borra su fecha de cese: vuelve a aparecer en el kiosko y a generar incidencias desde hoy.
+                Las incidencias pendientes que se eliminaron con la baja no se regeneran solas (usa "Sincronizar" si hace falta).
+              </p>
+              <div className="flex justify-end gap-2 mt-5">
+                <button onClick={() => setConfirmReactivar(null)} disabled={reactivando} className="px-4 py-2 text-sm text-primary-300 hover:text-white">Cancelar</button>
+                <button onClick={() => reactivarHandler(confirmReactivar)} disabled={reactivando} className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 text-[#111827] rounded-lg text-sm font-bold disabled:opacity-50">
+                  {reactivando && <FaSpinner className="animate-spin text-xs" />} Sí, reactivar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Modal baja de trabajador ── */}
         <BajaTrabajadorModal

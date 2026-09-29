@@ -751,11 +751,12 @@ function registrarAsistenciaManual(data) {
     var ss = SpreadsheetApp.openById(SHEET_ID);
     var sheet = getOrCreateAsistenciaSheet_(ss, 'asistencias_v2', HEADERS_ASISTENCIAS_V2);
 
-    // Columna 'nota' (13): se agrega al header si la hoja aun no la tiene.
-    // Las filas antiguas simplemente la tienen vacia.
-    var headerRow = sheet.getRange(1, 1, 1, HEADERS_ASISTENCIAS_V2.length + 1).getValues()[0];
+    // Columna 'nota': se agrega AL FINAL si la hoja aun no la tiene (antes se
+    // escribia en la columna 13 fija y podia pisar otra cabecera).
+    var headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     if (headerRow.indexOf('nota') < 0) {
-      sheet.getRange(1, HEADERS_ASISTENCIAS_V2.length + 1).setValue('nota').setFontWeight('bold');
+      sheet.getRange(1, headerRow.length + 1).setValue('nota').setFontWeight('bold');
+      headerRow.push('nota');
     }
 
     // Anti-duplicado igual que el kiosko (solo eventos de oficina). Aqui SI se
@@ -765,24 +766,71 @@ function registrarAsistenciaManual(data) {
       return { success: false, error: 'Ese evento ya esta registrado para ese trabajador ese dia' };
     }
 
-    sheet.appendRow([
-      Utilities.getUuid(),
-      dni,
-      trab.nombre,
-      trab.cargo,
-      evento,
-      fecha,
-      hora + ':00',
-      '', '', '',  // sin GPS
-      '',          // sin foto -> el panel lo muestra como registro manual
-      ts.toISOString(),
-      nota
-    ]);
+    // Fila por nombre de cabecera (sin GPS ni foto -> el panel lo muestra como manual)
+    var valores = {
+      id: Utilities.getUuid(), dni: dni, nombre: trab.nombre, cargo: trab.cargo, evento: evento,
+      fecha: fecha, hora: hora + ':00', gps_lat: '', gps_lng: '', gps_accuracy: '', foto_url: '',
+      timestamp: ts.toISOString(), nota: nota
+    };
+    sheet.appendRow(headerRow.map(function (c) { return valores[c] !== undefined ? valores[c] : ''; }));
 
     // Sembrar el indice para que el kiosko no acepte luego el mismo evento.
     if (!esCampo) marcarEnIndiceDia_(fecha, dni, evento, hora + ':00');
 
     return { success: true, data: { evento: evento, fecha: fecha, hora: hora, nombre: trab.nombre } };
+  });
+}
+
+// Anula una marca registrada A MANO (sin foto: las del kiosko siempre la
+// tienen). No se borra en silencio: la fila se copia a 'asistencias_anuladas'
+// con motivo, usuario y fecha, y recien entonces sale de asistencias_v2.
+// data = { id, motivo }
+var HEADERS_ASISTENCIAS_ANULADAS_ = ['id', 'dni', 'nombre', 'cargo', 'evento', 'fecha', 'hora', 'nota',
+  'timestamp', 'anulado_por', 'anulado_en', 'motivo_anulacion'];
+
+function anularMarcaManual(data, userId) {
+  data = data || {};
+  var id = String(data.id || '');
+  var motivo = String(data.motivo || '').trim();
+  if (!id) return { success: false, error: 'Falta la marca a anular' };
+  if (motivo.length < 5) return { success: false, error: 'Escribe el motivo de la anulacion (min. 5 caracteres)' };
+  return withLock_(function () {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = ss.getSheetByName('asistencias_v2');
+    if (!sheet) return { success: false, error: 'Hoja asistencias_v2 no encontrada' };
+    var datos = sheet.getDataRange().getValues();
+    var h = datos[0];
+    var c = function (n) { return h.indexOf(n); };
+    var fila = -1;
+    for (var i = datos.length - 1; i >= 1; i--) { if (String(datos[i][c('id')]) === id) { fila = i; break; } }
+    if (fila < 0) return { success: false, error: 'Marca no encontrada (puede que ya se haya anulado)' };
+    var r = datos[fila];
+    if (c('foto_url') >= 0 && String(r[c('foto_url')] || '')) {
+      return { success: false, error: 'Solo se pueden anular marcas registradas a mano (esta viene del kiosko con foto)' };
+    }
+    var v = function (n) { var k = c(n); return k >= 0 ? r[k] : ''; };
+    var fecha = v('fecha') instanceof Date ? Utilities.formatDate(v('fecha'), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd') : String(v('fecha'));
+    var hora = v('hora') instanceof Date ? Utilities.formatDate(v('hora'), ss.getSpreadsheetTimeZone(), 'HH:mm:ss') : String(v('hora'));
+    var usuario = String(userId || '');
+    try { var p = perfilUsuario_(userId); usuario = (p && (p.nombre || p.email)) || usuario; } catch (e) {}
+    var anuladas = getOrCreateAsistenciaSheet_(ss, 'asistencias_anuladas', HEADERS_ASISTENCIAS_ANULADAS_);
+    var ha = anuladas.getRange(1, 1, 1, anuladas.getLastColumn()).getValues()[0];
+    var valores = {
+      id: id, dni: v('dni'), nombre: v('nombre'), cargo: v('cargo'), evento: v('evento'), fecha: fecha, hora: hora,
+      nota: v('nota'), timestamp: v('timestamp'), anulado_por: usuario, anulado_en: new Date().toISOString(), motivo_anulacion: motivo
+    };
+    anuladas.appendRow(ha.map(function (n) { return valores[n] !== undefined ? valores[n] : ''; }));
+    sheet.deleteRow(fila + 1);
+    // Quitar la marca del indice anti-duplicado del dia: si no, el kiosko
+    // seguiria rechazando la marca correcta de ese evento.
+    try {
+      var idx = leerIndiceDia_(fecha);
+      if (idx) {
+        delete idx[claveDup_(String(v('dni')), String(v('evento')))];
+        CacheService.getScriptCache().put(cacheKeyDia_(fecha), JSON.stringify(idx), CACHE_TTL_DUP_);
+      }
+    } catch (e) { /* no critico: la hoja es la autoridad */ }
+    return { success: true, message: 'Marca anulada: ' + v('nombre') + ' · ' + v('evento') + ' ' + fecha + ' ' + hora.slice(0, 5) + '. Queda registrada en asistencias_anuladas.' };
   });
 }
 

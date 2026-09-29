@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import {
   FaPlus, FaSearch, FaSpinner, FaTimes, FaUserTie, FaFileAlt, FaFileContract, FaIdCard, FaCamera, FaExchangeAlt,
   FaMapMarkerAlt, FaUserSlash, FaUserCheck, FaKey, FaCopy, FaHistory, FaFolderOpen, FaUpload, FaExternalLinkAlt,
@@ -97,7 +98,10 @@ export default function EmployeesPage() {
   const [verCesados, setVerCesados] = useState(false)
   const [soloIncompletos, setSoloIncompletos] = useState(false)
   const [abierto, setAbierto] = useState<Employee | null>(null)
-  const [nuevo, setNuevo] = useState(false)
+  // Desde Postulaciones ("Contratado" → Crear trabajador) llega ?nuevo=1&dni=…&nombre=…
+  const [params, setParams] = useSearchParams()
+  const [nuevo, setNuevo] = useState(params.get('nuevo') === '1')
+  const prellenado = { dni: params.get('dni') || '', nombre: params.get('nombre') || '' }
 
   const recargar = () => {
     qc.invalidateQueries({ queryKey: ['empleadosTodos'] })
@@ -231,7 +235,7 @@ export default function EmployeesPage() {
       {abierto && (
         <FichaPanel empleado={abierto} proyectos={proyQ.data || []} onCerrar={() => setAbierto(null)} onCambio={recargar} />
       )}
-      {nuevo && <NuevoTrabajador onCerrar={() => setNuevo(false)} onCreado={() => { setNuevo(false); recargar() }} />}
+      {nuevo && <NuevoTrabajador inicial={prellenado} onCerrar={() => { setNuevo(false); setParams({}) }} onCreado={() => { setNuevo(false); setParams({}); recargar() }} />}
     </AdminLayout>
   )
 }
@@ -569,9 +573,9 @@ function Historial({ ficha }: { ficha: FichaTrabajador }) {
 }
 
 // ── Alta de trabajador ──────────────────────────────────────────
-function NuevoTrabajador({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: () => void }) {
+function NuevoTrabajador({ inicial, onCerrar, onCreado }: { inicial?: { dni: string; nombre: string }; onCerrar: () => void; onCreado: () => void }) {
   const toast = useToast()
-  const [f, setF] = useState({ dni: '', nombre: '', cargo: '', sede: 'Cusco', email: '', fecha: hoy(), sueldo: '' })
+  const [f, setF] = useState({ dni: (inicial?.dni || '').replace(/\D/g, '').slice(0, 8), nombre: inicial?.nombre || '', cargo: '', sede: 'Cusco', email: '', fecha: hoy(), sueldo: '' })
   const [guardando, setGuardando] = useState(false)
   const errores: Record<string, string> = {}
   if (f.dni && !/^\d{8}$/.test(f.dni)) errores.dni = 'El DNI tiene 8 números'

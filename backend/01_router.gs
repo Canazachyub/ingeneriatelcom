@@ -104,6 +104,7 @@ var ROUTES = {
   getAsistenciasV2: { nivel: 'auth', handler: function (ctx) { return getAsistenciasV2(ctx.data); } },
   getJustificaciones: { nivel: 'auth', handler: function (ctx) { return getJustificaciones(ctx.data); } },
   registrarAsistenciaManual: { nivel: 'auth', handler: function (ctx) { return registrarAsistenciaManual(ctx.data); } },
+  anularMarcaManual: { nivel: 'auth', handler: function (ctx) { return anularMarcaManual(ctx.data, ctx.userId); } },
 
   // === PLANILLA (datos sensibles: sueldos → nivel admin) ===
   getConfigPlanilla: { nivel: 'admin', handler: function () { return getConfigPlanillaAction(); } },
@@ -150,6 +151,11 @@ var ROUTES = {
   eliminarPregunta: { nivel: 'auth', handler: function (ctx) { return eliminarPregunta(ctx.data); } },
   getEvaluaciones: { nivel: 'auth', handler: function (ctx) { return getEvaluaciones(ctx.data); } },
   revisarEvaluacion: { nivel: 'auth', handler: function (ctx) { return revisarEvaluacion(ctx.data); } },
+  // Capacitaciones a prueba de errores: archivar en vez de borrar, reabrir intento
+  getCapacitacionesAdmin: { nivel: 'auth', handler: function (ctx) { return getCapacitacionesAdmin(ctx.data); } },
+  archivarCapacitacion: { nivel: 'auth', handler: function (ctx) { return archivarCapacitacion(ctx.data); } },
+  archivarPregunta: { nivel: 'auth', handler: function (ctx) { return archivarPregunta(ctx.data); } },
+  anularEvaluacion: { nivel: 'auth', handler: function (ctx) { return anularEvaluacion(ctx.data); } },
 
   // === LICITACIONES (16_licitaciones.gs) — hoy solo admin (ver docs/PLAN_LICITACIONES_ADMIN.md) ===
   licImportar: { nivel: 'admin', handler: function (ctx) { return licImportar(ctx.data); } },
@@ -203,11 +209,13 @@ var MODULO_POR_ACCION_ = {
   getProjects: 'proyectos', getProject: 'proyectos', createProject: 'proyectos', updateProject: 'proyectos', deleteProject: 'proyectos',
   getAssignments: 'proyectos', assignEmployee: 'proyectos', removeAssignment: 'proyectos',
   getAttendances: 'asistencias', obtenerAsistenciasHoy: 'asistencias', getAsistenciasV2: ['asistencias', 'reportes'],
-  getJustificaciones: 'asistencias', registrarAsistenciaManual: 'asistencias',
+  getJustificaciones: 'asistencias', registrarAsistenciaManual: 'asistencias', anularMarcaManual: 'asistencias',
   getArchivo: ['asistencias', 'bolsa', 'capacitaciones'],
   crearCapacitacion: 'capacitaciones', actualizarCapacitacion: 'capacitaciones',
   getPreguntas: 'capacitaciones', crearPregunta: 'capacitaciones', actualizarPregunta: 'capacitaciones',
-  eliminarPregunta: 'capacitaciones', getEvaluaciones: 'capacitaciones', revisarEvaluacion: 'capacitaciones'
+  eliminarPregunta: 'capacitaciones', getEvaluaciones: 'capacitaciones', revisarEvaluacion: 'capacitaciones',
+  getCapacitacionesAdmin: 'capacitaciones', archivarCapacitacion: 'capacitaciones', archivarPregunta: 'capacitaciones',
+  anularEvaluacion: 'capacitaciones'
 };
 
 function handleRequest_(e) {
@@ -287,7 +295,11 @@ function handleRequest_(e) {
     if (String(error && error.message).indexOf('TOKEN_TRANSITORIO') !== -1) {
       return jsonResponse({ success: false, error: 'Servidor ocupado, intenta de nuevo en unos segundos' });
     }
-    return jsonResponse({ success: false, error: error.message });
+    // Al usuario, un mensaje en palabras simples; el detalle técnico queda en
+    // los registros de ejecución con un código para ubicarlo.
+    var codigo = 'ERR-' + Date.now().toString(36).toUpperCase();
+    console.error(codigo + ' en ' + action + ': ' + (error && error.stack || error));
+    return jsonResponse({ success: false, error: 'No se pudo completar la acción. Intenta de nuevo; si se repite, avisa al administrador (código ' + codigo + ').' });
   }
 }
 

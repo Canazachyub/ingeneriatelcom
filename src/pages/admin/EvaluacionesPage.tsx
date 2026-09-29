@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FaEye, FaCheckCircle, FaExclamationCircle, FaClock,
-  FaTimes, FaImage, FaFilter, FaListUl
+  FaTimes, FaImage, FaFilter, FaListUl, FaRedo, FaUndo, FaExclamationTriangle
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import { Evaluacion, Capacitacion, Pregunta } from '../../types/capacitacion.types'
@@ -18,6 +18,7 @@ const ESTADO_LABELS: Record<string, string> = {
   observado: 'Observado',
   en_curso: 'En curso',
   abandonado: 'Abandonado',
+  anulado: 'Anulado (reabierto)',
 }
 
 const ESTADO_COLORS: Record<string, string> = {
@@ -26,6 +27,7 @@ const ESTADO_COLORS: Record<string, string> = {
   observado: 'bg-orange-500/15 text-orange-300 border border-orange-500/30',
   en_curso: 'bg-accent-electric/15 text-accent-electric border border-accent-electric/30',
   abandonado: 'bg-primary-800/60 text-primary-400 border border-primary-700',
+  anulado: 'bg-primary-800/60 text-primary-500 border border-primary-700 line-through',
 }
 
 const SELECT_CLS =
@@ -50,13 +52,18 @@ export default function EvaluacionesPage() {
   const [loadingPreguntas, setLoadingPreguntas] = useState(false)
   // Visor seguro de fotos de proctoring (los archivos de Drive ya no son publicos — C6)
   const [fotoVisor, setFotoVisor] = useState<{ url: string; indice: number } | null>(null)
+  // Recalificar una evaluación ya calificada (pide confirmación explícita)
+  const [recalificando, setRecalificando] = useState(false)
+  // Reabrir intento (anular para que vuelva a rendir)
+  const [reabriendo, setReabriendo] = useState(false)
+  const [motivoReabrir, setMotivoReabrir] = useState('')
 
   const loadData = async () => {
     setLoading(true)
     setErrorCarga('')
     const [evalRes, capRes] = await Promise.all([
       api.getEvaluaciones({ estado: filtroEstado || undefined, capacitacion_id: filtroCap || undefined }),
-      api.getCapacitaciones()
+      api.getCapacitacionesAdmin(true) // todos, para mostrar el nombre de cualquier curso
     ])
     if (evalRes.success && evalRes.data) setEvaluaciones(evalRes.data)
     else { setEvaluaciones([]); setErrorCarga(evalRes.error || 'Error desconocido') }
@@ -68,6 +75,9 @@ export default function EvaluacionesPage() {
 
   const abrirRevision = async (ev: Evaluacion) => {
     setSeleccionada(ev)
+    setRecalificando(false)
+    setReabriendo(false)
+    setMotivoReabrir('')
     const yaRevisada = ev.estado === 'aprobado' || ev.estado === 'observado'
     setNotaFinal(yaRevisada && ev.nota_final !== undefined
       ? String(ev.nota_final)
@@ -99,7 +109,8 @@ export default function EvaluacionesPage() {
   const handleRevisar = async (estado: 'aprobado' | 'observado') => {
     if (!seleccionada) return
     const nota = parseFloat(notaFinal)
-    if (isNaN(nota) || nota < 0 || nota > 20) { toast.warning('Ingresa una nota válida (0–20)'); return }
+    if (notaFinal.trim() === '' || isNaN(nota) || nota < 0 || nota > 20) { toast.warning('Ingresa una nota válida (0–20)'); return }
+    const yaCalificada = seleccionada.estado === 'aprobado' || seleccionada.estado === 'observado'
     setGuardando(true)
     const res = await api.revisarEvaluacion({
       id: seleccionada.id,
@@ -108,10 +119,27 @@ export default function EvaluacionesPage() {
       estado,
       // Trazabilidad: quién revisó (antes quedaba siempre "Admin")
       revisado_por: user?.name || user?.email || 'Admin',
+      recalificar: yaCalificada && recalificando,
     })
     setGuardando(false)
     if (res.success) {
-      toast.success(`Evaluación marcada como ${estado}. Correo enviado a ${seleccionada.email}`)
+      // Solo se dice "correo enviado" si de verdad salió
+      if (res.data?.correo_enviado) toast.success(`Evaluación marcada como ${estado}. Correo enviado a ${seleccionada.email}`)
+      else toast.warning(`Evaluación marcada como ${estado}, pero el correo NO se envió${res.data?.correo_error ? ': ' + res.data.correo_error : ''}`)
+      setSeleccionada(null)
+      loadData()
+    } else {
+      toast.error('Error: ' + res.error)
+    }
+  }
+
+  const reabrirIntento = async () => {
+    if (!seleccionada || motivoReabrir.trim().length < 3) return
+    setGuardando(true)
+    const res = await api.anularEvaluacion(seleccionada.id, motivoReabrir.trim(), user?.name || user?.email || 'Admin')
+    setGuardando(false)
+    if (res.success) {
+      toast.success(res.message || 'Intento anulado: ya puede volver a rendir')
       setSeleccionada(null)
       loadData()
     } else {
@@ -153,6 +181,7 @@ export default function EvaluacionesPage() {
             <option value="aprobado">Aprobados</option>
             <option value="observado">Observados</option>
             <option value="en_curso">En curso</option>
+            <option value="anulado">Anulados (reabiertos)</option>
           </select>
           <select value={filtroCap} onChange={e => setFiltroCap(e.target.value)} className={SELECT_CLS}>
             <option value="">Todas las capacitaciones</option>
@@ -426,9 +455,15 @@ export default function EvaluacionesPage() {
                 })()}
 
                 {/* Revisión */}
-                {(seleccionada.estado === 'pendiente_revision' || seleccionada.estado === 'en_curso') && (
+                {(seleccionada.estado === 'pendiente_revision' || seleccionada.estado === 'en_curso' || recalificando) && (
                   <div className="space-y-4">
-                    <h4 className="font-semibold text-primary-200 text-sm">Calificación manual</h4>
+                    <h4 className="font-semibold text-primary-200 text-sm">{recalificando ? 'Recalificar' : 'Calificación manual'}</h4>
+                    {recalificando && (
+                      <p className="text-xs text-amber-200 bg-amber-500/10 border border-amber-500/40 rounded-xl p-3 flex gap-2">
+                        <FaExclamationTriangle className="mt-0.5 shrink-0" />
+                        Vas a cambiar una calificación ya enviada. La persona recibirá un correo nuevo con el resultado corregido.
+                      </p>
+                    )}
                     <div>
                       <label htmlFor="nota-final" className="block text-xs font-medium text-primary-300 mb-1">Nota final (0–20)</label>
                       <input
@@ -498,10 +533,44 @@ export default function EvaluacionesPage() {
                         <strong>Retroalimentación:</strong> {seleccionada.retroalimentacion}
                       </p>
                     )}
-                    <div className="mt-3 flex items-center gap-1 text-xs text-amber-300">
+                    <div className="mt-3 flex items-center gap-1 text-xs text-primary-400">
                       <FaClock />
-                      Correo enviado al momento de la revisión
+                      El resultado se envía por correo al calificar
                     </div>
+                    {!recalificando && (
+                      <button onClick={() => { setRecalificando(true); setNotaFinal(String(seleccionada.nota_final ?? '')) }}
+                        className="mt-3 inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border border-amber-500/50 text-amber-200 hover:bg-amber-500/10">
+                        <FaRedo /> Recalificar
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Reabrir intento: anula un intento cortado o sin calificar para que vuelva a rendir */}
+                {['en_curso', 'pendiente_revision', 'abandonado'].includes(seleccionada.estado) && (
+                  <div className="rounded-2xl p-4 text-sm border border-primary-700 bg-primary-900/40 space-y-3">
+                    <p className="text-primary-200 text-xs">
+                      ¿Se le cortó el internet o hubo un problema? Puedes <strong>reabrir el intento</strong>: este queda anulado (no se borra) y la persona puede volver a rendir.
+                    </p>
+                    {!reabriendo ? (
+                      <button onClick={() => setReabriendo(true)}
+                        className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border border-primary-600 text-primary-200 hover:border-accent-electric">
+                        <FaUndo /> Reabrir intento
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <input value={motivoReabrir} onChange={(e) => setMotivoReabrir(e.target.value)} autoFocus
+                          placeholder="Motivo (obligatorio). Ej.: se cortó la conexión"
+                          className="w-full bg-primary-900/80 border border-primary-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-accent-electric" />
+                        <div className="flex gap-2 justify-end">
+                          <button onClick={() => { setReabriendo(false); setMotivoReabrir('') }} className="px-3 py-1.5 text-xs rounded-lg border border-primary-600 text-primary-200">Cancelar</button>
+                          <button onClick={reabrirIntento} disabled={guardando || motivoReabrir.trim().length < 3}
+                            className="px-3 py-1.5 text-xs rounded-lg bg-amber-400 text-primary-950 font-semibold disabled:opacity-40">
+                            Sí, anular y dejar volver a rendir
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -7,7 +7,8 @@ import {
   FaCheck,
   FaClock,
   FaReply,
-  FaTrash,
+  FaArchive,
+  FaBoxOpen,
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
@@ -28,9 +29,10 @@ interface ContactMessage {
 }
 
 // La hoja usó distintos valores de estado según la época (nuevo, en_proceso,
-// pendiente, leido, respondido); la pantalla trabaja con tres.
+// pendiente, leido, respondido); la pantalla trabaja con tres + archivado.
 const normalizarEstado = (e: unknown): string => {
   const v = String(e || '').toLowerCase().trim()
+  if (v === 'archivado') return 'archivado'
   if (v === 'respondido') return 'respondido'
   if (v === 'leido' || v === 'leído' || v === 'en_proceso') return 'leido'
   return 'pendiente' // nuevo, pendiente o vacío
@@ -59,6 +61,9 @@ export default function MessagesPage() {
   const [filterStatus, setFilterStatus] = useState('')
   const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null)
   const [message, setMessage] = useState({ type: '', text: '' })
+  // Archivar en vez de borrar: el mensaje se oculta y se recupera cuando quieras
+  const [verArchivados, setVerArchivados] = useState(false)
+  const [confirmarArchivo, setConfirmarArchivo] = useState(false)
 
   useEffect(() => {
     loadMessages()
@@ -86,12 +91,13 @@ export default function MessagesPage() {
       msg.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       msg.asunto.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = !filterStatus || msg.estado === filterStatus
-    return matchesSearch && matchesStatus
+    const matchesArchivo = verArchivados ? msg.estado === 'archivado' : msg.estado !== 'archivado'
+    return matchesSearch && matchesStatus && matchesArchivo
   })
 
   // Cambios de estado: antes un fallo no mostraba nada y el admin creía que
   // se había guardado. Ahora cada error se avisa con el motivo del servidor.
-  const cambiarEstado = async (messageId: string, estado: 'leido' | 'respondido', ok: string) => {
+  const cambiarEstado = async (messageId: string, estado: 'leido' | 'respondido' | 'archivado', ok: string) => {
     const result = await api.updateContactStatus(messageId, estado)
     if (result.success) {
       setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, estado } : m)))
@@ -108,31 +114,34 @@ export default function MessagesPage() {
   const handleMarkAsAnswered = (messageId: string) =>
     cambiarEstado(messageId, 'respondido', 'Mensaje marcado como respondido')
 
-  const handleDelete = async (messageId: string) => {
-    const msg = messages.find((m) => m.id === messageId)
-    const quien = msg ? ` de ${msg.nombre}` : ''
-    if (!confirm(`¿Eliminar el mensaje${quien}? Esta acción no se puede deshacer.`)) return
-
-    const result = await api.deleteContact(messageId)
+  // "Archivar" (antes Eliminar): no se borra, se recupera en "Ver archivados"
+  const handleArchivar = async (messageId: string) => {
+    setConfirmarArchivo(false)
+    const result = await api.deleteContact(messageId) // el backend ahora archiva
     if (result.success) {
-      setMessages((prev) => prev.filter((m) => m.id !== messageId))
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, estado: 'archivado' } : m)))
       setSelectedMessage(null)
-      setMessage({ type: 'success', text: 'Mensaje eliminado' })
+      setMessage({ type: 'success', text: 'Mensaje archivado. Lo recuperas en "Ver archivados".' })
     } else {
-      toast.error(`No se pudo eliminar el mensaje: ${result.error || 'error desconocido'}`)
+      toast.error(`No se pudo archivar el mensaje: ${result.error || 'error desconocido'}`)
     }
   }
+
+  const handleRecuperar = (messageId: string) =>
+    cambiarEstado(messageId, 'leido', 'Mensaje recuperado')
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
       pendiente: 'bg-yellow-500/20 text-yellow-400',
       leido: 'bg-blue-500/20 text-blue-400',
       respondido: 'bg-green-500/20 text-green-400',
+      archivado: 'bg-slate-600/40 text-slate-300',
     }
     const labels: Record<string, string> = {
       pendiente: 'Pendiente',
       leido: 'Leído',
       respondido: 'Respondido',
+      archivado: 'Archivado',
     }
     return (
       <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || 'bg-gray-500/20 text-gray-400'}`}>
@@ -210,6 +219,12 @@ export default function MessagesPage() {
             <option value="leido">Leido</option>
             <option value="respondido">Respondido</option>
           </select>
+          <button
+            onClick={() => { setVerArchivados(!verArchivados); setSelectedMessage(null) }}
+            className={`px-4 py-2 rounded-lg border text-sm inline-flex items-center gap-2 ${verArchivados ? 'bg-slate-700 border-slate-400 text-white' : 'border-primary-700 text-primary-300 hover:text-white'}`}
+          >
+            <FaArchive /> {verArchivados ? 'Ocultar archivados' : 'Ver archivados'}
+          </button>
         </div>
 
         {/* Messages List and Detail */}
@@ -240,7 +255,7 @@ export default function MessagesPage() {
                   key={msg.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  onClick={() => setSelectedMessage(msg)}
+                  onClick={() => { setSelectedMessage(msg); setConfirmarArchivo(false) }}
                   className={`bg-primary-900/50 backdrop-blur-sm rounded-xl border p-4 cursor-pointer transition-all ${
                     selectedMessage?.id === msg.id
                       ? 'border-accent-electric'
@@ -320,6 +335,15 @@ export default function MessagesPage() {
                     <FaReply />
                     Responder
                   </a>
+                  {selectedMessage.estado === 'archivado' && (
+                    <button
+                      onClick={() => handleRecuperar(selectedMessage.id)}
+                      className="flex items-center justify-center gap-2 px-4 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-colors"
+                    >
+                      <FaBoxOpen />
+                      Recuperar
+                    </button>
+                  )}
                   {selectedMessage.estado === 'pendiente' && (
                     <button
                       onClick={() => handleMarkAsRead(selectedMessage.id)}
@@ -329,7 +353,7 @@ export default function MessagesPage() {
                       Marcar Leido
                     </button>
                   )}
-                  {selectedMessage.estado !== 'respondido' && (
+                  {selectedMessage.estado !== 'respondido' && selectedMessage.estado !== 'archivado' && (
                     <button
                       onClick={() => handleMarkAsAnswered(selectedMessage.id)}
                       className="flex items-center justify-center gap-2 px-4 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-colors"
@@ -338,13 +362,23 @@ export default function MessagesPage() {
                       Respondido
                     </button>
                   )}
-                  <button
-                    onClick={() => handleDelete(selectedMessage.id)}
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
-                  >
-                    <FaTrash />
-                  </button>
+                  {selectedMessage.estado !== 'archivado' && (
+                    <button
+                      onClick={() => setConfirmarArchivo(!confirmarArchivo)}
+                      title="Archivar"
+                      className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-600/30 text-slate-200 rounded-lg hover:bg-slate-600/50 transition-colors"
+                    >
+                      <FaArchive />
+                    </button>
+                  )}
                 </div>
+                {confirmarArchivo && selectedMessage.estado !== 'archivado' && (
+                  <div className="mt-3 p-3 rounded-lg bg-slate-800 border border-slate-500 text-sm text-slate-200 flex flex-wrap items-center gap-3">
+                    <span className="flex-1">¿Archivar el mensaje de {selectedMessage.nombre}? Se oculta de la lista; no se borra y lo recuperas en "Ver archivados".</span>
+                    <button onClick={() => setConfirmarArchivo(false)} className="px-3 py-1.5 rounded border border-primary-600 text-primary-200">Cancelar</button>
+                    <button onClick={() => handleArchivar(selectedMessage.id)} className="px-3 py-1.5 rounded bg-accent-electric text-white font-semibold">Sí, archivar</button>
+                  </div>
+                )}
               </motion.div>
             ) : (
               <div className="bg-primary-900/50 backdrop-blur-sm rounded-xl border border-primary-800 p-12 text-center">

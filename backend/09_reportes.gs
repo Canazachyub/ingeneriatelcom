@@ -44,7 +44,7 @@ function getDashboardStats() {
 
   const postulacionesPendientes = applications.filter(a => {
     const estado = appEstadoCol >= 0 ? a[appEstadoCol] : a[12];
-    return estado === 'pendiente' || estado === 'revision';
+    return estado === 'pendiente' || estado === 'revision' || estado === 'en_revision';
   }).length;
 
   const convocatoriasActivas = jobs.filter(j => {

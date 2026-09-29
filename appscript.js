@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-29T10:23:02.552Z con tools/build-backend.mjs
+// Generado: 2026-09-29T10:33:30.499Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -499,6 +499,7 @@ var ROUTES = {
   getAsistenciasV2: { nivel: 'auth', handler: function (ctx) { return getAsistenciasV2(ctx.data); } },
   getJustificaciones: { nivel: 'auth', handler: function (ctx) { return getJustificaciones(ctx.data); } },
   registrarAsistenciaManual: { nivel: 'auth', handler: function (ctx) { return registrarAsistenciaManual(ctx.data); } },
+  anularMarcaManual: { nivel: 'auth', handler: function (ctx) { return anularMarcaManual(ctx.data, ctx.userId); } },
 
   // === PLANILLA (datos sensibles: sueldos → nivel admin) ===
   getConfigPlanilla: { nivel: 'admin', handler: function () { return getConfigPlanillaAction(); } },
@@ -545,6 +546,11 @@ var ROUTES = {
   eliminarPregunta: { nivel: 'auth', handler: function (ctx) { return eliminarPregunta(ctx.data); } },
   getEvaluaciones: { nivel: 'auth', handler: function (ctx) { return getEvaluaciones(ctx.data); } },
   revisarEvaluacion: { nivel: 'auth', handler: function (ctx) { return revisarEvaluacion(ctx.data); } },
+  // Capacitaciones a prueba de errores: archivar en vez de borrar, reabrir intento
+  getCapacitacionesAdmin: { nivel: 'auth', handler: function (ctx) { return getCapacitacionesAdmin(ctx.data); } },
+  archivarCapacitacion: { nivel: 'auth', handler: function (ctx) { return archivarCapacitacion(ctx.data); } },
+  archivarPregunta: { nivel: 'auth', handler: function (ctx) { return archivarPregunta(ctx.data); } },
+  anularEvaluacion: { nivel: 'auth', handler: function (ctx) { return anularEvaluacion(ctx.data); } },
 
   // === LICITACIONES (16_licitaciones.gs) — hoy solo admin (ver docs/PLAN_LICITACIONES_ADMIN.md) ===
   licImportar: { nivel: 'admin', handler: function (ctx) { return licImportar(ctx.data); } },
@@ -598,11 +604,13 @@ var MODULO_POR_ACCION_ = {
   getProjects: 'proyectos', getProject: 'proyectos', createProject: 'proyectos', updateProject: 'proyectos', deleteProject: 'proyectos',
   getAssignments: 'proyectos', assignEmployee: 'proyectos', removeAssignment: 'proyectos',
   getAttendances: 'asistencias', obtenerAsistenciasHoy: 'asistencias', getAsistenciasV2: ['asistencias', 'reportes'],
-  getJustificaciones: 'asistencias', registrarAsistenciaManual: 'asistencias',
+  getJustificaciones: 'asistencias', registrarAsistenciaManual: 'asistencias', anularMarcaManual: 'asistencias',
   getArchivo: ['asistencias', 'bolsa', 'capacitaciones'],
   crearCapacitacion: 'capacitaciones', actualizarCapacitacion: 'capacitaciones',
   getPreguntas: 'capacitaciones', crearPregunta: 'capacitaciones', actualizarPregunta: 'capacitaciones',
-  eliminarPregunta: 'capacitaciones', getEvaluaciones: 'capacitaciones', revisarEvaluacion: 'capacitaciones'
+  eliminarPregunta: 'capacitaciones', getEvaluaciones: 'capacitaciones', revisarEvaluacion: 'capacitaciones',
+  getCapacitacionesAdmin: 'capacitaciones', archivarCapacitacion: 'capacitaciones', archivarPregunta: 'capacitaciones',
+  anularEvaluacion: 'capacitaciones'
 };
 
 function handleRequest_(e) {
@@ -682,7 +690,11 @@ function handleRequest_(e) {
     if (String(error && error.message).indexOf('TOKEN_TRANSITORIO') !== -1) {
       return jsonResponse({ success: false, error: 'Servidor ocupado, intenta de nuevo en unos segundos' });
     }
-    return jsonResponse({ success: false, error: error.message });
+    // Al usuario, un mensaje en palabras simples; el detalle técnico queda en
+    // los registros de ejecución con un código para ubicarlo.
+    var codigo = 'ERR-' + Date.now().toString(36).toUpperCase();
+    console.error(codigo + ' en ' + action + ': ' + (error && error.stack || error));
+    return jsonResponse({ success: false, error: 'No se pudo completar la acción. Intenta de nuevo; si se repite, avisa al administrador (código ' + codigo + ').' });
   }
 }
 
@@ -1982,26 +1994,33 @@ function uploadJobPdf(data) {
     if (!data.fileContent || !data.fileName) {
       return { success: false, error: 'Archivo requerido' };
     }
+    // Solo PDF y con tamaño razonable
+    const mime = data.mimeType || 'application/pdf';
+    if (mime !== 'application/pdf') return { success: false, error: 'La ficha debe ser un PDF' };
+    const errArchivo = validarArchivoSubido_(data.fileContent, mime, 'documento');
+    if (errArchivo) return errArchivo;
 
     const mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
     const fichasFolder = getOrCreateFolder(mainFolder, 'Fichas_Postulacion');
     const cityName = (data.ciudad || 'General').replace(/[\\/:*?"<>|]/g, '_');
     const cityFolder = getOrCreateFolder(fichasFolder, cityName);
 
-    // If replacing an old file for this job, delete it
-    if (data.convocatoriaId) {
-      const oldFiles = cityFolder.getFilesByName(data.fileName);
-      while (oldFiles.hasNext()) {
-        oldFiles.next().setTrashed(true);
+    // El archivo lleva el id de la convocatoria al inicio: al reemplazar solo
+    // se manda a la papelera la ficha anterior de ESA convocatoria (antes se
+    // borraba cualquier archivo con el mismo nombre, aunque fuera de otra).
+    const limpio = String(data.fileName).replace(/[\\/:*?"<>|]/g, '_');
+    const prefijo = data.convocatoriaId ? String(data.convocatoriaId) + ' - ' : '';
+    const nombreFinal = prefijo && limpio.indexOf(prefijo) !== 0 ? prefijo + limpio : limpio;
+    if (prefijo) {
+      const previos = cityFolder.getFiles();
+      while (previos.hasNext()) {
+        const f = previos.next();
+        if (f.getName().indexOf(prefijo) === 0) f.setTrashed(true);
       }
     }
 
     const decodedBytes = Utilities.base64Decode(data.fileContent);
-    const blob = Utilities.newBlob(
-      decodedBytes,
-      data.mimeType || 'application/pdf',
-      data.fileName
-    );
+    const blob = Utilities.newBlob(decodedBytes, mime, nombreFinal);
     const file = cityFolder.createFile(blob);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
@@ -2022,6 +2041,28 @@ function uploadJobPdf(data) {
 // ============================================
 // CONVOCATORIAS (BOLSA DE TRABAJO)
 // ============================================
+// true si la fecha de cierre ya pasó (el mismo día de cierre aún se postula)
+function convocatoriaVencida_(fechaCierre) {
+  if (fechaCierre === '' || fechaCierre === null || fechaCierre === undefined) return false;
+  var f = fechaISO_(fechaCierre);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return false;
+  return f < Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
+}
+
+// Salario vacío o 0 → '' (sin dato); valida mínimo ≤ máximo. Devuelve error o null.
+function normalizarSalarios_(data) {
+  ['salario_min', 'salario_max'].forEach(function (k) {
+    if (data[k] === undefined) return;
+    var n = Number(data[k]);
+    data[k] = data[k] === '' || data[k] === null || isNaN(n) || n <= 0 ? '' : n;
+  });
+  if (data.salario_min !== undefined && data.salario_max !== undefined && data.salario_min !== '' && data.salario_max !== '' &&
+      Number(data.salario_min) > Number(data.salario_max)) {
+    return { success: false, error: 'El salario mínimo no puede ser mayor que el máximo' };
+  }
+  return null;
+}
+
 function getActiveJobs() {
   const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
   const data = sheet.getDataRange().getValues();
@@ -2029,13 +2070,15 @@ function getActiveJobs() {
 
   // Encontrar indice de columna 'estado' dinamicamente
   const estadoCol = headers.indexOf('estado');
+  const cierreCol = headers.indexOf('fecha_cierre');
 
   const jobs = data.slice(1)
     .filter(row => {
       if (row[0] === '') return false;
-      // Verificar estado usando el indice correcto
-      const estado = estadoCol >= 0 ? row[estadoCol] : row[10];
-      return estado === 'activo';
+      // Verificar estado por nombre de columna (sin 'estado' no se publica nada)
+      const estado = estadoCol >= 0 ? row[estadoCol] : '';
+      // Una convocatoria con la fecha de cierre vencida ya no se publica
+      return estado === 'activo' && !(cierreCol >= 0 && convocatoriaVencida_(row[cierreCol]));
     })
     .map(row => {
       const job = rowToObject(headers, row);
@@ -2083,6 +2126,9 @@ function getJobById(id) {
 }
 
 function createJob(data) {
+  data = data || {};
+  const errSal = normalizarSalarios_(data);
+  if (errSal) return errSal;
   return withLock_(function () {
     const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
     const headers = sheet.getDataRange().getValues()[0];
@@ -2140,6 +2186,9 @@ function updateJob(data) {
       return idx >= 0 ? idx + 1 : -1;
     };
 
+    const errSal = normalizarSalarios_(data);
+    if (errSal) return errSal;
+
     // La hoja no tiene 'prioridad': la prioridad alta se guarda como 'urgente'
     if (data.urgente === undefined && data.prioridad !== undefined) {
       data.urgente = ['alta', 'urgente'].indexOf(String(data.prioridad).toLowerCase()) >= 0;
@@ -2149,6 +2198,13 @@ function updateJob(data) {
 
     for (let i = 1; i < jobs.length; i++) {
       if (jobs[i][0] === data.id) {
+        // Mínimo ≤ máximo también contra lo ya guardado (si solo se envía uno)
+        const cMin = getColNum('salario_min'), cMax = getColNum('salario_max');
+        const minF = data.salario_min !== undefined ? data.salario_min : (cMin > 0 ? jobs[i][cMin - 1] : '');
+        const maxF = data.salario_max !== undefined ? data.salario_max : (cMax > 0 ? jobs[i][cMax - 1] : '');
+        if (minF !== '' && maxF !== '' && Number(minF) > 0 && Number(maxF) > 0 && Number(minF) > Number(maxF)) {
+          return { success: false, error: 'El salario mínimo no puede ser mayor que el máximo' };
+        }
         // Actualizar campos usando nombres de columna
         if (data.titulo !== undefined) poner(i + 1, 'titulo', data.titulo);
         if (data.categoria !== undefined) poner(i + 1, 'categoria', data.categoria);
@@ -2179,39 +2235,35 @@ function updateJob(data) {
   });
 }
 
+var ESTADOS_CONVOCATORIA_ = ['activo', 'inactivo', 'cerrado', 'archivada'];
+
 function updateJobStatus(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
-  const jobs = sheet.getDataRange().getValues();
-  const headers = jobs[0];
-
-  // Encontrar indice de columna 'estado' dinamicamente
-  const estadoCol = headers.indexOf('estado');
-  const colNum = estadoCol >= 0 ? estadoCol + 1 : 14; // +1 porque getRange es 1-based
-
-  for (let i = 1; i < jobs.length; i++) {
-    if (jobs[i][0] === data.id) {
-      sheet.getRange(i + 1, colNum).setValue(data.estado);
-      return { success: true, message: 'Estado actualizado' };
-    }
-  }
-
-  return { success: false, error: 'Convocatoria no encontrada' };
-}
-
-function deleteJob(data) {
+  data = data || {};
+  if (ESTADOS_CONVOCATORIA_.indexOf(String(data.estado)) < 0) return { success: false, error: 'Estado no válido: ' + data.estado };
   return withLock_(function () {
     const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
     const jobs = sheet.getDataRange().getValues();
+    const headers = jobs[0];
+    // Por nombre de columna: sin 'estado' no se escribe en una columna fija
+    const estadoCol = headers.indexOf('estado');
+    if (estadoCol < 0) return { success: false, error: 'La hoja convocatorias no tiene la columna estado' };
 
     for (let i = 1; i < jobs.length; i++) {
       if (jobs[i][0] === data.id) {
-        sheet.deleteRow(i + 1);
-        return { success: true, message: 'Convocatoria eliminada' };
+        sheet.getRange(i + 1, estadoCol + 1).setValue(data.estado);
+        const cUpd = headers.indexOf('updatedAt');
+        if (cUpd >= 0) sheet.getRange(i + 1, cUpd + 1).setValue(new Date());
+        return { success: true, message: data.estado === 'archivada' ? 'Convocatoria archivada' : 'Estado actualizado' };
       }
     }
-
     return { success: false, error: 'Convocatoria no encontrada' };
   });
+}
+
+// "Eliminar" ya no borra la fila: la ARCHIVA (sus postulaciones siguen
+// enlazadas). Se recupera con updateJobStatus a 'inactivo' o 'activo'.
+function deleteJob(data) {
+  return updateJobStatus({ id: (data || {}).id, estado: 'archivada' });
 }
 
 // ============================================
@@ -2335,6 +2387,10 @@ function validarConvocatoriaAbierta_(jobId) {
       var estado = cEstado >= 0 ? String(filas[i][cEstado]).toLowerCase().trim() : 'activo';
       if (estado && estado !== 'activo' && estado !== 'active') {
         return { success: false, error: 'Esta convocatoria ya no recibe postulaciones' };
+      }
+      var cCierre = h.indexOf('fecha_cierre');
+      if (cCierre >= 0 && convocatoriaVencida_(filas[i][cCierre])) {
+        return { success: false, error: 'Esta convocatoria cerró el ' + fechaISO_(filas[i][cCierre]) + ' y ya no recibe postulaciones' };
       }
       return null;
     }
@@ -2595,11 +2651,17 @@ function getContacts() {
   return { success: true, data: contacts };
 }
 
+var ESTADOS_CONTACTO_ = ['pendiente', 'nuevo', 'leido', 'en_proceso', 'respondido', 'archivado'];
+
 function updateContactStatus(data) {
+  data = data || {};
+  if (ESTADOS_CONTACTO_.indexOf(String(data.estado)) < 0) return { success: false, error: 'Estado no válido: ' + data.estado };
   const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('contactos');
   const contacts = sheet.getDataRange().getValues();
 
-  const cEstado = contacts[0].indexOf('estado') >= 0 ? contacts[0].indexOf('estado') : 7;
+  // Por nombre de columna: sin 'estado' no se escribe en una columna fija
+  const cEstado = contacts[0].indexOf('estado');
+  if (cEstado < 0) return { success: false, error: 'La hoja contactos no tiene la columna estado' };
   for (let i = 1; i < contacts.length; i++) {
     if (contacts[i][0] === data.id) {
       sheet.getRange(i + 1, cEstado + 1).setValue(data.estado);
@@ -2610,18 +2672,11 @@ function updateContactStatus(data) {
   return { success: false, error: 'Mensaje no encontrado' };
 }
 
+// "Eliminar" ya no borra: ARCHIVA el mensaje (se recupera desde "Ver archivados")
 function deleteContact(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('contactos');
-  const contacts = sheet.getDataRange().getValues();
-
-  for (let i = 1; i < contacts.length; i++) {
-    if (contacts[i][0] === data.id) {
-      sheet.deleteRow(i + 1);
-      return { success: true, message: 'Mensaje eliminado' };
-    }
-  }
-
-  return { success: false, error: 'Mensaje no encontrado' };
+  const r = updateContactStatus({ id: (data || {}).id, estado: 'archivado' });
+  if (r.success) r.message = 'Mensaje archivado';
+  return r;
 }
 
 // ============================================
@@ -2945,6 +3000,46 @@ function historialPostulaciones(dni) {
 // se regenera con `npm run build:backend`.
 // ============================================================
 // --- CRUD Capacitaciones ---
+// Nada se borra: "eliminar" archiva (estado 'archivado' en cursos, 'inactiva'
+// en preguntas) y se puede recuperar. Todas las escrituras van por nombre de
+// columna (tablaPorCabecera_, 04_proyectos.gs) y bajo withLock_.
+
+var CAP_ESTADOS_ = ['borrador', 'activo', 'cerrado', 'archivado'];
+
+// Agrega una fila escribiendo cada valor en la columna de su mismo nombre
+function capAgregarFila_(nombreHoja, valores) {
+  var t = tablaPorCabecera_(nombreHoja);
+  t.hoja.appendRow(t.datos[0].map(function (c) { return valores[c] !== undefined ? valores[c] : ''; }));
+}
+
+// Preguntas activas de un curso (para no activar un curso sin preguntas suficientes)
+function capPreguntasActivas_(capacitacion_id) {
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('banco_preguntas');
+  if (!sheet) return 0;
+  var rows = sheet.getDataRange().getValues();
+  var h = rows[0];
+  var cCap = h.indexOf('capacitacion_id'), cEst = h.indexOf('estado');
+  var n = 0;
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][cCap]) === String(capacitacion_id) && rows[i][cEst] === 'activa') n++;
+  }
+  return n;
+}
+
+// Valida los campos de un curso. `parcial` = solo los que vienen (edición).
+function capValidar_(data, parcial) {
+  var num = function (v) { return v === undefined || v === null || v === '' ? null : Number(v); };
+  if (!parcial || data.titulo !== undefined) {
+    if (!String(data.titulo || '').trim()) return 'El título es obligatorio';
+  }
+  var np = num(data.num_preguntas), nm = num(data.nota_minima), tl = num(data.tiempo_limite_min), fi = num(data.foto_intervalo_seg);
+  if (np !== null && (isNaN(np) || np < 1 || np > 100 || Math.floor(np) !== np)) return 'El número de preguntas debe ser un entero entre 1 y 100';
+  if (nm !== null && (isNaN(nm) || nm < 0 || nm > 20)) return 'La nota mínima debe estar entre 0 y 20';
+  if (tl !== null && (isNaN(tl) || tl <= 0 || tl > 600)) return 'El tiempo límite debe ser mayor que 0 minutos';
+  if (fi !== null && (isNaN(fi) || fi < 5 || fi > 600)) return 'El intervalo de fotos debe estar entre 5 y 600 segundos';
+  if (data.estado !== undefined && CAP_ESTADOS_.indexOf(data.estado) < 0) return 'Estado no válido: ' + data.estado;
+  return '';
+}
 
 function getCapacitaciones() {
   var ss = SpreadsheetApp.openById(SHEET_ID);
@@ -2957,6 +3052,34 @@ function getCapacitaciones() {
     .map(function(r) { return rowToObject(headers, r); })
     .filter(function(c) { return c.estado === 'activo'; });
   return { success: true, data: rows };
+}
+
+// Panel: todos los cursos (borrador, activo, cerrado); archivados solo si se piden.
+// Incluye cuántas preguntas activas tiene cada uno.
+function getCapacitacionesAdmin(data) {
+  data = data || {};
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('capacitaciones');
+  if (!sheet) return { success: false, error: 'Hoja capacitaciones no encontrada' };
+  var rows = sheet.getDataRange().getValues();
+  var headers = rows[0];
+  var activasPorCap = {};
+  var banco = SpreadsheetApp.openById(SHEET_ID).getSheetByName('banco_preguntas');
+  if (banco) {
+    var b = banco.getDataRange().getValues();
+    var cCap = b[0].indexOf('capacitacion_id'), cEst = b[0].indexOf('estado');
+    for (var j = 1; j < b.length; j++) {
+      if (b[j][cEst] === 'activa') activasPorCap[b[j][cCap]] = (activasPorCap[b[j][cCap]] || 0) + 1;
+    }
+  }
+  var lista = rows.slice(1)
+    .filter(function (r) { return r[0] !== ''; })
+    .map(function (r) {
+      var o = rowToObject(headers, r);
+      o.preguntas_activas = activasPorCap[o.id] || 0;
+      return o;
+    })
+    .filter(function (c) { return data.archivados ? true : c.estado !== 'archivado'; });
+  return { success: true, data: lista };
 }
 
 function getCapacitacionById(id) {
@@ -2974,36 +3097,61 @@ function getCapacitacionById(id) {
 }
 
 function crearCapacitacion(data) {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
-  var sheet = ss.getSheetByName('capacitaciones');
+  data = data || {};
+  var err = capValidar_(data, false);
+  if (err) return { success: false, error: err };
+  var estado = data.estado || 'borrador';
+  if (estado === 'archivado') estado = 'borrador';
+  var numPreg = Number(data.num_preguntas) || 15;
+  // Un curso nuevo aún no tiene preguntas: no se puede publicar ("activo") todavía
+  if (estado === 'activo') {
+    return { success: false, error: 'Un curso nuevo no tiene preguntas todavía. Créalo como borrador, agrega al menos ' + numPreg + ' preguntas activas y luego actívalo.' };
+  }
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('capacitaciones');
   if (!sheet) return { success: false, error: 'Hoja capacitaciones no encontrada' };
-  var id = 'CAP' + Utilities.getUuid().substring(0, 8).toUpperCase();
-  sheet.appendRow([
-    id,
-    data.titulo || '',
-    data.descripcion || '',
-    data.material_url || '',
-    data.categoria || '',
-    data.num_preguntas || 15,
-    data.nota_minima || 14,
-    data.tiempo_limite_min || 30,
-    data.foto_intervalo_seg || 20,
-    data.estado || 'borrador',
-    new Date().toISOString()
-  ]);
-  return { success: true, data: { id: id }, message: 'Capacitacion creada' };
+  return withLock_(function () {
+    var id = 'CAP' + Utilities.getUuid().substring(0, 8).toUpperCase();
+    capAgregarFila_('capacitaciones', {
+      id: id,
+      titulo: String(data.titulo).trim(),
+      descripcion: data.descripcion || '',
+      material_url: data.material_url || '',
+      categoria: data.categoria || '',
+      num_preguntas: numPreg,
+      nota_minima: data.nota_minima === undefined || data.nota_minima === '' ? 14 : Number(data.nota_minima),
+      tiempo_limite_min: Number(data.tiempo_limite_min) || 30,
+      foto_intervalo_seg: Number(data.foto_intervalo_seg) || 20,
+      estado: estado,
+      fecha_creacion: new Date().toISOString()
+    });
+    return { success: true, data: { id: id }, message: 'Capacitacion creada' };
+  });
 }
 
 function actualizarCapacitacion(data) {
+  data = data || {};
+  var err = capValidar_(data, true);
+  if (err) return { success: false, error: err };
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName('capacitaciones');
   if (!sheet) return { success: false, error: 'Hoja no encontrada' };
-  var rows = sheet.getDataRange().getValues();
-  var headers = rows[0];
-  for (var i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(data.id)) {
+  return withLock_(function () {
+    var rows = sheet.getDataRange().getValues();
+    var headers = rows[0];
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) !== String(data.id)) continue;
+      var actual = rowToObject(headers, rows[i]);
+      // Activar exige preguntas activas suficientes para armar el examen
+      var estadoFinal = data.estado !== undefined ? data.estado : actual.estado;
+      var numFinal = data.num_preguntas !== undefined && data.num_preguntas !== '' ? Number(data.num_preguntas) : Number(actual.num_preguntas) || 15;
+      if (estadoFinal === 'activo') {
+        var activas = capPreguntasActivas_(data.id);
+        if (activas < numFinal) {
+          return { success: false, error: 'No se puede activar: el examen pide ' + numFinal + ' preguntas y el banco tiene ' + activas + ' activas. Agrega preguntas o baja el número de preguntas.' };
+        }
+      }
       var fieldMap = {
-        titulo: data.titulo, descripcion: data.descripcion,
+        titulo: data.titulo !== undefined ? String(data.titulo).trim() : undefined, descripcion: data.descripcion,
         material_url: data.material_url, categoria: data.categoria,
         num_preguntas: data.num_preguntas, nota_minima: data.nota_minima,
         tiempo_limite_min: data.tiempo_limite_min, foto_intervalo_seg: data.foto_intervalo_seg,
@@ -3016,22 +3164,33 @@ function actualizarCapacitacion(data) {
       });
       return { success: true, message: 'Capacitacion actualizada' };
     }
-  }
-  return { success: false, error: 'Capacitacion no encontrada' };
+    return { success: false, error: 'Capacitacion no encontrada' };
+  });
 }
 
-function eliminarCapacitacion(data) {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
-  var sheet = ss.getSheetByName('capacitaciones');
+// data = { id, archivar: true|false } — archivar oculta el curso (no se puede
+// rendir); recuperar lo devuelve como borrador para revisarlo antes de activarlo.
+function archivarCapacitacion(data) {
+  data = data || {};
+  var archivar = data.archivar !== false;
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('capacitaciones');
   if (!sheet) return { success: false, error: 'Hoja no encontrada' };
-  var rows = sheet.getDataRange().getValues();
-  for (var i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(data.id)) {
-      sheet.deleteRow(i + 1);
-      return { success: true, message: 'Capacitacion eliminada' };
+  return withLock_(function () {
+    var rows = sheet.getDataRange().getValues();
+    var cEst = rows[0].indexOf('estado');
+    if (cEst < 0) return { success: false, error: 'La hoja capacitaciones no tiene columna estado' };
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) !== String(data.id)) continue;
+      sheet.getRange(i + 1, cEst + 1).setValue(archivar ? 'archivado' : 'borrador');
+      return { success: true, message: archivar ? 'Capacitación archivada. Puedes recuperarla en "Ver archivadas".' : 'Capacitación recuperada como borrador' };
     }
-  }
-  return { success: false, error: 'Capacitacion no encontrada' };
+    return { success: false, error: 'Capacitacion no encontrada' };
+  });
+}
+
+// Compatibilidad: la ruta antigua de borrado ahora ARCHIVA (no borra la fila)
+function eliminarCapacitacion(data) {
+  return archivarCapacitacion({ id: (data || {}).id, archivar: true });
 }
 
 // --- CRUD Banco de Preguntas ---
@@ -3054,37 +3213,64 @@ function getPreguntas(data) {
   return { success: true, data: result };
 }
 
+// Valida una pregunta completa (se usa con los valores finales, tras mezclar la edición)
+function capValidarPregunta_(p) {
+  if (!String(p.capacitacion_id || '').trim()) return 'Elige la capacitación de la pregunta';
+  if (!String(p.pregunta || '').trim()) return 'Escribe el texto de la pregunta';
+  var tipo = p.tipo || 'multiple';
+  if (['multiple', 'llenado'].indexOf(tipo) < 0) return 'Tipo de pregunta no válido';
+  var puntaje = Number(p.puntaje);
+  if (p.puntaje !== undefined && p.puntaje !== '' && (isNaN(puntaje) || puntaje < 1 || puntaje > 10)) return 'El puntaje debe estar entre 1 y 10';
+  if (p.dificultad !== undefined && p.dificultad !== '' && ['facil', 'media', 'dificil'].indexOf(p.dificultad) < 0) return 'Dificultad no válida';
+  if (tipo === 'multiple') {
+    var opciones = ['a', 'b', 'c', 'd'].filter(function (l) { return String(p['opcion_' + l] || '').trim(); });
+    if (opciones.length < 2) return 'Una pregunta de opción múltiple necesita al menos 2 opciones';
+    var r = String(p.respuesta_correcta || '').trim().toUpperCase();
+    if (['A', 'B', 'C', 'D'].indexOf(r) < 0) return 'Elige cuál es la respuesta correcta (A, B, C o D)';
+    if (!String(p['opcion_' + r.toLowerCase()] || '').trim()) return 'La respuesta correcta (' + r + ') está vacía: escribe esa opción o elige otra';
+  } else if (!String(p.respuesta_correcta || '').trim()) {
+    return 'Escribe la respuesta de referencia';
+  }
+  return '';
+}
+
 function crearPregunta(data) {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
-  var sheet = ss.getSheetByName('banco_preguntas');
+  data = data || {};
+  var err = capValidarPregunta_(data);
+  if (err) return { success: false, error: err };
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('banco_preguntas');
   if (!sheet) return { success: false, error: 'Hoja banco_preguntas no encontrada' };
-  var id = 'PQ' + Utilities.getUuid().substring(0, 8).toUpperCase();
-  sheet.appendRow([
-    id,
-    data.capacitacion_id || '',
-    data.pregunta || '',
-    data.tipo || 'multiple',
-    data.opcion_a || '',
-    data.opcion_b || '',
-    data.opcion_c || '',
-    data.opcion_d || '',
-    data.respuesta_correcta || '',
-    data.justificacion || '',
-    data.dificultad || 'media',
-    data.puntaje || 1,
-    data.estado || 'activa'
-  ]);
-  return { success: true, data: { id: id }, message: 'Pregunta creada' };
+  return withLock_(function () {
+    var id = 'PQ' + Utilities.getUuid().substring(0, 8).toUpperCase();
+    capAgregarFila_('banco_preguntas', {
+      id: id,
+      capacitacion_id: data.capacitacion_id || '',
+      pregunta: String(data.pregunta).trim(),
+      tipo: data.tipo || 'multiple',
+      opcion_a: data.opcion_a || '',
+      opcion_b: data.opcion_b || '',
+      opcion_c: data.opcion_c || '',
+      opcion_d: data.opcion_d || '',
+      respuesta_correcta: (data.tipo || 'multiple') === 'multiple' ? String(data.respuesta_correcta || '').trim().toUpperCase() : (data.respuesta_correcta || ''),
+      justificacion: data.justificacion || '',
+      dificultad: data.dificultad || 'media',
+      puntaje: Number(data.puntaje) || 1,
+      estado: data.estado === 'inactiva' ? 'inactiva' : 'activa'
+    });
+    return { success: true, data: { id: id }, message: 'Pregunta creada' };
+  });
 }
 
 function actualizarPregunta(data) {
+  data = data || {};
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName('banco_preguntas');
   if (!sheet) return { success: false, error: 'Hoja no encontrada' };
-  var rows = sheet.getDataRange().getValues();
-  var headers = rows[0];
-  for (var i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(data.id)) {
+  return withLock_(function () {
+    var rows = sheet.getDataRange().getValues();
+    var headers = rows[0];
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) !== String(data.id)) continue;
       var fieldMap = {
         pregunta: data.pregunta, tipo: data.tipo,
         opcion_a: data.opcion_a, opcion_b: data.opcion_b,
@@ -3093,6 +3279,15 @@ function actualizarPregunta(data) {
         justificacion: data.justificacion, dificultad: data.dificultad,
         puntaje: data.puntaje, estado: data.estado
       };
+      // Valida la pregunta tal como quedaría después del cambio
+      var final = rowToObject(headers, rows[i]);
+      Object.keys(fieldMap).forEach(function (k) { if (fieldMap[k] !== undefined) final[k] = fieldMap[k]; });
+      var err = capValidarPregunta_(final);
+      if (err) return { success: false, error: err };
+      if (data.estado !== undefined && ['activa', 'inactiva'].indexOf(data.estado) < 0) return { success: false, error: 'Estado de pregunta no válido' };
+      if ((final.tipo || 'multiple') === 'multiple' && fieldMap.respuesta_correcta !== undefined) {
+        fieldMap.respuesta_correcta = String(fieldMap.respuesta_correcta).trim().toUpperCase();
+      }
       headers.forEach(function(h, col) {
         if (fieldMap.hasOwnProperty(h) && fieldMap[h] !== undefined) {
           sheet.getRange(i + 1, col + 1).setValue(fieldMap[h]);
@@ -3100,22 +3295,32 @@ function actualizarPregunta(data) {
       });
       return { success: true, message: 'Pregunta actualizada' };
     }
-  }
-  return { success: false, error: 'Pregunta no encontrada' };
+    return { success: false, error: 'Pregunta no encontrada' };
+  });
 }
 
-function eliminarPregunta(data) {
-  var ss = SpreadsheetApp.openById(SHEET_ID);
-  var sheet = ss.getSheetByName('banco_preguntas');
+// data = { id, archivar: true|false } → estado 'inactiva' / 'activa'
+function archivarPregunta(data) {
+  data = data || {};
+  var archivar = data.archivar !== false;
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('banco_preguntas');
   if (!sheet) return { success: false, error: 'Hoja no encontrada' };
-  var rows = sheet.getDataRange().getValues();
-  for (var i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(data.id)) {
-      sheet.deleteRow(i + 1);
-      return { success: true, message: 'Pregunta eliminada' };
+  return withLock_(function () {
+    var rows = sheet.getDataRange().getValues();
+    var cEst = rows[0].indexOf('estado');
+    if (cEst < 0) return { success: false, error: 'La hoja banco_preguntas no tiene columna estado' };
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) !== String(data.id)) continue;
+      sheet.getRange(i + 1, cEst + 1).setValue(archivar ? 'inactiva' : 'activa');
+      return { success: true, message: archivar ? 'Pregunta archivada (ya no sale en los exámenes)' : 'Pregunta recuperada' };
     }
-  }
-  return { success: false, error: 'Pregunta no encontrada' };
+    return { success: false, error: 'Pregunta no encontrada' };
+  });
+}
+
+// Compatibilidad: la ruta antigua de borrado ahora ARCHIVA la pregunta
+function eliminarPregunta(data) {
+  return archivarPregunta({ id: (data || {}).id, archivar: true });
 }
 
 // --- Evaluaciones ---
@@ -3221,12 +3426,12 @@ function iniciarEvaluacion(data) {
     if (existeIntentoEvaluacion_(evalSheet, capacitacion_id, dni)) {
       return { success: false, error: 'Ya existe un intento registrado para esta capacitacion con este DNI' };
     }
-    evalSheet.appendRow([
-      evalId, capacitacion_id, dni, nombres, email,
-      preguntasIds, '', '', 0, '',
-      horaInicio, '', '', 'en_curso',
-      '', '', '', ''
-    ]);
+    capAgregarFila_('evaluaciones', {
+      id: evalId, capacitacion_id: capacitacion_id, dni: dni, nombres: nombres, email: email,
+      preguntas_asignadas: preguntasIds, respuestas: '', puntaje_auto: '', salidas_pestana: 0, fotos_url: '',
+      hora_inicio: horaInicio, hora_fin: '', duracion_seg: '', estado: 'en_curso',
+      nota_final: '', retroalimentacion: '', revisado_por: '', fecha_revision: ''
+    });
     return { success: true };
   });
 
@@ -3247,7 +3452,7 @@ function iniciarEvaluacion(data) {
   };
 }
 
-// Verifica si ya existe un intento (no abandonado) para un DNI en una
+// Verifica si ya existe un intento (no abandonado ni anulado) para un DNI en una
 // capacitacion dada. Lee la sheet fresca (getDataRange) cada vez que se
 // llama, por eso es seguro usarla dentro y fuera del lock.
 function existeIntentoEvaluacion_(evalSheet, capacitacion_id, dni) {
@@ -3259,7 +3464,8 @@ function existeIntentoEvaluacion_(evalSheet, capacitacion_id, dni) {
   for (var i = 1; i < evalData.length; i++) {
     if (String(evalData[i][capIdCol]) === String(capacitacion_id) &&
         String(evalData[i][dniCol2]) === dni &&
-        evalData[i][estadoCol] !== 'abandonado') {
+        evalData[i][estadoCol] !== 'abandonado' &&
+        evalData[i][estadoCol] !== 'anulado') {
       return true;
     }
   }
@@ -3366,70 +3572,118 @@ function getEvaluaciones(data) {
   return { success: true, data: result };
 }
 
+// data = { id, nota_final (0-20), retroalimentacion, estado: aprobado|observado,
+//          revisado_por, recalificar?: true }
+// Una evaluación ya calificada solo se vuelve a calificar con recalificar: true
+// (el panel lo pide con confirmación). La respuesta dice si el correo salió.
 function revisarEvaluacion(data) {
+  data = data || {};
   var id = data.id;
-  var nota_final = data.nota_final;
   var retroalimentacion = data.retroalimentacion || '';
   var estado = data.estado;
 
-  if (!id || nota_final === undefined || !estado) return { success: false, error: 'Faltan campos: id, nota_final, estado' };
+  if (!id || data.nota_final === undefined || data.nota_final === null || data.nota_final === '' || !estado) {
+    return { success: false, error: 'Faltan campos: id, nota_final, estado' };
+  }
+  var nota_final = Number(data.nota_final);
+  if (isNaN(nota_final) || nota_final < 0 || nota_final > 20) return { success: false, error: 'La nota debe estar entre 0 y 20' };
   if (['aprobado', 'observado'].indexOf(estado) < 0) return { success: false, error: 'Estado debe ser aprobado u observado' };
 
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName('evaluaciones');
   if (!sheet) return { success: false, error: 'Hoja no encontrada' };
 
-  var rows = sheet.getDataRange().getValues();
-  var headers = rows[0];
-  var rowIdx = -1;
-  var evalRow = null;
-  for (var i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(id)) {
-      rowIdx = i + 1;
-      evalRow = rowToObject(headers, rows[i]);
-      break;
+  var guardado = withLock_(function () {
+    var rows = sheet.getDataRange().getValues();
+    var headers = rows[0];
+    var cId = headers.indexOf('id');
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][cId >= 0 ? cId : 0]) !== String(id)) continue;
+      var evalRow = rowToObject(headers, rows[i]);
+      if (evalRow.estado === 'anulado') return { success: false, error: 'Este intento fue anulado: no se puede calificar' };
+      if ((evalRow.estado === 'aprobado' || evalRow.estado === 'observado') && data.recalificar !== true) {
+        return { success: false, error: 'Esta evaluación ya fue calificada. Confirma que quieres recalificarla.' };
+      }
+      var updateMap = {
+        nota_final: nota_final,
+        retroalimentacion: retroalimentacion,
+        estado: estado,
+        revisado_por: data.revisado_por || 'Admin',
+        fecha_revision: new Date().toISOString()
+      };
+      headers.forEach(function(h, col) {
+        if (updateMap.hasOwnProperty(h)) sheet.getRange(i + 1, col + 1).setValue(updateMap[h]);
+      });
+      return { success: true, evalRow: evalRow };
     }
-  }
-  if (!evalRow) return { success: false, error: 'Evaluacion no encontrada' };
-
-  var updateMap = {
-    nota_final: nota_final,
-    retroalimentacion: retroalimentacion,
-    estado: estado,
-    revisado_por: data.revisado_por || 'Admin',
-    fecha_revision: new Date().toISOString()
-  };
-  headers.forEach(function(h, col) {
-    if (updateMap.hasOwnProperty(h)) sheet.getRange(rowIdx, col + 1).setValue(updateMap[h]);
+    return { success: false, error: 'Evaluacion no encontrada' };
   });
+  if (!guardado.success) return guardado;
+  var evalRow = guardado.evalRow;
 
   var capResult = getCapacitacionById(evalRow.capacitacion_id);
   var tituloCap = capResult.success ? capResult.data.titulo : 'Capacitacion';
 
-  try {
-    var emailDest = evalRow.email;
-    if (emailDest && emailDest.indexOf('@') > 0) {
-      var estadoLabel = estado === 'aprobado' ? 'APROBADO' : 'OBSERVADO';
-      var colorEstado = estado === 'aprobado' ? '#16a34a' : '#d97706';
-      MailApp.sendEmail({
-        to: emailDest,
-        subject: 'Resultado Evaluacion: ' + tituloCap + ' - ' + estadoLabel,
-        htmlBody: '<p>Estimado/a <strong>' + evalRow.nombres + '</strong>,</p>' +
-          '<p>Hemos revisado tu evaluacion de <strong>' + tituloCap + '</strong>.</p>' +
-          '<table style="border-collapse:collapse;margin:16px 0"><tr>' +
-          '<td style="padding:6px 16px;background:#f1f5f9"><strong>Resultado</strong></td>' +
-          '<td style="padding:6px 16px;color:' + colorEstado + '"><strong>' + estadoLabel + '</strong></td></tr>' +
-          '<tr><td style="padding:6px 16px;background:#f1f5f9"><strong>Nota</strong></td>' +
-          '<td style="padding:6px 16px"><strong>' + nota_final + '</strong></td></tr></table>' +
-          (retroalimentacion ? '<p><strong>Retroalimentacion del evaluador:</strong><br>' + retroalimentacion + '</p>' : '') +
-          '<p>Att,<br><strong>Ingenieria Telcom EIRL</strong></p>'
-      });
-    }
-  } catch(mailErr) {
-    return { success: true, message: 'Revision guardada. Error al enviar correo: ' + mailErr.message };
+  var emailDest = String(evalRow.email || '');
+  if (!emailDest || emailDest.indexOf('@') <= 0) {
+    return { success: true, data: { correo_enviado: false, correo_error: 'La evaluación no tiene un correo válido' }, message: 'Revisión guardada. No se envió correo: la evaluación no tiene un correo válido.' };
   }
+  try {
+    var estadoLabel = estado === 'aprobado' ? 'APROBADO' : 'OBSERVADO';
+    var colorEstado = estado === 'aprobado' ? '#16a34a' : '#d97706';
+    MailApp.sendEmail({
+      to: emailDest,
+      subject: 'Resultado Evaluacion: ' + tituloCap + ' - ' + estadoLabel,
+      htmlBody: '<p>Estimado/a <strong>' + evalRow.nombres + '</strong>,</p>' +
+        '<p>Hemos revisado tu evaluacion de <strong>' + tituloCap + '</strong>.</p>' +
+        '<table style="border-collapse:collapse;margin:16px 0"><tr>' +
+        '<td style="padding:6px 16px;background:#f1f5f9"><strong>Resultado</strong></td>' +
+        '<td style="padding:6px 16px;color:' + colorEstado + '"><strong>' + estadoLabel + '</strong></td></tr>' +
+        '<tr><td style="padding:6px 16px;background:#f1f5f9"><strong>Nota</strong></td>' +
+        '<td style="padding:6px 16px"><strong>' + nota_final + '</strong></td></tr></table>' +
+        (retroalimentacion ? '<p><strong>Retroalimentacion del evaluador:</strong><br>' + retroalimentacion + '</p>' : '') +
+        '<p>Att,<br><strong>Ingenieria Telcom EIRL</strong></p>'
+    });
+  } catch(mailErr) {
+    return { success: true, data: { correo_enviado: false, correo_error: mailErr.message }, message: 'Revisión guardada, pero el correo no se pudo enviar: ' + mailErr.message };
+  }
+  return { success: true, data: { correo_enviado: true }, message: 'Revision guardada y correo enviado a ' + emailDest };
+}
 
-  return { success: true, message: 'Revision guardada y correo enviado a ' + evalRow.email };
+// "Reabrir intento": anula un intento en curso o sin calificar (p. ej. se cortó
+// el internet) para que la persona pueda volver a rendir. No se borra: queda
+// como 'anulado' con el motivo, y existeIntentoEvaluacion_ ya no lo cuenta.
+// data = { id, motivo, revisado_por }
+function anularEvaluacion(data) {
+  data = data || {};
+  var motivo = String(data.motivo || '').trim();
+  if (!data.id) return { success: false, error: 'Falta la evaluación' };
+  if (motivo.length < 3) return { success: false, error: 'Escribe el motivo para reabrir el intento' };
+  var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('evaluaciones');
+  if (!sheet) return { success: false, error: 'Hoja no encontrada' };
+  return withLock_(function () {
+    var rows = sheet.getDataRange().getValues();
+    var headers = rows[0];
+    var cId = headers.indexOf('id');
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][cId >= 0 ? cId : 0]) !== String(data.id)) continue;
+      var ev = rowToObject(headers, rows[i]);
+      if (['en_curso', 'pendiente_revision', 'abandonado'].indexOf(ev.estado) < 0) {
+        return { success: false, error: 'Solo se puede reabrir un intento en curso o sin calificar (este está "' + ev.estado + '")' };
+      }
+      var updateMap = {
+        estado: 'anulado',
+        retroalimentacion: 'ANULADO para volver a rendir: ' + motivo,
+        revisado_por: data.revisado_por || 'Admin',
+        fecha_revision: new Date().toISOString()
+      };
+      headers.forEach(function (h, col) {
+        if (updateMap.hasOwnProperty(h)) sheet.getRange(i + 1, col + 1).setValue(updateMap[h]);
+      });
+      return { success: true, message: 'Intento anulado. ' + (ev.nombres || 'La persona') + ' ya puede volver a rendir la evaluación.' };
+    }
+    return { success: false, error: 'Evaluacion no encontrada' };
+  });
 }
 
 function guardarFotoWebcam(data) {
@@ -3463,9 +3717,10 @@ function guardarFotoWebcam(data) {
       var ss = SpreadsheetApp.openById(SHEET_ID);
       var fotosSheet = ss.getSheetByName('eval_fotos');
       if (fotosSheet) {
-        fotosSheet.appendRow([
-          Utilities.getUuid(), evaluacion_id, fotoUrl, new Date().toISOString(), fotosSheet.getLastRow()
-        ]);
+        capAgregarFila_('eval_fotos', {
+          id: Utilities.getUuid(), evaluacion_id: evaluacion_id, foto_url: fotoUrl,
+          timestamp: new Date().toISOString(), orden: fotosSheet.getLastRow()
+        });
       }
     }
     return { success: true, data: { foto_url: fotoUrl, foto_id: file.getId() } };
@@ -3481,13 +3736,13 @@ function registrarEventoLog(data) {
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName('eval_logs');
   if (!sheet) return { success: false, error: 'Hoja eval_logs no encontrada' };
-  sheet.appendRow([
-    Utilities.getUuid(),
-    data.evaluacion_id || '',
-    data.tipo_evento || 'desconocido',
-    data.detalle || '',
-    new Date().toISOString()
-  ]);
+  capAgregarFila_('eval_logs', {
+    id: Utilities.getUuid(),
+    evaluacion_id: data.evaluacion_id || '',
+    tipo_evento: data.tipo_evento || 'desconocido',
+    detalle: data.detalle || '',
+    timestamp: new Date().toISOString()
+  });
   return { success: true };
 }
 
@@ -4244,11 +4499,12 @@ function registrarAsistenciaManual(data) {
     var ss = SpreadsheetApp.openById(SHEET_ID);
     var sheet = getOrCreateAsistenciaSheet_(ss, 'asistencias_v2', HEADERS_ASISTENCIAS_V2);
 
-    // Columna 'nota' (13): se agrega al header si la hoja aun no la tiene.
-    // Las filas antiguas simplemente la tienen vacia.
-    var headerRow = sheet.getRange(1, 1, 1, HEADERS_ASISTENCIAS_V2.length + 1).getValues()[0];
+    // Columna 'nota': se agrega AL FINAL si la hoja aun no la tiene (antes se
+    // escribia en la columna 13 fija y podia pisar otra cabecera).
+    var headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     if (headerRow.indexOf('nota') < 0) {
-      sheet.getRange(1, HEADERS_ASISTENCIAS_V2.length + 1).setValue('nota').setFontWeight('bold');
+      sheet.getRange(1, headerRow.length + 1).setValue('nota').setFontWeight('bold');
+      headerRow.push('nota');
     }
 
     // Anti-duplicado igual que el kiosko (solo eventos de oficina). Aqui SI se
@@ -4258,24 +4514,71 @@ function registrarAsistenciaManual(data) {
       return { success: false, error: 'Ese evento ya esta registrado para ese trabajador ese dia' };
     }
 
-    sheet.appendRow([
-      Utilities.getUuid(),
-      dni,
-      trab.nombre,
-      trab.cargo,
-      evento,
-      fecha,
-      hora + ':00',
-      '', '', '',  // sin GPS
-      '',          // sin foto -> el panel lo muestra como registro manual
-      ts.toISOString(),
-      nota
-    ]);
+    // Fila por nombre de cabecera (sin GPS ni foto -> el panel lo muestra como manual)
+    var valores = {
+      id: Utilities.getUuid(), dni: dni, nombre: trab.nombre, cargo: trab.cargo, evento: evento,
+      fecha: fecha, hora: hora + ':00', gps_lat: '', gps_lng: '', gps_accuracy: '', foto_url: '',
+      timestamp: ts.toISOString(), nota: nota
+    };
+    sheet.appendRow(headerRow.map(function (c) { return valores[c] !== undefined ? valores[c] : ''; }));
 
     // Sembrar el indice para que el kiosko no acepte luego el mismo evento.
     if (!esCampo) marcarEnIndiceDia_(fecha, dni, evento, hora + ':00');
 
     return { success: true, data: { evento: evento, fecha: fecha, hora: hora, nombre: trab.nombre } };
+  });
+}
+
+// Anula una marca registrada A MANO (sin foto: las del kiosko siempre la
+// tienen). No se borra en silencio: la fila se copia a 'asistencias_anuladas'
+// con motivo, usuario y fecha, y recien entonces sale de asistencias_v2.
+// data = { id, motivo }
+var HEADERS_ASISTENCIAS_ANULADAS_ = ['id', 'dni', 'nombre', 'cargo', 'evento', 'fecha', 'hora', 'nota',
+  'timestamp', 'anulado_por', 'anulado_en', 'motivo_anulacion'];
+
+function anularMarcaManual(data, userId) {
+  data = data || {};
+  var id = String(data.id || '');
+  var motivo = String(data.motivo || '').trim();
+  if (!id) return { success: false, error: 'Falta la marca a anular' };
+  if (motivo.length < 5) return { success: false, error: 'Escribe el motivo de la anulacion (min. 5 caracteres)' };
+  return withLock_(function () {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = ss.getSheetByName('asistencias_v2');
+    if (!sheet) return { success: false, error: 'Hoja asistencias_v2 no encontrada' };
+    var datos = sheet.getDataRange().getValues();
+    var h = datos[0];
+    var c = function (n) { return h.indexOf(n); };
+    var fila = -1;
+    for (var i = datos.length - 1; i >= 1; i--) { if (String(datos[i][c('id')]) === id) { fila = i; break; } }
+    if (fila < 0) return { success: false, error: 'Marca no encontrada (puede que ya se haya anulado)' };
+    var r = datos[fila];
+    if (c('foto_url') >= 0 && String(r[c('foto_url')] || '')) {
+      return { success: false, error: 'Solo se pueden anular marcas registradas a mano (esta viene del kiosko con foto)' };
+    }
+    var v = function (n) { var k = c(n); return k >= 0 ? r[k] : ''; };
+    var fecha = v('fecha') instanceof Date ? Utilities.formatDate(v('fecha'), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd') : String(v('fecha'));
+    var hora = v('hora') instanceof Date ? Utilities.formatDate(v('hora'), ss.getSpreadsheetTimeZone(), 'HH:mm:ss') : String(v('hora'));
+    var usuario = String(userId || '');
+    try { var p = perfilUsuario_(userId); usuario = (p && (p.nombre || p.email)) || usuario; } catch (e) {}
+    var anuladas = getOrCreateAsistenciaSheet_(ss, 'asistencias_anuladas', HEADERS_ASISTENCIAS_ANULADAS_);
+    var ha = anuladas.getRange(1, 1, 1, anuladas.getLastColumn()).getValues()[0];
+    var valores = {
+      id: id, dni: v('dni'), nombre: v('nombre'), cargo: v('cargo'), evento: v('evento'), fecha: fecha, hora: hora,
+      nota: v('nota'), timestamp: v('timestamp'), anulado_por: usuario, anulado_en: new Date().toISOString(), motivo_anulacion: motivo
+    };
+    anuladas.appendRow(ha.map(function (n) { return valores[n] !== undefined ? valores[n] : ''; }));
+    sheet.deleteRow(fila + 1);
+    // Quitar la marca del indice anti-duplicado del dia: si no, el kiosko
+    // seguiria rechazando la marca correcta de ese evento.
+    try {
+      var idx = leerIndiceDia_(fecha);
+      if (idx) {
+        delete idx[claveDup_(String(v('dni')), String(v('evento')))];
+        CacheService.getScriptCache().put(cacheKeyDia_(fecha), JSON.stringify(idx), CACHE_TTL_DUP_);
+      }
+    } catch (e) { /* no critico: la hoja es la autoridad */ }
+    return { success: true, message: 'Marca anulada: ' + v('nombre') + ' · ' + v('evento') + ' ' + fecha + ' ' + hora.slice(0, 5) + '. Queda registrada en asistencias_anuladas.' };
   });
 }
 
@@ -4542,8 +4845,12 @@ function leerConfigPlanilla_() {
     if (!clave || !(clave in cfg)) continue;
     var valor = rows[i][1];
     if (valor instanceof Date) {
-      // Sheets convierte "07:30" en Date; volver a HH:mm
-      valor = Utilities.formatDate(valor, 'America/Lima', 'HH:mm');
+      // Sheets convierte "07:30" en Date (con fecha 1899-12-30) y "2026-07-02"
+      // en Date real: la hora vuelve a HH:mm y la fecha a AAAA-MM-DD. Antes todo
+      // salía como hora y fecha_operativo quedaba en "00:00".
+      valor = valor.getFullYear() <= 1900
+        ? Utilities.formatDate(valor, 'America/Lima', 'HH:mm')
+        : Utilities.formatDate(valor, 'America/Lima', 'yyyy-MM-dd');
     }
     var num = parseFloat(valor);
     cfg[clave] = (typeof CONFIG_PLANILLA_DEFAULT[clave] === 'number' && !isNaN(num)) ? num : String(valor);
@@ -4555,9 +4862,65 @@ function getConfigPlanillaAction() {
   return { success: true, data: leerConfigPlanilla_() };
 }
 
+// Rangos válidos de cada parámetro (mismas reglas que ConfigPlanillaForm.tsx).
+// Un valor fuera de rango cambiaría los descuentos de todos: se rechaza.
+var REGLAS_CONFIG_PLANILLA_ = {
+  ingreso_manana: { hora: true, etiqueta: 'Ingreso mañana' },
+  salida_manana: { hora: true, etiqueta: 'Salida mañana' },
+  ingreso_tarde: { hora: true, etiqueta: 'Ingreso tarde' },
+  salida_tarde: { hora: true, etiqueta: 'Salida tarde' },
+  salida_autorizada: { hora: true, etiqueta: 'Salida autorizada' },
+  tolerancia_manana_min: { min: 0, max: 120, entero: true, etiqueta: 'Tolerancia mañana' },
+  tolerancia_tarde_min: { min: 0, max: 120, entero: true, etiqueta: 'Tolerancia tarde' },
+  tardanza_grave_min: { min: 1, max: 480, entero: true, etiqueta: 'Tardanza grave' },
+  jornada_horas: { min: 1, max: 24, etiqueta: 'Jornada' },
+  factor_descanso_semanal: { min: 0, max: 1, etiqueta: 'Factor dominical' },
+  plazo_sustento_horas: { min: 1, max: 720, entero: true, etiqueta: 'Plazo de sustento' },
+  divisor_mes: { min: 1, max: 31, entero: true, etiqueta: 'Divisor mensual' },
+  rmv: { min: 500, max: 10000, etiqueta: 'RMV' },
+  fecha_operativo: { fecha: true, etiqueta: 'Fecha de inicio operativo' }
+};
+
+function validarConfigPlanilla_(valores) {
+  var errores = [];
+  var limpio = {};
+  Object.keys(valores).forEach(function (k) {
+    var r = REGLAS_CONFIG_PLANILLA_[k];
+    if (!r) return;
+    var v = String(valores[k] === undefined || valores[k] === null ? '' : valores[k]).trim().replace(',', '.');
+    if (!v) { errores.push(r.etiqueta + ': es obligatorio'); return; }
+    if (r.hora) {
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) errores.push(r.etiqueta + ': usa el formato HH:MM');
+      else limpio[k] = v;
+      return;
+    }
+    if (r.fecha) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) errores.push(r.etiqueta + ': usa el formato AAAA-MM-DD');
+      else limpio[k] = v;
+      return;
+    }
+    var n = Number(v);
+    if (isNaN(n)) { errores.push(r.etiqueta + ': debe ser un número'); return; }
+    if (r.entero && Math.floor(n) !== n) { errores.push(r.etiqueta + ': debe ser un número entero'); return; }
+    if (n < r.min || n > r.max) { errores.push(r.etiqueta + ': debe estar entre ' + r.min + ' y ' + r.max); return; }
+    limpio[k] = n;
+  });
+  // Orden del horario (con los valores nuevos o los vigentes)
+  var actual = leerConfigPlanilla_();
+  var hm = function (k) { var x = String(limpio[k] !== undefined ? limpio[k] : actual[k]).split(':'); return Number(x[0]) * 60 + Number(x[1]); };
+  if (!errores.length) {
+    if (!(hm('ingreso_manana') < hm('salida_manana'))) errores.push('La salida de la mañana debe ser después del ingreso');
+    else if (!(hm('salida_manana') <= hm('ingreso_tarde'))) errores.push('El ingreso de la tarde debe ser igual o después de la salida de la mañana');
+    else if (!(hm('ingreso_tarde') < hm('salida_tarde'))) errores.push('La salida de la tarde debe ser después del ingreso de la tarde');
+  }
+  return { errores: errores, limpio: limpio };
+}
+
 function updateConfigPlanilla(data) {
+  var validacion = validarConfigPlanilla_((data && data.valores) || {});
+  if (validacion.errores.length) return { success: false, error: 'No se guardó: ' + validacion.errores.join('; ') };
   return withLock_(function () {
-    var valores = data.valores || {};
+    var valores = validacion.limpio;
     var ss = SpreadsheetApp.openById(SHEET_ID);
     var sheet = ss.getSheetByName('config_planilla');
     if (!sheet) return { success: false, error: 'Ejecuta setupPlanillaSheets() primero' };
@@ -4783,7 +5146,14 @@ function updateSueldo(data) {
         if (rmvCol >= 0 && (rows[i][rmvCol] === true || rows[i][rmvCol] === 'TRUE')) {
           return { success: false, error: 'Este trabajador gana la RMV: su sueldo se ajusta con el parametro rmv de la configuracion' };
         }
-        sheet.getRange(i + 1, sueldoCol + 1).setValue(Number(data.sueldo) || 0);
+        // Vacío, texto o 0 no se guardan: dejaría al trabajador con sueldo 0 en planilla
+        var sueldo = Number(String(data.sueldo === undefined || data.sueldo === null ? '' : data.sueldo).trim().replace(',', '.'));
+        if (String(data.sueldo === undefined || data.sueldo === null ? '' : data.sueldo).trim() === '' || isNaN(sueldo) || sueldo <= 0) {
+          return { success: false, error: 'Escribe un sueldo válido (mayor que 0)' };
+        }
+        if (sueldo > 100000) return { success: false, error: 'El sueldo parece demasiado alto; revísalo' };
+        if (sueldoCol < 0) return { success: false, error: 'La hoja sueldos no tiene la columna "sueldo"' };
+        sheet.getRange(i + 1, sueldoCol + 1).setValue(sueldo);
         invalidarCacheTrabajadores_();
         return { success: true, message: 'Sueldo actualizado' };
       }
@@ -5551,7 +5921,7 @@ function getDashboardStats() {
 
   const postulacionesPendientes = applications.filter(a => {
     const estado = appEstadoCol >= 0 ? a[appEstadoCol] : a[12];
-    return estado === 'pendiente' || estado === 'revision';
+    return estado === 'pendiente' || estado === 'revision' || estado === 'en_revision';
   }).length;
 
   const convocatoriasActivas = jobs.filter(j => {
@@ -6456,7 +6826,7 @@ var FUNCIONES_REQUERIDAS = [
   'uploadFile', 'getArchivo', 'getDashboardStats',
   'verificarEmpleado', 'marcarAsistencia', 'getAttendances', 'obtenerAsistenciasHoy',
   'getTrabajadores', 'registrarAsistenciaFoto', 'subirJustificacion', 'getAsistenciasV2', 'getJustificaciones',
-  'registrarAsistenciaManual',
+  'registrarAsistenciaManual', 'anularMarcaManual',
   'getConfigPlanillaAction', 'updateConfigPlanilla', 'getSueldos', 'updateSueldo', 'crearTrabajador',
   'darDeBajaTrabajador', 'reactivarTrabajador',
   'getIncidencias', 'revisarIncidencia', 'sincronizarIncidencias', 'getEstadoPlanilla', 'sincronizarIncidenciasProgramada',
@@ -6469,6 +6839,7 @@ var FUNCIONES_REQUERIDAS = [
   'crearCapacitacion', 'actualizarCapacitacion', 'eliminarCapacitacion',
   'getPreguntas', 'crearPregunta', 'actualizarPregunta', 'eliminarPregunta',
   'getEvaluaciones', 'revisarEvaluacion',
+  'getCapacitacionesAdmin', 'archivarCapacitacion', 'archivarPregunta', 'anularEvaluacion',
   'licImportar', 'licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia',
   'licDocumentos', 'licActualizarDocumento', 'licCrearDocumento', 'licActualizarProceso', 'licExportarCambios',
   'licPersonal', 'licContratos', 'licActualizarPersona', 'licActualizarContrato', 'licActualizarFactura',

@@ -137,8 +137,12 @@ function leerConfigPlanilla_() {
     if (!clave || !(clave in cfg)) continue;
     var valor = rows[i][1];
     if (valor instanceof Date) {
-      // Sheets convierte "07:30" en Date; volver a HH:mm
-      valor = Utilities.formatDate(valor, 'America/Lima', 'HH:mm');
+      // Sheets convierte "07:30" en Date (con fecha 1899-12-30) y "2026-07-02"
+      // en Date real: la hora vuelve a HH:mm y la fecha a AAAA-MM-DD. Antes todo
+      // salía como hora y fecha_operativo quedaba en "00:00".
+      valor = valor.getFullYear() <= 1900
+        ? Utilities.formatDate(valor, 'America/Lima', 'HH:mm')
+        : Utilities.formatDate(valor, 'America/Lima', 'yyyy-MM-dd');
     }
     var num = parseFloat(valor);
     cfg[clave] = (typeof CONFIG_PLANILLA_DEFAULT[clave] === 'number' && !isNaN(num)) ? num : String(valor);
@@ -150,9 +154,65 @@ function getConfigPlanillaAction() {
   return { success: true, data: leerConfigPlanilla_() };
 }
 
+// Rangos válidos de cada parámetro (mismas reglas que ConfigPlanillaForm.tsx).
+// Un valor fuera de rango cambiaría los descuentos de todos: se rechaza.
+var REGLAS_CONFIG_PLANILLA_ = {
+  ingreso_manana: { hora: true, etiqueta: 'Ingreso mañana' },
+  salida_manana: { hora: true, etiqueta: 'Salida mañana' },
+  ingreso_tarde: { hora: true, etiqueta: 'Ingreso tarde' },
+  salida_tarde: { hora: true, etiqueta: 'Salida tarde' },
+  salida_autorizada: { hora: true, etiqueta: 'Salida autorizada' },
+  tolerancia_manana_min: { min: 0, max: 120, entero: true, etiqueta: 'Tolerancia mañana' },
+  tolerancia_tarde_min: { min: 0, max: 120, entero: true, etiqueta: 'Tolerancia tarde' },
+  tardanza_grave_min: { min: 1, max: 480, entero: true, etiqueta: 'Tardanza grave' },
+  jornada_horas: { min: 1, max: 24, etiqueta: 'Jornada' },
+  factor_descanso_semanal: { min: 0, max: 1, etiqueta: 'Factor dominical' },
+  plazo_sustento_horas: { min: 1, max: 720, entero: true, etiqueta: 'Plazo de sustento' },
+  divisor_mes: { min: 1, max: 31, entero: true, etiqueta: 'Divisor mensual' },
+  rmv: { min: 500, max: 10000, etiqueta: 'RMV' },
+  fecha_operativo: { fecha: true, etiqueta: 'Fecha de inicio operativo' }
+};
+
+function validarConfigPlanilla_(valores) {
+  var errores = [];
+  var limpio = {};
+  Object.keys(valores).forEach(function (k) {
+    var r = REGLAS_CONFIG_PLANILLA_[k];
+    if (!r) return;
+    var v = String(valores[k] === undefined || valores[k] === null ? '' : valores[k]).trim().replace(',', '.');
+    if (!v) { errores.push(r.etiqueta + ': es obligatorio'); return; }
+    if (r.hora) {
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) errores.push(r.etiqueta + ': usa el formato HH:MM');
+      else limpio[k] = v;
+      return;
+    }
+    if (r.fecha) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) errores.push(r.etiqueta + ': usa el formato AAAA-MM-DD');
+      else limpio[k] = v;
+      return;
+    }
+    var n = Number(v);
+    if (isNaN(n)) { errores.push(r.etiqueta + ': debe ser un número'); return; }
+    if (r.entero && Math.floor(n) !== n) { errores.push(r.etiqueta + ': debe ser un número entero'); return; }
+    if (n < r.min || n > r.max) { errores.push(r.etiqueta + ': debe estar entre ' + r.min + ' y ' + r.max); return; }
+    limpio[k] = n;
+  });
+  // Orden del horario (con los valores nuevos o los vigentes)
+  var actual = leerConfigPlanilla_();
+  var hm = function (k) { var x = String(limpio[k] !== undefined ? limpio[k] : actual[k]).split(':'); return Number(x[0]) * 60 + Number(x[1]); };
+  if (!errores.length) {
+    if (!(hm('ingreso_manana') < hm('salida_manana'))) errores.push('La salida de la mañana debe ser después del ingreso');
+    else if (!(hm('salida_manana') <= hm('ingreso_tarde'))) errores.push('El ingreso de la tarde debe ser igual o después de la salida de la mañana');
+    else if (!(hm('ingreso_tarde') < hm('salida_tarde'))) errores.push('La salida de la tarde debe ser después del ingreso de la tarde');
+  }
+  return { errores: errores, limpio: limpio };
+}
+
 function updateConfigPlanilla(data) {
+  var validacion = validarConfigPlanilla_((data && data.valores) || {});
+  if (validacion.errores.length) return { success: false, error: 'No se guardó: ' + validacion.errores.join('; ') };
   return withLock_(function () {
-    var valores = data.valores || {};
+    var valores = validacion.limpio;
     var ss = SpreadsheetApp.openById(SHEET_ID);
     var sheet = ss.getSheetByName('config_planilla');
     if (!sheet) return { success: false, error: 'Ejecuta setupPlanillaSheets() primero' };
@@ -378,7 +438,14 @@ function updateSueldo(data) {
         if (rmvCol >= 0 && (rows[i][rmvCol] === true || rows[i][rmvCol] === 'TRUE')) {
           return { success: false, error: 'Este trabajador gana la RMV: su sueldo se ajusta con el parametro rmv de la configuracion' };
         }
-        sheet.getRange(i + 1, sueldoCol + 1).setValue(Number(data.sueldo) || 0);
+        // Vacío, texto o 0 no se guardan: dejaría al trabajador con sueldo 0 en planilla
+        var sueldo = Number(String(data.sueldo === undefined || data.sueldo === null ? '' : data.sueldo).trim().replace(',', '.'));
+        if (String(data.sueldo === undefined || data.sueldo === null ? '' : data.sueldo).trim() === '' || isNaN(sueldo) || sueldo <= 0) {
+          return { success: false, error: 'Escribe un sueldo válido (mayor que 0)' };
+        }
+        if (sueldo > 100000) return { success: false, error: 'El sueldo parece demasiado alto; revísalo' };
+        if (sueldoCol < 0) return { success: false, error: 'La hoja sueldos no tiene la columna "sueldo"' };
+        sheet.getRange(i + 1, sueldoCol + 1).setValue(sueldo);
         invalidarCacheTrabajadores_();
         return { success: true, message: 'Sueldo actualizado' };
       }

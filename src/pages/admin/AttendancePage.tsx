@@ -102,6 +102,28 @@ export default function AttendancePage() {
   const [manualHora, setManualHora] = useState('')
   const [manualNota, setManualNota] = useState('')
   const [manualSaving, setManualSaving] = useState(false)
+  // Anular una marca manual equivocada (motivo obligatorio, queda auditada)
+  const [anulando, setAnulando] = useState<{ id: string; texto: string } | null>(null)
+  const [motivoAnular, setMotivoAnular] = useState('')
+  const [anulandoSaving, setAnulandoSaving] = useState(false)
+  const confirmarAnular = async () => {
+    if (!anulando || motivoAnular.trim().length < 5) return
+    setAnulandoSaving(true)
+    try {
+      const res = await api.anularMarcaManual(anulando.id, motivoAnular.trim())
+      if (res.success) {
+        toast.success(res.message || 'Marca anulada')
+        setAnulando(null)
+        loadData()
+      } else {
+        toast.error(res.error || 'No se pudo anular')
+      }
+    } catch {
+      toast.error('Error de conexión. Intenta de nuevo.')
+    } finally {
+      setAnulandoSaving(false)
+    }
+  }
 
   // Roster de trabajadores (hoja 'sueldos' vía endpoint público, sin montos).
   // Fuente única de verdad: altas/bajas del panel de Planilla se reflejan sin redeploy.
@@ -529,6 +551,15 @@ export default function AttendancePage() {
                                 </span>
                               )}
                             </span>
+                            {!r.foto_url && (
+                              <button
+                                onClick={() => { setMotivoAnular(''); setAnulando({ id: String(r.id), texto: `${r.nombre} · ${EVENTO_LABELS[r.evento] || r.evento} · ${r.fecha} ${String(r.hora).slice(0, 5)}` }) }}
+                                className="ml-2 text-[11px] text-rose-400 hover:text-rose-300 underline"
+                                title="Anular esta marca manual (queda registrada con el motivo)"
+                              >
+                                Anular
+                              </button>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center text-gray-300 hidden sm:table-cell">{r.fecha}</td>
                           <td className="px-4 py-3 text-center font-mono text-white">{String(r.hora).slice(0, 5)}</td>
@@ -787,6 +818,37 @@ export default function AttendancePage() {
             title={`${justModal.nombre} · ${justModal.motivo} · ${justModal.fecha}`}
             onClose={() => setJustModal(null)}
           />
+        )}
+
+        {/* ── Confirmar anulación de marca manual ── */}
+        {anulando && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget && !anulandoSaving) setAnulando(null) }}>
+            <div className="w-full max-w-md bg-primary-900 border border-rose-500/50 rounded-xl p-6 space-y-4">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2"><FaExclamationTriangle className="text-rose-400" /> Anular marca manual</h3>
+              <p className="text-sm text-gray-300">{anulando.texto}</p>
+              <p className="text-xs text-gray-400">La marca sale de la asistencia (y el kiosko vuelve a aceptar ese evento), pero queda copiada con el motivo en la hoja <b>asistencias_anuladas</b>.</p>
+              <label className="block text-sm text-gray-300">
+                Motivo (obligatorio)
+                <input
+                  value={motivoAnular}
+                  onChange={(e) => setMotivoAnular(e.target.value)}
+                  autoFocus
+                  placeholder="Ej.: se registró en la fecha equivocada"
+                  className="mt-1 w-full bg-primary-800 border border-primary-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-rose-400"
+                />
+              </label>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setAnulando(null)} disabled={anulandoSaving} className="px-4 py-2 rounded-lg border border-primary-600 text-gray-300">Cancelar</button>
+                <button
+                  onClick={confirmarAnular}
+                  disabled={motivoAnular.trim().length < 5 || anulandoSaving}
+                  className="px-4 py-2 rounded-lg bg-rose-500 text-white font-semibold disabled:opacity-40"
+                >
+                  {anulandoSaving ? 'Anulando…' : 'Sí, anular'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* ── Modal registro manual ── */}

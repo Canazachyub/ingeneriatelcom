@@ -22,6 +22,7 @@ import {
   FaSave,
   FaEye,
 } from 'react-icons/fa'
+import { Link } from 'react-router-dom'
 import { api } from '../../api/appScriptApi'
 import AdminLayout from '../../components/admin/AdminLayout'
 import ErrorCarga from '../../components/admin/ErrorCarga'
@@ -214,6 +215,19 @@ function DetailModal({ application, isSaving, onClose, onStatusChange, onSaveNot
         className="bg-gray-900 rounded-2xl border border-gray-700 w-full max-w-3xl max-h-[92vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Contratado: marcar el estado NO crea al trabajador; se avisa y se da el atajo */}
+        {application.status === 'accepted' && (
+          <div className="mx-6 mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/40 text-sm text-green-100 flex flex-wrap items-center gap-3">
+            <FaUserTie className="text-green-300" />
+            <span className="flex-1">Marcado como <b>contratado</b>. Para que pueda marcar asistencia y entrar en planilla, créalo como trabajador en <b>Personal</b> (DNI {application.dni || '—'}).</span>
+            <Link
+              to={`/admin/empleados?nuevo=1&dni=${encodeURIComponent(application.dni)}&nombre=${encodeURIComponent(application.fullName)}`}
+              className="px-3 py-1.5 rounded-lg bg-green-500 text-gray-900 font-semibold whitespace-nowrap"
+            >
+              Crear trabajador en Personal
+            </Link>
+          </div>
+        )}
         {/* Modal Header */}
         <div className="flex items-start justify-between p-6 border-b border-gray-800 sticky top-0 bg-gray-900 z-10 rounded-t-2xl">
           <div className="flex-1 min-w-0">
@@ -599,7 +613,9 @@ export default function ApplicationsPage() {
     setIsSaving(false)
 
     if (result.success) {
-      showToast('success', notificar ? 'Estado actualizado y aviso enviado al postulante' : 'Estado actualizado correctamente')
+      showToast('success', newStatus === 'accepted'
+        ? 'Marcado como contratado. Falta crearlo como trabajador en Personal (botón verde en su ficha).'
+        : notificar ? 'Estado actualizado y aviso enviado al postulante' : 'Estado actualizado correctamente')
       setApplications((prev) =>
         prev.map((a) => (a.id === applicationId ? { ...a, status: newStatus } : a))
       )

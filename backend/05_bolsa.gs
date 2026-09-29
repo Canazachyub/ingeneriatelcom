@@ -27,26 +27,33 @@ function uploadJobPdf(data) {
     if (!data.fileContent || !data.fileName) {
       return { success: false, error: 'Archivo requerido' };
     }
+    // Solo PDF y con tamaño razonable
+    const mime = data.mimeType || 'application/pdf';
+    if (mime !== 'application/pdf') return { success: false, error: 'La ficha debe ser un PDF' };
+    const errArchivo = validarArchivoSubido_(data.fileContent, mime, 'documento');
+    if (errArchivo) return errArchivo;
 
     const mainFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
     const fichasFolder = getOrCreateFolder(mainFolder, 'Fichas_Postulacion');
     const cityName = (data.ciudad || 'General').replace(/[\\/:*?"<>|]/g, '_');
     const cityFolder = getOrCreateFolder(fichasFolder, cityName);
 
-    // If replacing an old file for this job, delete it
-    if (data.convocatoriaId) {
-      const oldFiles = cityFolder.getFilesByName(data.fileName);
-      while (oldFiles.hasNext()) {
-        oldFiles.next().setTrashed(true);
+    // El archivo lleva el id de la convocatoria al inicio: al reemplazar solo
+    // se manda a la papelera la ficha anterior de ESA convocatoria (antes se
+    // borraba cualquier archivo con el mismo nombre, aunque fuera de otra).
+    const limpio = String(data.fileName).replace(/[\\/:*?"<>|]/g, '_');
+    const prefijo = data.convocatoriaId ? String(data.convocatoriaId) + ' - ' : '';
+    const nombreFinal = prefijo && limpio.indexOf(prefijo) !== 0 ? prefijo + limpio : limpio;
+    if (prefijo) {
+      const previos = cityFolder.getFiles();
+      while (previos.hasNext()) {
+        const f = previos.next();
+        if (f.getName().indexOf(prefijo) === 0) f.setTrashed(true);
       }
     }
 
     const decodedBytes = Utilities.base64Decode(data.fileContent);
-    const blob = Utilities.newBlob(
-      decodedBytes,
-      data.mimeType || 'application/pdf',
-      data.fileName
-    );
+    const blob = Utilities.newBlob(decodedBytes, mime, nombreFinal);
     const file = cityFolder.createFile(blob);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
@@ -67,6 +74,28 @@ function uploadJobPdf(data) {
 // ============================================
 // CONVOCATORIAS (BOLSA DE TRABAJO)
 // ============================================
+// true si la fecha de cierre ya pasó (el mismo día de cierre aún se postula)
+function convocatoriaVencida_(fechaCierre) {
+  if (fechaCierre === '' || fechaCierre === null || fechaCierre === undefined) return false;
+  var f = fechaISO_(fechaCierre);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return false;
+  return f < Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
+}
+
+// Salario vacío o 0 → '' (sin dato); valida mínimo ≤ máximo. Devuelve error o null.
+function normalizarSalarios_(data) {
+  ['salario_min', 'salario_max'].forEach(function (k) {
+    if (data[k] === undefined) return;
+    var n = Number(data[k]);
+    data[k] = data[k] === '' || data[k] === null || isNaN(n) || n <= 0 ? '' : n;
+  });
+  if (data.salario_min !== undefined && data.salario_max !== undefined && data.salario_min !== '' && data.salario_max !== '' &&
+      Number(data.salario_min) > Number(data.salario_max)) {
+    return { success: false, error: 'El salario mínimo no puede ser mayor que el máximo' };
+  }
+  return null;
+}
+
 function getActiveJobs() {
   const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
   const data = sheet.getDataRange().getValues();
@@ -74,13 +103,15 @@ function getActiveJobs() {
 
   // Encontrar indice de columna 'estado' dinamicamente
   const estadoCol = headers.indexOf('estado');
+  const cierreCol = headers.indexOf('fecha_cierre');
 
   const jobs = data.slice(1)
     .filter(row => {
       if (row[0] === '') return false;
-      // Verificar estado usando el indice correcto
-      const estado = estadoCol >= 0 ? row[estadoCol] : row[10];
-      return estado === 'activo';
+      // Verificar estado por nombre de columna (sin 'estado' no se publica nada)
+      const estado = estadoCol >= 0 ? row[estadoCol] : '';
+      // Una convocatoria con la fecha de cierre vencida ya no se publica
+      return estado === 'activo' && !(cierreCol >= 0 && convocatoriaVencida_(row[cierreCol]));
     })
     .map(row => {
       const job = rowToObject(headers, row);
@@ -128,6 +159,9 @@ function getJobById(id) {
 }
 
 function createJob(data) {
+  data = data || {};
+  const errSal = normalizarSalarios_(data);
+  if (errSal) return errSal;
   return withLock_(function () {
     const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
     const headers = sheet.getDataRange().getValues()[0];
@@ -185,6 +219,9 @@ function updateJob(data) {
       return idx >= 0 ? idx + 1 : -1;
     };
 
+    const errSal = normalizarSalarios_(data);
+    if (errSal) return errSal;
+
     // La hoja no tiene 'prioridad': la prioridad alta se guarda como 'urgente'
     if (data.urgente === undefined && data.prioridad !== undefined) {
       data.urgente = ['alta', 'urgente'].indexOf(String(data.prioridad).toLowerCase()) >= 0;
@@ -194,6 +231,13 @@ function updateJob(data) {
 
     for (let i = 1; i < jobs.length; i++) {
       if (jobs[i][0] === data.id) {
+        // Mínimo ≤ máximo también contra lo ya guardado (si solo se envía uno)
+        const cMin = getColNum('salario_min'), cMax = getColNum('salario_max');
+        const minF = data.salario_min !== undefined ? data.salario_min : (cMin > 0 ? jobs[i][cMin - 1] : '');
+        const maxF = data.salario_max !== undefined ? data.salario_max : (cMax > 0 ? jobs[i][cMax - 1] : '');
+        if (minF !== '' && maxF !== '' && Number(minF) > 0 && Number(maxF) > 0 && Number(minF) > Number(maxF)) {
+          return { success: false, error: 'El salario mínimo no puede ser mayor que el máximo' };
+        }
         // Actualizar campos usando nombres de columna
         if (data.titulo !== undefined) poner(i + 1, 'titulo', data.titulo);
         if (data.categoria !== undefined) poner(i + 1, 'categoria', data.categoria);
@@ -224,39 +268,35 @@ function updateJob(data) {
   });
 }
 
+var ESTADOS_CONVOCATORIA_ = ['activo', 'inactivo', 'cerrado', 'archivada'];
+
 function updateJobStatus(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
-  const jobs = sheet.getDataRange().getValues();
-  const headers = jobs[0];
-
-  // Encontrar indice de columna 'estado' dinamicamente
-  const estadoCol = headers.indexOf('estado');
-  const colNum = estadoCol >= 0 ? estadoCol + 1 : 14; // +1 porque getRange es 1-based
-
-  for (let i = 1; i < jobs.length; i++) {
-    if (jobs[i][0] === data.id) {
-      sheet.getRange(i + 1, colNum).setValue(data.estado);
-      return { success: true, message: 'Estado actualizado' };
-    }
-  }
-
-  return { success: false, error: 'Convocatoria no encontrada' };
-}
-
-function deleteJob(data) {
+  data = data || {};
+  if (ESTADOS_CONVOCATORIA_.indexOf(String(data.estado)) < 0) return { success: false, error: 'Estado no válido: ' + data.estado };
   return withLock_(function () {
     const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('convocatorias');
     const jobs = sheet.getDataRange().getValues();
+    const headers = jobs[0];
+    // Por nombre de columna: sin 'estado' no se escribe en una columna fija
+    const estadoCol = headers.indexOf('estado');
+    if (estadoCol < 0) return { success: false, error: 'La hoja convocatorias no tiene la columna estado' };
 
     for (let i = 1; i < jobs.length; i++) {
       if (jobs[i][0] === data.id) {
-        sheet.deleteRow(i + 1);
-        return { success: true, message: 'Convocatoria eliminada' };
+        sheet.getRange(i + 1, estadoCol + 1).setValue(data.estado);
+        const cUpd = headers.indexOf('updatedAt');
+        if (cUpd >= 0) sheet.getRange(i + 1, cUpd + 1).setValue(new Date());
+        return { success: true, message: data.estado === 'archivada' ? 'Convocatoria archivada' : 'Estado actualizado' };
       }
     }
-
     return { success: false, error: 'Convocatoria no encontrada' };
   });
+}
+
+// "Eliminar" ya no borra la fila: la ARCHIVA (sus postulaciones siguen
+// enlazadas). Se recupera con updateJobStatus a 'inactivo' o 'activo'.
+function deleteJob(data) {
+  return updateJobStatus({ id: (data || {}).id, estado: 'archivada' });
 }
 
 // ============================================
@@ -380,6 +420,10 @@ function validarConvocatoriaAbierta_(jobId) {
       var estado = cEstado >= 0 ? String(filas[i][cEstado]).toLowerCase().trim() : 'activo';
       if (estado && estado !== 'activo' && estado !== 'active') {
         return { success: false, error: 'Esta convocatoria ya no recibe postulaciones' };
+      }
+      var cCierre = h.indexOf('fecha_cierre');
+      if (cCierre >= 0 && convocatoriaVencida_(filas[i][cCierre])) {
+        return { success: false, error: 'Esta convocatoria cerró el ' + fechaISO_(filas[i][cCierre]) + ' y ya no recibe postulaciones' };
       }
       return null;
     }
@@ -640,11 +684,17 @@ function getContacts() {
   return { success: true, data: contacts };
 }
 
+var ESTADOS_CONTACTO_ = ['pendiente', 'nuevo', 'leido', 'en_proceso', 'respondido', 'archivado'];
+
 function updateContactStatus(data) {
+  data = data || {};
+  if (ESTADOS_CONTACTO_.indexOf(String(data.estado)) < 0) return { success: false, error: 'Estado no válido: ' + data.estado };
   const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('contactos');
   const contacts = sheet.getDataRange().getValues();
 
-  const cEstado = contacts[0].indexOf('estado') >= 0 ? contacts[0].indexOf('estado') : 7;
+  // Por nombre de columna: sin 'estado' no se escribe en una columna fija
+  const cEstado = contacts[0].indexOf('estado');
+  if (cEstado < 0) return { success: false, error: 'La hoja contactos no tiene la columna estado' };
   for (let i = 1; i < contacts.length; i++) {
     if (contacts[i][0] === data.id) {
       sheet.getRange(i + 1, cEstado + 1).setValue(data.estado);
@@ -655,18 +705,11 @@ function updateContactStatus(data) {
   return { success: false, error: 'Mensaje no encontrado' };
 }
 
+// "Eliminar" ya no borra: ARCHIVA el mensaje (se recupera desde "Ver archivados")
 function deleteContact(data) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('contactos');
-  const contacts = sheet.getDataRange().getValues();
-
-  for (let i = 1; i < contacts.length; i++) {
-    if (contacts[i][0] === data.id) {
-      sheet.deleteRow(i + 1);
-      return { success: true, message: 'Mensaje eliminado' };
-    }
-  }
-
-  return { success: false, error: 'Mensaje no encontrado' };
+  const r = updateContactStatus({ id: (data || {}).id, estado: 'archivado' });
+  if (r.success) r.message = 'Mensaje archivado';
+  return r;
 }
 
 // ============================================

@@ -8,7 +8,9 @@ export interface Capacitacion {
   nota_minima: number;
   tiempo_limite_min: number;
   foto_intervalo_seg: number;
-  estado: 'activo' | 'borrador' | 'cerrado';
+  estado: 'activo' | 'borrador' | 'cerrado' | 'archivado';
+  /** solo en el panel (getCapacitacionesAdmin) */
+  preguntas_activas?: number;
   fecha_creacion?: string;
 }
 
@@ -68,7 +70,7 @@ export interface Evaluacion {
   hora_inicio?: string;
   hora_fin?: string;
   duracion_seg?: number;
-  estado: 'en_curso' | 'pendiente_revision' | 'aprobado' | 'observado' | 'abandonado';
+  estado: 'en_curso' | 'pendiente_revision' | 'aprobado' | 'observado' | 'abandonado' | 'anulado';
   nota_final?: number;
   retroalimentacion?: string;
   revisado_por?: string;

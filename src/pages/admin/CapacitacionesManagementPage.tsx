@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  FaPlus, FaEdit, FaTrash, FaTimes, FaBook, FaListAlt,
-  FaSave, FaChevronDown
+  FaPlus, FaEdit, FaTimes, FaBook, FaListAlt,
+  FaSave, FaChevronDown, FaArchive, FaBoxOpen, FaExclamationTriangle
 } from 'react-icons/fa'
 import { api } from '../../api/appScriptApi'
 import { Capacitacion, Pregunta } from '../../types/capacitacion.types'
@@ -23,6 +23,34 @@ const emptyCapacitacion: Omit<Capacitacion, 'id' | 'fecha_creacion'> = {
   foto_intervalo_seg: 20, estado: 'borrador',
 }
 
+// Validación en el navegador (el backend repite las mismas reglas)
+function erroresCapacitacion(f: Omit<Capacitacion, 'id' | 'fecha_creacion'>): string[] {
+  const e: string[] = []
+  if (!f.titulo.trim()) e.push('Escribe el título')
+  if (!Number.isInteger(Number(f.num_preguntas)) || f.num_preguntas < 1 || f.num_preguntas > 100) e.push('N° de preguntas: un entero entre 1 y 100')
+  if (isNaN(Number(f.nota_minima)) || f.nota_minima < 0 || f.nota_minima > 20) e.push('Nota mínima: entre 0 y 20')
+  if (isNaN(Number(f.tiempo_limite_min)) || f.tiempo_limite_min <= 0) e.push('Tiempo: mayor que 0 minutos')
+  if (isNaN(Number(f.foto_intervalo_seg)) || f.foto_intervalo_seg < 5) e.push('Intervalo de foto: al menos 5 segundos')
+  return e
+}
+
+function erroresPregunta(f: Omit<Pregunta, 'id'>): string[] {
+  const e: string[] = []
+  if (!f.capacitacion_id) e.push('Elige la capacitación')
+  if (!f.pregunta.trim()) e.push('Escribe la pregunta')
+  if (isNaN(Number(f.puntaje)) || f.puntaje < 1 || f.puntaje > 10) e.push('Puntaje: entre 1 y 10')
+  if (f.tipo === 'multiple') {
+    const letras = (['a', 'b', 'c', 'd'] as const).filter((l) => String(f[`opcion_${l}`] || '').trim())
+    if (letras.length < 2) e.push('Escribe al menos 2 opciones')
+    const r = String(f.respuesta_correcta || '').toUpperCase()
+    if (!['A', 'B', 'C', 'D'].includes(r)) e.push('Elige la respuesta correcta')
+    else if (!String(f[`opcion_${r.toLowerCase()}` as 'opcion_a'] || '').trim()) e.push(`La opción ${r} (respuesta correcta) está vacía`)
+  } else if (!String(f.respuesta_correcta || '').trim()) {
+    e.push('Escribe la respuesta de referencia')
+  }
+  return e
+}
+
 const emptyPregunta: Omit<Pregunta, 'id'> = {
   capacitacion_id: '', pregunta: '', tipo: 'multiple',
   opcion_a: '', opcion_b: '', opcion_c: '', opcion_d: '',
@@ -37,6 +65,10 @@ export default function CapacitacionesManagementPage() {
   const [preguntas, setPreguntas] = useState<Pregunta[]>([])
   const [loading, setLoading] = useState(true)
   const [capSeleccionada, setCapSeleccionada] = useState<string>('')
+  // Nada se borra: se archiva y se puede recuperar
+  const [verArchivadas, setVerArchivadas] = useState(false)
+  const [verPreguntasArchivadas, setVerPreguntasArchivadas] = useState(false)
+  const [confirmando, setConfirmando] = useState<string | null>(null)
 
   // Modal capacitacion
   const [modalCap, setModalCap] = useState(false)
@@ -64,13 +96,13 @@ export default function CapacitacionesManagementPage() {
   const loadCapacitaciones = async () => {
     setLoading(true)
     setErrorCarga('')
-    const res = await api.getCapacitaciones()
+    const res = await api.getCapacitacionesAdmin(verArchivadas)
     if (res.success && res.data) setCapacitaciones(res.data)
     else { setCapacitaciones([]); setErrorCarga(res.error || 'Error desconocido') }
     setLoading(false)
   }
 
-  useEffect(() => { loadCapacitaciones() }, [])
+  useEffect(() => { loadCapacitaciones() }, [verArchivadas]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cargar preguntas cuando cambia la capacitacion seleccionada
   const loadPreguntas = async (capId: string) => {
@@ -106,7 +138,13 @@ export default function CapacitacionesManagementPage() {
     setModalCap(true)
   }
 
+  const errCap = erroresCapacitacion(formCap)
+  // Activar exige preguntas activas suficientes (un curso nuevo aún no tiene)
+  const activasCap = editCap ? (editCap.preguntas_activas ?? 0) : 0
+  const faltanPreguntas = formCap.estado === 'activo' && activasCap < formCap.num_preguntas
+
   const guardarCap = async () => {
+    if (errCap.length || faltanPreguntas) return
     setSavingCap(true)
     let res
     if (editCap) {
@@ -124,11 +162,11 @@ export default function CapacitacionesManagementPage() {
     }
   }
 
-  const eliminarCap = async (id: string, titulo: string) => {
-    if (!confirm(`¿Eliminar "${titulo}"? Esta acción no se puede deshacer.`)) return
-    const res = await api.eliminarCapacitacion(id)
+  const archivarCap = async (id: string, archivar: boolean) => {
+    setConfirmando(null)
+    const res = await api.archivarCapacitacion(id, archivar)
     if (res.success) {
-      showToast('Capacitación eliminada')
+      showToast(res.message || (archivar ? 'Capacitación archivada' : 'Capacitación recuperada'))
       loadCapacitaciones()
     } else {
       showToast('Error: ' + res.error)
@@ -148,8 +186,11 @@ export default function CapacitacionesManagementPage() {
     setModalPq(true)
   }
 
+  const errPq = erroresPregunta(formPq)
+
   const guardarPq = async () => {
     if (!formPq.capacitacion_id) { showToast('Selecciona una capacitación'); return }
+    if (errPq.length) return
     setSavingPq(true)
     let res
     if (editPq) {
@@ -162,27 +203,34 @@ export default function CapacitacionesManagementPage() {
       showToast(editPq ? 'Pregunta actualizada' : 'Pregunta creada')
       setModalPq(false)
       loadPreguntas(capSeleccionada)
+      loadCapacitaciones() // actualiza el conteo de preguntas activas
     } else {
       showToast('Error: ' + res.error)
     }
   }
 
-  const eliminarPq = async (id: string) => {
-    if (!confirm('¿Eliminar esta pregunta?')) return
-    const res = await api.eliminarPregunta(id)
+  const archivarPq = async (id: string, archivar: boolean) => {
+    setConfirmando(null)
+    const res = await api.archivarPregunta(id, archivar)
     if (res.success) {
-      showToast('Pregunta eliminada')
+      showToast(res.message || (archivar ? 'Pregunta archivada' : 'Pregunta recuperada'))
       loadPreguntas(capSeleccionada)
+      loadCapacitaciones()
     } else {
       showToast('Error: ' + res.error)
     }
   }
+
+  const capActual = capacitaciones.find((c) => c.id === capSeleccionada)
+  const preguntasVisibles = preguntas.filter((p) => verPreguntasArchivadas || p.estado !== 'inactiva')
+  const nActivas = preguntas.filter((p) => p.estado === 'activa').length
 
   const estadoBadge = (estado: string) => {
     const map: Record<string, string> = {
       activo: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30',
       borrador: 'bg-primary-800/60 text-primary-300 border border-primary-700',
       cerrado: 'bg-rose-500/15 text-rose-300 border border-rose-500/30',
+      archivado: 'bg-primary-800/60 text-primary-500 border border-primary-700',
     }
     return map[estado] || 'bg-primary-800/60 text-primary-300 border border-primary-700'
   }
@@ -215,7 +263,13 @@ export default function CapacitacionesManagementPage() {
       {tab === 'capacitaciones' && (
         <div>
           <div className="flex justify-between items-center mb-4">
-            <p className="text-sm text-primary-400">{capacitaciones.length} {capacitaciones.length !== 1 ? 'capacitaciones' : 'capacitación'}</p>
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-primary-400">{capacitaciones.length} {capacitaciones.length !== 1 ? 'capacitaciones' : 'capacitación'}</p>
+              <button onClick={() => setVerArchivadas(!verArchivadas)}
+                className={`text-xs px-3 py-1.5 rounded-lg border inline-flex items-center gap-1.5 ${verArchivadas ? 'bg-primary-700 border-primary-500 text-white' : 'border-primary-700 text-primary-400 hover:text-white'}`}>
+                <FaArchive /> {verArchivadas ? 'Ocultar archivadas' : 'Ver archivadas'}
+              </button>
+            </div>
             <button
               onClick={abrirCrearCap}
               className="flex items-center gap-2 bg-accent-electric hover:brightness-110 text-primary-950 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
@@ -246,7 +300,10 @@ export default function CapacitacionesManagementPage() {
                   <p className="text-primary-300 text-sm mb-3 line-clamp-2">{cap.descripcion}</p>
                   <div className="flex flex-wrap gap-3 text-xs text-primary-400 mb-4">
                     <span>{cap.categoria}</span>
-                    <span>{cap.num_preguntas} preg.</span>
+                    <span className={(cap.preguntas_activas ?? 0) < cap.num_preguntas ? 'text-amber-300' : ''}
+                      title="Preguntas activas en el banco / preguntas que pide el examen">
+                      {cap.preguntas_activas ?? 0}/{cap.num_preguntas} preg.
+                    </span>
                     <span>Nota mín: {cap.nota_minima}</span>
                     <span>{cap.tiempo_limite_min} min</span>
                   </div>
@@ -260,10 +317,23 @@ export default function CapacitacionesManagementPage() {
                     <button onClick={() => abrirEditarCap(cap)} className="p-2 text-primary-400 hover:text-accent-electric hover:bg-accent-electric/10 rounded-lg transition-colors">
                       <FaEdit />
                     </button>
-                    <button onClick={() => eliminarCap(cap.id, cap.titulo)} className="p-2 text-primary-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors">
-                      <FaTrash />
-                    </button>
+                    {cap.estado === 'archivado' ? (
+                      <button onClick={() => archivarCap(cap.id, false)} title="Recuperar (vuelve como borrador)" className="p-2 text-primary-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-colors">
+                        <FaBoxOpen />
+                      </button>
+                    ) : (
+                      <button onClick={() => setConfirmando('cap:' + cap.id)} title="Archivar (no se borra)" className="p-2 text-primary-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-colors">
+                        <FaArchive />
+                      </button>
+                    )}
                   </div>
+                  {confirmando === 'cap:' + cap.id && (
+                    <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/40 text-xs text-amber-100 flex flex-wrap items-center gap-2">
+                      <span className="flex-1">¿Archivar «{cap.titulo}»? Ya no se podrá rendir. Sus preguntas y evaluaciones se conservan y la recuperas con "Ver archivadas".</span>
+                      <button onClick={() => setConfirmando(null)} className="px-2 py-1 rounded border border-primary-600 text-primary-200">Cancelar</button>
+                      <button onClick={() => archivarCap(cap.id, true)} className="px-2 py-1 rounded bg-amber-400 text-primary-950 font-semibold">Sí, archivar</button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -283,11 +353,22 @@ export default function CapacitacionesManagementPage() {
                 className="border border-primary-700 rounded-xl px-3 py-2 text-sm text-white bg-primary-900/80 focus:outline-none focus:border-accent-electric"
               >
                 <option value="">Selecciona una capacitación</option>
-                {capacitaciones.map(c => (
-                  <option key={c.id} value={c.id}>{c.titulo}</option>
+                {capacitaciones.filter(c => c.estado !== 'archivado').map(c => (
+                  <option key={c.id} value={c.id}>{c.titulo}{c.estado !== 'activo' ? ` (${c.estado})` : ''}</option>
                 ))}
               </select>
             </div>
+            {capSeleccionada && (
+              <div className="flex items-center gap-3 text-xs">
+                <span className={capActual && nActivas < capActual.num_preguntas ? 'text-amber-300' : 'text-primary-400'}>
+                  {nActivas} preguntas activas{capActual ? ` · el examen pide ${capActual.num_preguntas}` : ''}
+                </span>
+                <button onClick={() => setVerPreguntasArchivadas(!verPreguntasArchivadas)}
+                  className={`px-3 py-1.5 rounded-lg border inline-flex items-center gap-1.5 ${verPreguntasArchivadas ? 'bg-primary-700 border-primary-500 text-white' : 'border-primary-700 text-primary-400 hover:text-white'}`}>
+                  <FaArchive /> {verPreguntasArchivadas ? 'Ocultar archivadas' : 'Ver archivadas'}
+                </button>
+              </div>
+            )}
             <button
               onClick={abrirCrearPq}
               disabled={!capSeleccionada}
@@ -304,15 +385,15 @@ export default function CapacitacionesManagementPage() {
             </div>
           ) : errorPreguntas ? (
             <ErrorCarga que="las preguntas" error={errorPreguntas} onReintentar={() => loadPreguntas(capSeleccionada)} />
-          ) : preguntas.length === 0 ? (
+          ) : preguntasVisibles.length === 0 ? (
             <div className="text-center py-12 text-primary-400">
               <FaListAlt className="text-4xl mx-auto mb-3 opacity-30" />
               <p>No hay preguntas para esta capacitación. Crea la primera con el botón de arriba.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {preguntas.map((pq, i) => (
-                <div key={pq.id} className="panel-hud p-4">
+              {preguntasVisibles.map((pq, i) => (
+                <div key={pq.id} className={`panel-hud p-4 ${pq.estado === 'inactiva' ? 'opacity-60' : ''}`}>
                   <div className="flex items-start gap-3">
                     <span className="shrink-0 w-6 h-6 bg-accent-electric/15 text-accent-electric rounded-full text-xs font-bold flex items-center justify-center mt-0.5">
                       {i + 1}
@@ -332,11 +413,24 @@ export default function CapacitacionesManagementPage() {
                       <button onClick={() => abrirEditarPq(pq)} className="p-2 text-primary-400 hover:text-accent-electric hover:bg-accent-electric/10 rounded-lg transition-colors">
                         <FaEdit className="text-xs" />
                       </button>
-                      <button onClick={() => eliminarPq(pq.id)} className="p-2 text-primary-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors">
-                        <FaTrash className="text-xs" />
-                      </button>
+                      {pq.estado === 'inactiva' ? (
+                        <button onClick={() => archivarPq(pq.id, false)} title="Recuperar" className="p-2 text-primary-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-colors">
+                          <FaBoxOpen className="text-xs" />
+                        </button>
+                      ) : (
+                        <button onClick={() => setConfirmando('pq:' + pq.id)} title="Archivar (no se borra)" className="p-2 text-primary-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-colors">
+                          <FaArchive className="text-xs" />
+                        </button>
+                      )}
                     </div>
                   </div>
+                  {confirmando === 'pq:' + pq.id && (
+                    <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/40 text-xs text-amber-100 flex flex-wrap items-center gap-2">
+                      <span className="flex-1">¿Archivar esta pregunta? Ya no saldrá en los exámenes nuevos. Se recupera con "Ver archivadas".</span>
+                      <button onClick={() => setConfirmando(null)} className="px-2 py-1 rounded border border-primary-600 text-primary-200">Cancelar</button>
+                      <button onClick={() => archivarPq(pq.id, true)} className="px-2 py-1 rounded bg-amber-400 text-primary-950 font-semibold">Sí, archivar</button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -394,6 +488,7 @@ export default function CapacitacionesManagementPage() {
                     <select value={formCap.estado} onChange={e => setFormCap(p => ({ ...p, estado: e.target.value as Capacitacion['estado'] }))}
                       className="w-full border border-primary-700 rounded-xl px-4 py-2.5 focus:outline-none focus:border-accent-electric text-sm text-white bg-primary-900/80">
                       {ESTADOS_CAP.map(s => <option key={s}>{s}</option>)}
+                      {formCap.estado === 'archivado' && <option value="archivado">archivado</option>}
                     </select>
                   </div>
                 </div>
@@ -427,12 +522,25 @@ export default function CapacitacionesManagementPage() {
                 </div>
               </div>
 
+              {(errCap.length > 0 || faltanPreguntas) && (
+                <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-xs text-amber-100 space-y-1">
+                  {errCap.map((e) => <p key={e} className="flex items-center gap-2"><FaExclamationTriangle className="shrink-0" /> {e}</p>)}
+                  {faltanPreguntas && (
+                    <p className="flex items-center gap-2"><FaExclamationTriangle className="shrink-0" />
+                      {editCap
+                        ? `Para activarla el banco necesita ${formCap.num_preguntas} preguntas activas y tiene ${activasCap}. Agrega preguntas o baja el N° de preguntas.`
+                        : 'Una capacitación nueva aún no tiene preguntas: guárdala como borrador, agrega las preguntas y luego actívala.'}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-3 mt-6">
                 <button onClick={() => setModalCap(false)}
                   className="flex-1 border border-primary-700 text-primary-200 py-2.5 rounded-xl text-sm hover:bg-primary-800/60 transition-colors">
                   Cancelar
                 </button>
-                <button onClick={guardarCap} disabled={savingCap || !formCap.titulo}
+                <button onClick={guardarCap} disabled={savingCap || errCap.length > 0 || faltanPreguntas}
                   className="flex-1 bg-accent-electric hover:brightness-110 disabled:opacity-50 text-primary-950 py-2.5 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2">
                   {savingCap ? <div className="w-4 h-4 border-2 border-primary-950 border-t-transparent rounded-full animate-spin" /> : <FaSave />}
                   {editCap ? 'Actualizar' : 'Crear'}
@@ -471,7 +579,7 @@ export default function CapacitacionesManagementPage() {
                   <select value={formPq.capacitacion_id} onChange={e => setFormPq(p => ({ ...p, capacitacion_id: e.target.value }))}
                     className="w-full border border-primary-700 rounded-xl px-4 py-2.5 focus:outline-none focus:border-accent-electric text-sm text-white bg-primary-900/80">
                     <option value="">Seleccionar...</option>
-                    {capacitaciones.map(c => <option key={c.id} value={c.id}>{c.titulo}</option>)}
+                    {capacitaciones.filter(c => c.estado !== 'archivado').map(c => <option key={c.id} value={c.id}>{c.titulo}</option>)}
                   </select>
                 </div>
 
@@ -548,12 +656,18 @@ export default function CapacitacionesManagementPage() {
                 </div>
               </div>
 
+              {errPq.length > 0 && (formPq.pregunta || editPq) && (
+                <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-xs text-amber-100 space-y-1">
+                  {errPq.map((e) => <p key={e} className="flex items-center gap-2"><FaExclamationTriangle className="shrink-0" /> {e}</p>)}
+                </div>
+              )}
+
               <div className="flex gap-3 mt-6">
                 <button onClick={() => setModalPq(false)}
                   className="flex-1 border border-primary-700 text-primary-200 py-2.5 rounded-xl text-sm hover:bg-primary-800/60 transition-colors">
                   Cancelar
                 </button>
-                <button onClick={guardarPq} disabled={savingPq || !formPq.pregunta || !formPq.capacitacion_id}
+                <button onClick={guardarPq} disabled={savingPq || errPq.length > 0}
                   className="flex-1 bg-accent-electric hover:brightness-110 disabled:opacity-50 text-primary-950 py-2.5 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2">
                   {savingPq ? <div className="w-4 h-4 border-2 border-primary-950 border-t-transparent rounded-full animate-spin" /> : <FaSave />}
                   {editPq ? 'Actualizar' : 'Crear'}

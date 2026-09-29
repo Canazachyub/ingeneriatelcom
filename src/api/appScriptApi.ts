@@ -1345,6 +1345,11 @@ class AppScriptApi {
 
   // Feriados / días no laborables (hoja 'feriados'): esos días no generan
   // falta ni omisión en planilla y se muestran como no laborables en informes.
+  // Anula una marca registrada a mano (queda copiada en asistencias_anuladas)
+  async anularMarcaManual(id: string, motivo: string): Promise<ApiResponse<null>> {
+    return this.request('anularMarcaManual', 'POST', { id, motivo })
+  }
+
   async getFeriados(): Promise<ApiResponse<{ fecha: string; descripcion: string }[]>> {
     return this.request('getFeriados', 'POST')
   }
@@ -1566,8 +1571,30 @@ class AppScriptApi {
     retroalimentacion: string
     estado: 'aprobado' | 'observado'
     revisado_por?: string
-  }): Promise<ApiResponse<null>> {
+    /** obligatorio para volver a calificar una evaluación ya calificada */
+    recalificar?: boolean
+  }): Promise<ApiResponse<{ correo_enviado: boolean; correo_error?: string }>> {
     return this.request('revisarEvaluacion', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  // Panel: todos los cursos (con preguntas_activas); archivados solo si se piden
+  async getCapacitacionesAdmin(archivados = false): Promise<ApiResponse<(Capacitacion & { preguntas_activas?: number })[]>> {
+    return this.request('getCapacitacionesAdmin', 'POST', { archivados })
+  }
+
+  /** Archiva (no borra) o recupera un curso; recuperado vuelve como borrador */
+  async archivarCapacitacion(id: string, archivar: boolean): Promise<ApiResponse<null>> {
+    return this.request('archivarCapacitacion', 'POST', { id, archivar })
+  }
+
+  /** Archiva (estado inactiva) o recupera una pregunta del banco */
+  async archivarPregunta(id: string, archivar: boolean): Promise<ApiResponse<null>> {
+    return this.request('archivarPregunta', 'POST', { id, archivar })
+  }
+
+  /** Reabrir intento: anula una evaluación en curso/sin calificar para volver a rendir */
+  async anularEvaluacion(id: string, motivo: string, revisado_por?: string): Promise<ApiResponse<null>> {
+    return this.request('anularEvaluacion', 'POST', { id, motivo, revisado_por })
   }
 
   // ============================================

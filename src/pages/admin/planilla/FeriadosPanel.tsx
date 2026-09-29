@@ -18,6 +18,8 @@ export default function FeriadosPanel() {
   const [descripcion, setDescripcion] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [sembrando, setSembrando] = useState(false)
+  // Confirmaciones en pantalla: qué acción espera un "sí"
+  const [confirmar, setConfirmar] = useState<null | { tipo: 'agregar' } | { tipo: 'sembrar' } | { tipo: 'eliminar'; feriado: Feriado }>(null)
 
   const cargar = async () => {
     setCargando(true)
@@ -30,11 +32,19 @@ export default function FeriadosPanel() {
 
   useEffect(() => { cargar() }, [])
 
-  const agregar = async () => {
+  // Primer clic: valida y pide confirmación; el "sí" llama a agregar()
+  const pedirAgregar = () => {
     if (!fecha || !descripcion.trim()) {
       toast.error('Completa la fecha y la descripción')
       return
     }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) { toast.error('Fecha inválida'); return }
+    if (feriados.some((f) => f.fecha === fecha)) { toast.error('Esa fecha ya está registrada como feriado'); return }
+    setConfirmar({ tipo: 'agregar' })
+  }
+
+  const agregar = async () => {
+    setConfirmar(null)
     setGuardando(true)
     const res = await api.agregarFeriado({ fecha, descripcion: descripcion.trim() })
     setGuardando(false)
@@ -49,6 +59,7 @@ export default function FeriadosPanel() {
   }
 
   const eliminar = async (f: Feriado) => {
+    setConfirmar(null)
     const res = await api.eliminarFeriado(f.fecha)
     if (res.success && res.data) {
       setFeriados([...res.data].sort((a, b) => a.fecha.localeCompare(b.fecha)))
@@ -59,6 +70,7 @@ export default function FeriadosPanel() {
   }
 
   const sembrar = async () => {
+    setConfirmar(null)
     setSembrando(true)
     const res = await api.sembrarFeriadosPeru2026()
     setSembrando(false)
@@ -83,7 +95,7 @@ export default function FeriadosPanel() {
           </p>
         </div>
         <button
-          onClick={sembrar}
+          onClick={() => setConfirmar({ tipo: 'sembrar' })}
           disabled={sembrando}
           className="inline-flex items-center gap-2 px-3 py-1.5 bg-accent-electric/15 border border-accent-electric/40 text-accent-electric rounded-lg text-xs font-medium hover:bg-accent-electric/25 transition-colors disabled:opacity-50 self-start"
         >
@@ -108,7 +120,7 @@ export default function FeriadosPanel() {
           className="flex-1 px-3 py-2 bg-primary-950 border border-primary-800 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-electric"
         />
         <button
-          onClick={agregar}
+          onClick={pedirAgregar}
           disabled={guardando}
           className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-accent-energy/15 border border-accent-energy/40 text-accent-energy rounded-lg text-sm font-medium hover:bg-accent-energy/25 transition-colors disabled:opacity-50"
         >
@@ -116,6 +128,33 @@ export default function FeriadosPanel() {
           {guardando ? 'Guardando…' : 'Agregar'}
         </button>
       </div>
+
+      {/* Confirmación */}
+      {confirmar && (
+        <div className="mb-4 p-3 rounded-xl border border-amber-500/50 bg-amber-500/10 text-xs text-amber-100">
+          {confirmar.tipo === 'agregar' && <>
+            <p className="font-semibold">¿Registrar {fecha.slice(8)}/{fecha.slice(5, 7)}/{fecha.slice(0, 4)} ({descripcion.trim()}) como no laborable?</p>
+            <p className="mt-1">Ese día nadie tendrá falta. Las incidencias <b>pendientes</b> (faltas y omisiones sin revisar) de esa fecha se eliminan. Lo ya revisado no se toca.</p>
+          </>}
+          {confirmar.tipo === 'sembrar' && <>
+            <p className="font-semibold">¿Cargar los feriados nacionales de Perú 2026?</p>
+            <p className="mt-1">Se agregan los que falten (no duplica). Las incidencias <b>pendientes</b> de esos días se eliminan; lo ya revisado no se toca.</p>
+          </>}
+          {confirmar.tipo === 'eliminar' && <>
+            <p className="font-semibold">¿Quitar el feriado {confirmar.feriado.fecha.slice(8)}/{confirmar.feriado.fecha.slice(5, 7)} ({confirmar.feriado.descripcion})?</p>
+            <p className="mt-1">Ese día vuelve a ser laborable: al sincronizar, quienes no marcaron tendrán falta.</p>
+          </>}
+          <div className="flex justify-end gap-2 mt-2">
+            <button onClick={() => setConfirmar(null)} className="px-3 py-1.5 text-primary-300 hover:text-white">Cancelar</button>
+            <button
+              onClick={() => confirmar.tipo === 'agregar' ? agregar() : confirmar.tipo === 'sembrar' ? sembrar() : eliminar(confirmar.feriado)}
+              className="px-3 py-1.5 bg-amber-500 text-[#111827] rounded-lg font-bold"
+            >
+              {confirmar.tipo === 'eliminar' ? 'Sí, quitar' : 'Sí, continuar'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Lista */}
       {cargando ? (
@@ -135,7 +174,7 @@ export default function FeriadosPanel() {
               <span className="font-mono text-accent-electric">{f.fecha.slice(8)}/{f.fecha.slice(5, 7)}</span>
               {f.descripcion}
               <button
-                onClick={() => eliminar(f)}
+                onClick={() => setConfirmar({ tipo: 'eliminar', feriado: f })}
                 className="text-gray-600 hover:text-rose-400 transition-colors"
                 title="Eliminar feriado"
               >

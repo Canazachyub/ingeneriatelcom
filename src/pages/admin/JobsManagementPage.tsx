@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   FaPlus,
   FaEdit,
-  FaTrash,
+  FaArchive,
+  FaBoxOpen,
   FaSearch,
   FaSpinner,
   FaTimes,
@@ -107,6 +108,9 @@ export default function JobsManagementPage() {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
+  // Archivar en vez de borrar: las postulaciones de la convocatoria se conservan
+  const [verArchivadas, setVerArchivadas] = useState(false)
+  const [archivando, setArchivando] = useState<string | null>(null)
 
   useEffect(() => {
     loadJobs()
@@ -158,7 +162,8 @@ export default function JobsManagementPage() {
       job.ubicacion.toLowerCase().includes(searchTerm.toLowerCase()) ||
       job.categoria.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = !filterStatus || job.estado === filterStatus
-    return matchesSearch && matchesStatus
+    const matchesArchivo = verArchivadas ? job.estado === 'archivada' : job.estado !== 'archivada'
+    return matchesSearch && matchesStatus && matchesArchivo
   })
 
   const handleOpenModal = (job?: JobData) => {
@@ -218,7 +223,7 @@ export default function JobsManagementPage() {
         const result = await api.uploadJobPdf({
           fileContent: base64,
           fileName: file.name,
-          mimeType: file.type || 'application/pdf',
+          mimeType: 'application/pdf',
           ciudad: formData.ubicacion,
           convocatoriaId: editingJob?.id,
         })
@@ -239,8 +244,19 @@ export default function JobsManagementPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSaving(true)
     setMessage({ type: '', text: '' })
+    // Salarios: vacío = "a convenir" (no 0); el mínimo no puede superar al máximo
+    const sMin = formData.salario_min ? Number(formData.salario_min) : 0
+    const sMax = formData.salario_max ? Number(formData.salario_max) : 0
+    if (Number.isNaN(sMin) || Number.isNaN(sMax) || sMin < 0 || sMax < 0) {
+      setMessage({ type: 'error', text: 'El salario debe ser un número (o déjalo vacío si es a convenir)' })
+      return
+    }
+    if (sMin && sMax && sMin > sMax) {
+      setMessage({ type: 'error', text: 'El salario mínimo no puede ser mayor que el máximo' })
+      return
+    }
+    setIsSaving(true)
 
     // Upload PDF if a new file was selected
     let pdfUrl = formData.pdf_url || pdfPreviewUrl
@@ -257,8 +273,8 @@ export default function JobsManagementPage() {
       beneficios: formData.beneficios,
       ubicacion: formData.ubicacion,
       modalidad: formData.modalidad,
-      salario_min: formData.salario_min ? Number(formData.salario_min) : 0,
-      salario_max: formData.salario_max ? Number(formData.salario_max) : 0,
+      salario_min: formData.salario_min ? Number(formData.salario_min) : '',
+      salario_max: formData.salario_max ? Number(formData.salario_max) : '',
       prioridad: formData.prioridad,
       fecha_cierre: formData.fecha_cierre,
       estado: formData.estado,
@@ -285,16 +301,28 @@ export default function JobsManagementPage() {
     }
   }
 
-  const handleDelete = async (job: JobData) => {
-    if (!confirm(`¿Eliminar la convocatoria "${job.titulo}"?\n\nEsta accion no se puede deshacer.`)) return
-
-    const result = await api.deleteJobAdmin(job.id)
+  // Archivar (antes "Eliminar"): se oculta de la bolsa y deja de recibir
+  // postulaciones, pero no se borra; se recupera desde "Ver archivadas".
+  const handleArchivar = async (job: JobData) => {
+    setArchivando(null)
+    const result = await api.deleteJobAdmin(job.id) // el backend ahora archiva
     if (result.success) {
-      setMessage({ type: 'success', text: 'Convocatoria eliminada' })
+      setMessage({ type: 'success', text: `Convocatoria "${job.titulo}" archivada. La recuperas en "Ver archivadas".` })
       loadJobs()
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000)
+      setTimeout(() => setMessage({ type: '', text: '' }), 4000)
     } else {
-      setMessage({ type: 'error', text: result.error || 'Error al eliminar' })
+      setMessage({ type: 'error', text: result.error || 'No se pudo archivar' })
+    }
+  }
+
+  const handleRecuperar = async (job: JobData) => {
+    const result = await api.updateJobAdmin(job.id, { estado: 'inactivo' })
+    if (result.success) {
+      setMessage({ type: 'success', text: `Convocatoria "${job.titulo}" recuperada (queda inactiva: actívala cuando quieras publicarla).` })
+      loadJobs()
+      setTimeout(() => setMessage({ type: '', text: '' }), 4000)
+    } else {
+      setMessage({ type: 'error', text: result.error || 'No se pudo recuperar' })
     }
   }
 
@@ -305,10 +333,23 @@ export default function JobsManagementPage() {
       loadJobs()
       setMessage({ type: 'success', text: `Convocatoria ${newStatus === 'activo' ? 'activada' : 'desactivada'}` })
       setTimeout(() => setMessage({ type: '', text: '' }), 3000)
+    } else {
+      setMessage({ type: 'error', text: `No se pudo ${newStatus === 'activo' ? 'activar' : 'desactivar'}: ${result.error || 'intenta de nuevo'}` })
     }
   }
 
+  // La fecha de cierre ya pasó: la bolsa pública no la muestra ni acepta postulaciones
+  const vencida = (job: JobData) => {
+    const f = String(job.fecha_cierre || '').slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return false
+    const hoyLima = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10)
+    return f < hoyLima
+  }
+
   const getStatusBadge = (status: string) => {
+    if (status === 'archivada') {
+      return <span className="px-2 py-1 rounded-full text-xs font-medium bg-slate-600/40 text-slate-300">Archivada</span>
+    }
     const isActive = status === 'activo'
     return (
       <span className={`px-2 py-1 rounded-full text-xs font-medium ${isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
@@ -334,7 +375,8 @@ export default function JobsManagementPage() {
     return `Hasta S/${max.toLocaleString()}`
   }
 
-  const activeCount = jobs.filter((j) => j.estado === 'activo').length
+  const activeCount = jobs.filter((j) => j.estado === 'activo' && !vencida(j)).length
+  const archivadasCount = jobs.filter((j) => j.estado === 'archivada').length
   const totalApplications = jobs.reduce((sum, j) => sum + (j.postulantes_count || 0), 0)
 
   return (
@@ -362,7 +404,7 @@ export default function JobsManagementPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-primary-900/50 backdrop-blur-sm rounded-xl border border-primary-800 p-4">
             <p className="text-primary-400 text-sm">Total</p>
-            <p className="text-2xl font-bold text-white">{jobs.length}</p>
+            <p className="text-2xl font-bold text-white">{jobs.length - archivadasCount}</p>
           </div>
           <div className="bg-green-500/10 backdrop-blur-sm rounded-xl border border-green-500/30 p-4">
             <p className="text-green-400 text-sm">Activas</p>
@@ -414,6 +456,12 @@ export default function JobsManagementPage() {
             <option value="activo">Activas</option>
             <option value="inactivo">Inactivas</option>
           </select>
+          <button
+            onClick={() => setVerArchivadas(!verArchivadas)}
+            className={`px-4 py-2 rounded-lg border text-sm inline-flex items-center gap-2 ${verArchivadas ? 'bg-slate-700 border-slate-400 text-white' : 'border-primary-700 text-primary-300 hover:text-white'}`}
+          >
+            <FaArchive /> {verArchivadas ? 'Ocultar archivadas' : `Ver archivadas${archivadasCount ? ` (${archivadasCount})` : ''}`}
+          </button>
         </div>
 
         {/* Jobs List */}
@@ -459,6 +507,11 @@ export default function JobsManagementPage() {
                         {job.categoria}
                       </span>
                       {getStatusBadge(job.estado)}
+                      {job.estado === 'activo' && vencida(job) && (
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-300" title="La bolsa pública ya no la muestra ni acepta postulaciones">
+                          Cerrada el {String(job.fecha_cierre).slice(0, 10)}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mb-2">
                       {job.imagen && (
@@ -498,7 +551,7 @@ export default function JobsManagementPage() {
                     >
                       Ver postulaciones
                     </Link>
-                    <button
+                    {job.estado !== 'archivada' && <button
                       onClick={() => handleToggleStatus(job)}
                       className={`p-2 rounded-lg transition-colors ${
                         job.estado === 'activo'
@@ -508,7 +561,7 @@ export default function JobsManagementPage() {
                       title={job.estado === 'activo' ? 'Desactivar' : 'Activar'}
                     >
                       {job.estado === 'activo' ? <FaEye /> : <FaEyeSlash />}
-                    </button>
+                    </button>}
                     <button
                       onClick={() => handleOpenModal(job)}
                       className="p-2 text-primary-400 hover:text-accent-electric hover:bg-primary-800 rounded-lg transition-colors"
@@ -516,15 +569,33 @@ export default function JobsManagementPage() {
                     >
                       <FaEdit />
                     </button>
-                    <button
-                      onClick={() => handleDelete(job)}
-                      className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                      title="Eliminar"
-                    >
-                      <FaTrash />
-                    </button>
+                    {job.estado === 'archivada' ? (
+                      <button
+                        onClick={() => handleRecuperar(job)}
+                        className="px-3 py-1.5 text-xs text-green-300 border border-green-500/40 rounded-lg hover:bg-green-500/10 inline-flex items-center gap-1.5"
+                        title="Recuperar"
+                      >
+                        <FaBoxOpen /> Recuperar
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setArchivando(archivando === job.id ? null : job.id)}
+                        className="p-2 text-primary-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-colors"
+                        title="Archivar"
+                      >
+                        <FaArchive />
+                      </button>
+                    )}
                   </div>
                 </div>
+                {archivando === job.id && (
+                  <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/40 text-sm text-amber-100 flex flex-wrap items-center gap-3">
+                    <FaExclamationTriangle className="text-amber-300" />
+                    <span className="flex-1">¿Archivar «{job.titulo}»? Deja de verse en la bolsa y de recibir postulaciones. No se borra: sus postulaciones se conservan y la recuperas en "Ver archivadas".</span>
+                    <button onClick={() => setArchivando(null)} className="px-3 py-1.5 rounded border border-primary-600 text-primary-200">Cancelar</button>
+                    <button onClick={() => handleArchivar(job)} className="px-3 py-1.5 rounded bg-amber-500 text-[#111827] font-semibold">Sí, archivar</button>
+                  </div>
+                )}
               </motion.div>
             ))}
           </div>
@@ -808,7 +879,18 @@ export default function JobsManagementPage() {
                         className="hidden"
                         onChange={(e) => {
                           const file = e.target.files?.[0]
-                          if (file) { setPdfFile(file); setPdfPreviewUrl('') }
+                          e.target.value = ''
+                          if (!file) return
+                          // Solo PDF de hasta 10 MB (el servidor también lo valida)
+                          if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+                            setMessage({ type: 'error', text: 'La ficha debe ser un archivo PDF' })
+                            return
+                          }
+                          if (file.size > 10 * 1024 * 1024) {
+                            setMessage({ type: 'error', text: `El PDF pesa ${(file.size / 1048576).toFixed(1)} MB: el máximo es 10 MB` })
+                            return
+                          }
+                          setPdfFile(file); setPdfPreviewUrl('')
                         }}
                       />
                     </label>
