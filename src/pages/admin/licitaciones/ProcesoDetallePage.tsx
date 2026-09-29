@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { FaArrowLeft, FaGavel, FaTrophy, FaSave, FaSpinner, FaFolderOpen } from 'react-icons/fa'
+import { FaArrowLeft, FaGavel, FaTrophy, FaSave, FaSpinner, FaFolderOpen, FaPen, FaPlus } from 'react-icons/fa'
 import { api, LicAccion, LicPostor, LicProceso } from '../../../api/appScriptApi'
 import AdminLayout from '../../../components/admin/AdminLayout'
 import ErrorCarga from '../../../components/admin/ErrorCarga'
 import { useToast } from '../../../context/ToastContext'
 import { fecha, money, pct, ResultadoBadge, Pestanas } from './licUtils'
+import FichaEditable, { EtiquetaEdicion } from './FichaEditable'
 
 const ESTADOS_SEGUIMIENTO = [
   { value: '', label: 'Sin definir' },
@@ -15,7 +16,7 @@ const ESTADOS_SEGUIMIENTO = [
   { value: 'cerrado', label: 'Cerrado' },
 ]
 
-function BarraPostor({ p, max }: { p: LicPostor; max: number }) {
+function BarraPostor({ p, max, onEditar }: { p: LicPostor; max: number; onEditar: () => void }) {
   const monto = Number(p.monto) || 0
   const ancho = max > 0 ? Math.max(2, (monto / max) * 100) : 0
   return (
@@ -25,7 +26,13 @@ function BarraPostor({ p, max }: { p: LicPostor; max: number }) {
           {p.es_telcom && <FaTrophy className="inline mr-1.5 text-accent-electric" />}
           {p.razon_social || 'Persona natural'} {p.gano && <span className="ml-1.5 text-[10px] uppercase text-emerald-400">Ganó</span>}
         </span>
-        <span className="text-primary-300 tabular-nums shrink-0">{money(p.monto)} · {pct(p.pct_vr)}</span>
+        <span className="flex items-center gap-3 shrink-0">
+          <EtiquetaEdicion fila={p as unknown as Record<string, unknown>} />
+          <span className="text-primary-300 tabular-nums">{money(p.monto)} · {pct(p.pct_vr)}</span>
+          <button onClick={onEditar} className="px-2.5 py-1 text-xs border border-primary-700 text-primary-200 hover:border-accent-energy inline-flex items-center gap-1.5">
+            <FaPen className="text-[10px]" /> Editar
+          </button>
+        </span>
       </div>
       <div className="h-2 rounded-full bg-primary-800 overflow-hidden">
         <div className={`h-full rounded-full ${p.es_telcom ? 'bg-accent-electric' : 'bg-primary-600'}`} style={{ width: `${ancho}%` }} />
@@ -46,6 +53,8 @@ export default function LicProcesoDetallePage() {
   const [estadoSeguimiento, setEstadoSeguimiento] = useState('')
   const [notas, setNotas] = useState('')
   const [guardando, setGuardando] = useState(false)
+  // Ficha abierta: datos de la licitación, un postor existente o uno nuevo
+  const [ficha, setFicha] = useState<null | { tipo: 'proceso' } | { tipo: 'postor'; fila: LicPostor | null }>(null)
 
   const cargar = async () => {
     if (!nom) return
@@ -72,7 +81,7 @@ export default function LicProcesoDetallePage() {
     setGuardando(true)
     const r = await api.licActualizarProceso({ nomenclatura: nom, estado_seguimiento: estadoSeguimiento, notas })
     setGuardando(false)
-    if (r.success) toast.success('Seguimiento actualizado')
+    if (r.success) { toast.success('Seguimiento actualizado'); cargar() }
     else toast.error(r.error || 'No se pudo guardar')
   }
 
@@ -102,7 +111,13 @@ export default function LicProcesoDetallePage() {
                 </h1>
                 <p className="text-primary-400 mt-1 max-w-2xl">{proceso.objeto}</p>
               </div>
-              <ResultadoBadge resultado={proceso.resultado} />
+              <div className="flex flex-wrap items-center gap-3">
+                <EtiquetaEdicion fila={proceso as unknown as Record<string, unknown>} />
+                <ResultadoBadge resultado={proceso.resultado} />
+                <button onClick={() => setFicha({ tipo: 'proceso' })} className="px-3 py-2 text-sm bg-accent-energy text-[#111827] font-semibold inline-flex items-center gap-2">
+                  <FaPen className="text-xs" /> Editar datos de la licitación
+                </button>
+              </div>
             </div>
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -137,12 +152,17 @@ export default function LicProcesoDetallePage() {
             )}
 
             <div className="panel-hud p-5">
-              <h2 className="font-display font-semibold text-white mb-4">Postores ({postores.length})</h2>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <h2 className="font-display font-semibold text-white">Postores ({postores.length})</h2>
+                <button onClick={() => setFicha({ tipo: 'postor', fila: null })} className="px-3 py-1.5 text-sm border border-accent-energy text-accent-energy hover:bg-accent-energy hover:text-[#111827] inline-flex items-center gap-2">
+                  <FaPlus className="text-xs" /> Agregar postor
+                </button>
+              </div>
               {postores.length === 0 ? (
                 <p className="text-primary-500 text-sm">Sin postores registrados para este proceso.</p>
               ) : (
                 <div className="space-y-2.5">
-                  {postores.map((p, i) => <BarraPostor key={p.ruc || i} p={p} max={maxMonto} />)}
+                  {postores.map((p, i) => <BarraPostor key={p.ruc || i} p={p} max={maxMonto} onEditar={() => setFicha({ tipo: 'postor', fila: p })} />)}
                 </div>
               )}
             </div>
@@ -197,6 +217,27 @@ export default function LicProcesoDetallePage() {
           </>
         )}
       </div>
+
+      {ficha && proceso && (
+        ficha.tipo === 'proceso' ? (
+          <FichaEditable
+            entidad="procesos"
+            fila={proceso as unknown as Record<string, unknown>}
+            onCerrar={() => setFicha(null)}
+            onGuardado={() => { setFicha(null); cargar() }}
+          />
+        ) : (
+          <FichaEditable
+            entidad="postores"
+            fila={ficha.fila as unknown as Record<string, unknown> | null}
+            inicial={{ nomenclatura: proceso.nomenclatura }}
+            clavesFijas={['nomenclatura']}
+            titulo={ficha.fila ? undefined : `Agregar postor a ${proceso.nomenclatura}`}
+            onCerrar={() => setFicha(null)}
+            onGuardado={() => { setFicha(null); cargar() }}
+          />
+        )
+      )}
     </AdminLayout>
   )
 }

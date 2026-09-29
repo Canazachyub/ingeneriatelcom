@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-29T07:12:03.602Z con tools/build-backend.mjs
+// Generado: 2026-09-29T07:54:47.880Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -538,17 +538,17 @@ var ROUTES = {
   // === LICITACIONES (16_licitaciones.gs) — hoy solo admin (ver docs/PLAN_LICITACIONES_ADMIN.md) ===
   licImportar: { nivel: 'admin', handler: function (ctx) { return licImportar(ctx.data); } },
   licResumen: { nivel: 'admin', handler: function () { return licResumen(); } },
-  licProcesos: { nivel: 'admin', handler: function () { return licProcesos(); } },
+  licProcesos: { nivel: 'admin', handler: function (ctx) { return licProcesos(ctx.data); } },
   licProceso: { nivel: 'admin', handler: function (ctx) { return licProceso(arg_(ctx, 'nom')); } },
-  licCompetidores: { nivel: 'admin', handler: function () { return licCompetidores(); } },
-  licExperiencia: { nivel: 'admin', handler: function () { return licExperiencia(); } },
+  licCompetidores: { nivel: 'admin', handler: function (ctx) { return licCompetidores(ctx.data); } },
+  licExperiencia: { nivel: 'admin', handler: function (ctx) { return licExperiencia(ctx.data); } },
   licDocumentos: { nivel: 'admin', handler: function (ctx) { return licDocumentos(ctx.data); } },
   licActualizarDocumento: { nivel: 'admin', handler: function (ctx) { return licActualizarDocumento(ctx.data, ctx.userId); } },
   licCrearDocumento: { nivel: 'admin', handler: function (ctx) { return licCrearDocumento(ctx.data, ctx.userId); } },
   licActualizarProceso: { nivel: 'admin', handler: function (ctx) { return licActualizarProceso(ctx.data, ctx.userId); } },
   licExportarCambios: { nivel: 'admin', handler: function (ctx) { return licExportarCambios(ctx.data); } },
-  licPersonal: { nivel: 'admin', handler: function () { return licPersonal(); } },
-  licContratos: { nivel: 'admin', handler: function () { return licContratos(); } },
+  licPersonal: { nivel: 'admin', handler: function (ctx) { return licPersonal(ctx.data); } },
+  licContratos: { nivel: 'admin', handler: function (ctx) { return licContratos(ctx.data); } },
   licActualizarPersona: { nivel: 'admin', handler: function (ctx) { return licActualizarPersona(ctx.data, ctx.userId); } },
   licActualizarContrato: { nivel: 'admin', handler: function (ctx) { return licActualizarContrato(ctx.data, ctx.userId); } },
   licActualizarFactura: { nivel: 'admin', handler: function (ctx) { return licActualizarFactura(ctx.data, ctx.userId); } },
@@ -556,7 +556,14 @@ var ROUTES = {
   licCarpetaDrive: { nivel: 'admin', handler: function () { return licCarpetaDrive(); } },
   licIndexarDrive: { nivel: 'admin', handler: function () { return licIndexarDrive(); } },
   licArchivosDrive: { nivel: 'admin', handler: function () { return licArchivosDrive(); } },
-  licSubirFoto: { nivel: 'admin', handler: function (ctx) { return licSubirFoto(ctx.data); } }
+  licSubirFoto: { nivel: 'admin', handler: function (ctx) { return licSubirFoto(ctx.data); } },
+  licSubirDocumento: { nivel: 'admin', handler: function (ctx) { return licSubirDocumento(ctx.data); } },
+  // Edición genérica de fichas (17_lic_edicion.gs)
+  licGuardar: { nivel: 'admin', handler: function (ctx) { return licGuardar(ctx.data, ctx.userId); } },
+  licArchivar: { nivel: 'admin', handler: function (ctx) { return licArchivar(ctx.data, ctx.userId); } },
+  licHistorial: { nivel: 'admin', handler: function (ctx) { return licHistorial(ctx.data); } },
+  licDeshacer: { nivel: 'admin', handler: function (ctx) { return licDeshacer(ctx.data, ctx.userId); } },
+  licServicios: { nivel: 'admin', handler: function (ctx) { return licServicios(ctx.data); } }
 };
 
 // Modulo del panel que exige cada accion de nivel 'auth' (escalon 2).
@@ -6390,7 +6397,7 @@ var HOJAS_REQUERIDAS = [
   'config_planilla', 'incidencias', 'planilla_log', 'autorizaciones_5pm', 'bolsa_horas',
   'capacitaciones', 'banco_preguntas', 'evaluaciones', 'eval_fotos', 'eval_logs',
   'lic_procesos', 'lic_postores', 'lic_acciones', 'lic_competidores', 'lic_experiencia', 'lic_documentos',
-  'lic_personal', 'lic_contratos', 'lic_facturas', 'lic_propuestas', 'lic_archivos'
+  'lic_personal', 'lic_contratos', 'lic_facturas', 'lic_propuestas', 'lic_archivos', 'lic_servicios', 'lic_historial'
 ];
 
 // Funciones que el router referencia — si falta una, la accion revienta en runtime
@@ -6423,7 +6430,8 @@ var FUNCIONES_REQUERIDAS = [
   'licImportar', 'licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia',
   'licDocumentos', 'licActualizarDocumento', 'licCrearDocumento', 'licActualizarProceso', 'licExportarCambios',
   'licPersonal', 'licContratos', 'licActualizarPersona', 'licActualizarContrato', 'licActualizarFactura',
-  'licPropuestas', 'licCarpetaDrive', 'licIndexarDrive', 'licArchivosDrive', 'licSubirFoto'
+  'licPropuestas', 'licCarpetaDrive', 'licIndexarDrive', 'licArchivosDrive', 'licSubirFoto',
+  'licSubirDocumento', 'licGuardar', 'licArchivar', 'licHistorial', 'licDeshacer', 'licServicios'
 ];
 
 function ejecutarTestSalud() {
@@ -7214,7 +7222,7 @@ function invalidarLecturas_() {
 
 // Lecturas del modulo Licitaciones que no siguen el prefijo get/obtener/...
 // (nombradas asi en docs/PLAN_LICITACIONES_ADMIN.md, el diseno ya aprobado).
-var LECTURAS_LIC_ = ['licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia', 'licDocumentos', 'licPersonal', 'licContratos', 'licPropuestas', 'licCarpetaDrive', 'licArchivosDrive'];
+var LECTURAS_LIC_ = ['licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia', 'licDocumentos', 'licPersonal', 'licContratos', 'licPropuestas', 'licCarpetaDrive', 'licArchivosDrive', 'licHistorial', 'licServicios'];
 
 // Acciones de solo lectura (no se auditan ni invalidan cache).
 function esAccionDeLectura_(action) {
@@ -7679,15 +7687,11 @@ function probarAnalytics() {
 // Diseño aprobado: docs/PLAN_LICITACIONES_ADMIN.md.
 //
 // Estrategia de importación (licImportar):
-//   - lic_postores, lic_acciones, lic_competidores, lic_experiencia se
-//     REEMPLAZAN enteras en cada import (son 100% derivadas del vault, sin
-//     estado propio del panel).
-//   - lic_procesos y lic_documentos se hacen MERGE por clave (nomenclatura /
-//     id): se actualizan los campos que vienen del vault, pero los campos
-//     editables desde la web (ver LIC_PROCESOS_SOLO_WEB_/PROTEGIDOS_ y
-//     LIC_DOC_SOLO_WEB_/PROTEGIDOS_ abajo) nunca se pisan, y las filas nuevas
-//     que solo existen en el panel (documentos dados de alta a mano) se
-//     conservan aunque no vengan en el JSON.
+//   - lic_acciones y lic_propuestas se REEMPLAZAN (derivadas del vault, no se editan).
+//   - Todas las demás se hacen MERGE por su clave (ver LIC_ENTIDADES_ en
+//     17_lic_edicion.gs): el vault actualiza sus campos, EXCEPTO los que se
+//     editaron en la web (columna campos_web) y los que el JSON no trae.
+//     Nada se borra: las fichas creadas en la web se conservan siempre.
 // ============================================================
 
 // ── Esquema de las hojas lic_* (columnas = campos del JSON del vault) ──────
@@ -7730,11 +7734,35 @@ var LIC_HOJAS_ = {
     // Solo-web (ver LIC_FACTURAS_SOLO_WEB_):
     'verificado', 'notas'
   ],
+  // Servicios en ejecución (solo web: el vault no los trae)
+  servicios: [
+    'id', 'nombre', 'proceso', 'entidad', 'zona', 'contrato', 'fecha_inicio', 'fecha_fin', 'monto', 'estado',
+    'responsable', 'personal', 'proyecto_id', 'proximo_hito', 'fecha_hito', 'notas'
+  ],
+  // Quién cambió qué (ver licGuardar/licDeshacer)
+  historial: ['id', 'fecha', 'usuario', 'entidad', 'clave', 'campo', 'antes', 'despues', 'accion'],
   // Nuestras propuestas completas con su índice (secciones: JSON)
   propuestas: ['nomenclatura', 'anio', 'archivo', 'tamano_mb', 'secciones'],
   // Índice de Drive: ruta relativa dentro de la carpeta "Licitaciones" → id del archivo
   archivos: ['ruta', 'id', 'nombre', 'tamano', 'actualizado']
 };
+
+// Campos solo-web agregados después (van AL FINAL: las hojas ya creadas
+// reciben la cabecera nueva sin mover columnas) + columnas comunes de edición.
+(function () {
+  var extra = {
+    competidores: ['zona', 'contacto', 'telefono', 'fortalezas', 'amenaza', 'notas'],
+    experiencia: ['notas'],
+    personal: ['profesion', 'colegiatura', 'telefono', 'correo', 'disponible'],
+    contratos: ['fecha_inicio', 'fecha_fin']
+  };
+  var editables = ['procesos', 'postores', 'competidores', 'experiencia', 'documentos', 'personal', 'contratos', 'facturas', 'servicios'];
+  editables.forEach(function (k) {
+    (extra[k] || []).concat(['origen', 'campos_web', 'archivado', 'editado_por', 'editado_en']).forEach(function (c) {
+      if (LIC_HOJAS_[k].indexOf(c) < 0) LIC_HOJAS_[k].push(c);
+    });
+  });
+})();
 
 function hojaLic_(clave) {
   var headers = LIC_HOJAS_[clave];
@@ -7744,6 +7772,9 @@ function hojaLic_(clave) {
   var hoja = ss.getSheetByName(nombre);
   if (!hoja) {
     hoja = ss.insertSheet(nombre);
+    // Texto plano: los DNI/RUC no pierden ceros y las fechas no se corren de día.
+    // Los números se siguen guardando como número (se escriben ya convertidos).
+    hoja.getRange(1, 1, hoja.getMaxRows(), Math.max(headers.length, hoja.getMaxColumns())).setNumberFormat('@');
     hoja.getRange(1, 1, 1, headers.length).setValues([headers]);
     hoja.getRange(1, 1, 1, headers.length).setFontWeight('bold');
     hoja.setFrozenRows(1);
@@ -7783,15 +7814,31 @@ function licValorCelda_(v) {
   return v === undefined || v === null ? '' : v;
 }
 
+// Fecha sin hora → 'AAAA-MM-DD' (lo que usa el panel); con hora → ISO.
+function licTextoCeldaLectura_(v) {
+  if (v instanceof Date) {
+    var hm = Utilities.formatDate(v, 'America/Lima', 'HH:mm:ss');
+    return Utilities.formatDate(v, 'America/Lima', hm === '00:00:00' ? 'yyyy-MM-dd' : "yyyy-MM-dd'T'HH:mm:ssXXX");
+  }
+  return v;
+}
+
 // Lee una hoja lic_* completa como lista de objetos (por cabecera, no por posición).
-function leerFilasLic_(clave) {
+// Las fichas archivadas no se devuelven salvo conArchivados.
+function leerFilasLic_(clave, conArchivados) {
   var hoja = hojaLic_(clave);
   var datos = hoja.getDataRange().getValues();
   if (datos.length < 2) return [];
   var headers = datos[0];
+  var iArch = headers.indexOf('archivado');
   return datos.slice(1)
-    .filter(function (f) { return f[0] !== ''; })
-    .map(function (f) { return rowToObject(headers, f); });
+    .filter(function (f) { return f[0] !== '' && (conArchivados || iArch < 0 || !f[iArch]); })
+    .map(function (f) {
+      var o = {};
+      headers.forEach(function (h, i) { o[h] = licTextoCeldaLectura_(f[i]); });
+      if (o.campos_web !== undefined) o.campos_web = licParseArray_(o.campos_web);
+      return o;
+    });
 }
 
 // ============================================================
@@ -7807,164 +7854,82 @@ function licReemplazarHoja_(clave, lista) {
   var filas = lista.map(function (o) {
     return headers.map(function (h) { return licValorCelda_(o[h]); });
   });
-  hoja.getRange(2, 1, filas.length, headers.length).setValues(filas);
+  hoja.getRange(2, 1, filas.length, headers.length).setNumberFormat('@').setValues(filas);
   return filas.length;
 }
 
-// Campos que SOLO se escriben desde el panel (el JSON del vault nunca los trae):
-// se preservan siempre que la fila ya exista.
-var LIC_PROCESOS_SOLO_WEB_ = ['estado_seguimiento', 'actualizado'];
-// Campos que SI vienen en el JSON pero, una vez cargados/editados, ya no se
-// pisan en imports posteriores (evita que un reimport borre el seguimiento).
-var LIC_PROCESOS_PROTEGIDOS_ = ['notas'];
+// Merge de una hoja editable con lo que exporta el vault. Por cada fila del JSON:
+//   · si ya existe (misma clave): se actualizan los campos que trae el JSON,
+//     salvo los editados en la web (campos_web) y las columnas de edición;
+//   · si no existe: se agrega con origen 'vault'.
+// Las filas que no vienen en el JSON (p. ej. creadas en la web) se conservan.
+var LIC_COLS_EDICION_ = ['origen', 'campos_web', 'archivado', 'editado_por', 'editado_en', 'actualizado'];
 
-function licMergeProcesos_(lista) {
-  var hoja = hojaLic_('procesos');
-  var headers = LIC_HOJAS_.procesos;
+function licMergeEntidad_(entidad, lista) {
+  if (!lista) return { nuevos: 0, actualizados: 0, protegidos: 0 };
+  var esq = LIC_ENTIDADES_[entidad];
+  var hoja = hojaLic_(entidad);
+  var headers = LIC_HOJAS_[entidad];
   var datos = hoja.getDataRange().getValues();
+  var idxClave = esq.clave.map(function (c) { return headers.indexOf(c); });
+  var claveDe = function (valores) { return valores.join('\u0001'); };
   var indice = {};
   for (var i = 1; i < datos.length; i++) {
-    var nom = String(datos[i][0] || '');
-    if (nom) indice[nom] = i;
+    indice[claveDe(idxClave.map(function (ix) { return licTextoCelda_(datos[i][ix]); }))] = i;
   }
-  var nuevos = 0, actualizados = 0;
-  (lista || []).forEach(function (o) {
-    var nom = String(o.nomenclatura || '');
-    if (!nom) return;
-    var fila = headers.map(function (h) {
-      if (LIC_PROCESOS_SOLO_WEB_.indexOf(h) >= 0) return '';
-      return licValorCelda_(o[h]);
-    });
-    if (indice[nom] !== undefined) {
-      var i2 = indice[nom];
-      var existente = datos[i2];
-      headers.forEach(function (h, c) {
-        if (LIC_PROCESOS_SOLO_WEB_.indexOf(h) >= 0) { fila[c] = existente[c]; return; }
-        if (LIC_PROCESOS_PROTEGIDOS_.indexOf(h) >= 0 && existente[c] !== '' && existente[c] !== undefined && existente[c] !== null) {
-          fila[c] = existente[c];
-        }
-      });
-      hoja.getRange(i2 + 1, 1, 1, headers.length).setValues([fila]);
-      actualizados++;
-    } else {
-      hoja.appendRow(fila);
-      nuevos++;
-    }
-  });
-  return { nuevos: nuevos, actualizados: actualizados };
-}
-
-var LIC_DOC_SOLO_WEB_ = ['editado_por', 'editado_en'];
-var LIC_DOC_PROTEGIDOS_ = ['verificado', 'vence', 'notas'];
-
-function licMergeDocumentos_(lista) {
-  var hoja = hojaLic_('documentos');
-  var headers = LIC_HOJAS_.documentos;
-  var datos = hoja.getDataRange().getValues();
-  var indice = {};
-  for (var i = 1; i < datos.length; i++) {
-    var id = String(datos[i][0] || '');
-    if (id) indice[id] = i;
-  }
-  var nuevos = 0, actualizados = 0;
-  (lista || []).forEach(function (o) {
-    var id = String(o.id || '');
-    if (!id) return;
-    var fila = headers.map(function (h) {
-      if (LIC_DOC_SOLO_WEB_.indexOf(h) >= 0) return '';
-      return licValorCelda_(o[h]);
-    });
-    if (indice[id] !== undefined) {
-      var i2 = indice[id];
-      var existente = datos[i2];
-      headers.forEach(function (h, c) {
-        if (LIC_DOC_SOLO_WEB_.indexOf(h) >= 0) { fila[c] = existente[c]; return; }
-        if (LIC_DOC_PROTEGIDOS_.indexOf(h) >= 0 && existente[c] !== '' && existente[c] !== undefined && existente[c] !== null) {
-          fila[c] = existente[c];
-        }
-      });
-      hoja.getRange(i2 + 1, 1, 1, headers.length).setValues([fila]);
-      actualizados++;
-    } else {
-      // Documento nuevo del vault. Si no existia, respeta los campos editables
-      // que pudiera traer el propio JSON (normalmente vacios la primera vez).
-      hoja.appendRow(fila);
-      nuevos++;
-    }
-  });
-  return { nuevos: nuevos, actualizados: actualizados };
-}
-
-// Merge generico por clave simple o compuesta (p.ej. ['contrato','numero']),
-// para hojas cuyos campos solo-web nunca vienen del JSON del vault (a
-// diferencia de procesos/documentos, no hace falta lista de "protegidos").
-function licClaveFila_(fila, headers, camposClave) {
-  return camposClave.map(function (c) {
-    var i = headers.indexOf(c);
-    return i >= 0 ? String(fila[i]) : '';
-  }).join('\u0001');
-}
-
-function licClaveObjeto_(o, camposClave) {
-  return camposClave.map(function (c) { return o[c] !== undefined && o[c] !== null ? String(o[c]) : ''; }).join('\u0001');
-}
-
-function licMergeGenerico_(clave, lista, camposClave, soloWeb) {
-  var hoja = hojaLic_(clave);
-  var headers = LIC_HOJAS_[clave];
-  var datos = hoja.getDataRange().getValues();
-  var indice = {};
-  for (var i = 1; i < datos.length; i++) {
-    var k = licClaveFila_(datos[i], headers, camposClave);
-    if (k.replace(/\u0001/g, '')) indice[k] = i;
-  }
-  var nuevos = 0, actualizados = 0;
-  (lista || []).forEach(function (o) {
-    var k = licClaveObjeto_(o, camposClave);
-    if (!k.replace(/\u0001/g, '')) return;
-    var fila = headers.map(function (h) {
-      if (soloWeb.indexOf(h) >= 0) return '';
-      return licValorCelda_(o[h]);
-    });
+  var iCamposWeb = headers.indexOf('campos_web');
+  var nuevas = [];
+  var nuevos = 0, actualizados = 0, protegidos = 0;
+  lista.forEach(function (o) {
+    var valoresClave = esq.clave.map(function (c) { return o[c] === undefined || o[c] === null ? '' : String(o[c]); });
+    if (!valoresClave.join('')) return;
+    var k = claveDe(valoresClave);
     if (indice[k] !== undefined) {
-      var i2 = indice[k];
-      var existente = datos[i2];
+      if (indice[k] < 0) return; // repetida dentro del mismo JSON
+      var fila = datos[indice[k]].slice();
+      while (fila.length < headers.length) fila.push('');
+      var web = licParseArray_(fila[iCamposWeb]);
       headers.forEach(function (h, c) {
-        if (soloWeb.indexOf(h) >= 0) fila[c] = existente[c];
+        if (o[h] === undefined || LIC_COLS_EDICION_.indexOf(h) >= 0) return;
+        if (web.indexOf(h) >= 0) { protegidos++; return; }
+        fila[c] = licValorCelda_(o[h]);
       });
-      hoja.getRange(i2 + 1, 1, 1, headers.length).setValues([fila]);
+      datos[indice[k]] = fila;
       actualizados++;
     } else {
-      hoja.appendRow(fila);
+      nuevas.push(headers.map(function (h) { return h === 'origen' ? 'vault' : licValorCelda_(o[h]); }));
+      indice[k] = -1;
       nuevos++;
     }
   });
-  return { nuevos: nuevos, actualizados: actualizados };
+  // Una sola escritura por bloque (más rápido y sin estados a medias)
+  if (datos.length > 1) {
+    var cuerpo = datos.slice(1).map(function (f) {
+      var r = f.slice(0, headers.length);
+      while (r.length < headers.length) r.push('');
+      return r;
+    });
+    hoja.getRange(2, 1, cuerpo.length, headers.length).setNumberFormat('@').setValues(cuerpo);
+  }
+  if (nuevas.length) {
+    hoja.getRange(hoja.getLastRow() + 1, 1, nuevas.length, headers.length).setNumberFormat('@').setValues(nuevas);
+  }
+  return { nuevos: nuevos, actualizados: actualizados, protegidos: protegidos };
 }
-
-var LIC_PERSONAL_SOLO_WEB_ = ['empleado_vinculado', 'notas'];
-var LIC_CONTRATOS_SOLO_WEB_ = ['estado', 'notas'];
-var LIC_FACTURAS_SOLO_WEB_ = ['verificado', 'notas'];
 
 // data = { procesos, postores, acciones, competidores, experiencia, documentos,
-//          personal, contratos, facturas, propuestas? }
+//          personal, contratos, facturas, propuestas? } — cada lista es opcional:
+// la que no viene no se toca.
 function licImportar(data) {
   data = data || {};
   return withLock_(function () {
-    var resumen = {
-      postores: licReemplazarHoja_('postores', data.postores),
-      acciones: licReemplazarHoja_('acciones', data.acciones),
-      competidores: licReemplazarHoja_('competidores', data.competidores),
-      experiencia: licReemplazarHoja_('experiencia', data.experiencia),
-      procesos: licMergeProcesos_(data.procesos),
-      documentos: licMergeDocumentos_(data.documentos),
-      personal: licMergeGenerico_('personal', data.personal, ['dni'], LIC_PERSONAL_SOLO_WEB_),
-      contratos: licMergeGenerico_('contratos', data.contratos, ['contrato'], LIC_CONTRATOS_SOLO_WEB_),
-      facturas: licMergeGenerico_('facturas', data.facturas, ['contrato', 'numero'], LIC_FACTURAS_SOLO_WEB_)
-    };
-    // Solo si viene: un import sin propuestas.json no debe vaciar la hoja
+    var resumen = {};
+    ['procesos', 'postores', 'competidores', 'experiencia', 'documentos', 'personal', 'contratos', 'facturas'].forEach(function (e) {
+      if (data[e]) resumen[e] = licMergeEntidad_(e, data[e]);
+    });
+    if (data.acciones) resumen.acciones = licReemplazarHoja_('acciones', data.acciones);
     if (data.propuestas) resumen.propuestas = licReemplazarHoja_('propuestas', data.propuestas);
-    return { success: true, data: resumen, message: 'Importación de licitaciones completada' };
+    return { success: true, data: resumen, message: 'Importación completada: lo corregido en la web se respetó' };
   });
 }
 
@@ -8018,8 +7983,8 @@ function licResumen() {
   };
 }
 
-function licProcesos() {
-  return { success: true, data: leerFilasLic_('procesos') };
+function licProcesos(data) {
+  return { success: true, data: leerFilasLic_('procesos', (data || {}).archivados) };
 }
 
 function licProceso(nom) {
@@ -8036,25 +8001,65 @@ function licProceso(nom) {
   return { success: true, data: { proceso: proceso, postores: postores, acciones: acciones } };
 }
 
-function licCompetidores() {
-  var lista = leerFilasLic_('competidores').map(function (c) {
-    return Object.assign({}, c, {
-      procesos: licParseArray_(c.procesos),
-      entidades: licParseArray_(c.entidades),
-      ofertas: licParseArray_(c.ofertas)
-    });
+// La ficha del competidor (datos + notas) sale de lic_competidores; sus números
+// (procesos, ofertas, ganados, % promedio) se CALCULAN de lic_postores, así un
+// postor agregado a mano en una licitación cuenta al instante.
+function licCompetidores(data) {
+  data = data || {};
+  var procesos = {};
+  leerFilasLic_('procesos').forEach(function (p) { procesos[p.nomenclatura] = p; });
+  var stats = {};
+  leerFilasLic_('postores').forEach(function (p) {
+    if (licEsVerdadero_(p.es_telcom) || !p.ruc) return;
+    var ruc = String(p.ruc);
+    var s = stats[ruc] || (stats[ruc] = { nombre: p.razon_social, procesos: [], entidades: [], ofertas: [], ganados: 0 });
+    if (s.procesos.indexOf(p.nomenclatura) < 0) s.procesos.push(p.nomenclatura);
+    var ent = procesos[p.nomenclatura] && procesos[p.nomenclatura].entidad;
+    if (ent && s.entidades.indexOf(ent) < 0) s.entidades.push(ent);
+    if (p.monto !== '' && p.monto !== null) {
+      s.ofertas.push({ proceso: p.nomenclatura, monto: Number(p.monto) || 0, pct_vr: p.pct_vr === '' || p.pct_vr === null ? null : Number(p.pct_vr) });
+    }
+    if (licEsVerdadero_(p.gano)) s.ganados++;
+  });
+  var vistos = {};
+  var lista = leerFilasLic_('competidores', data.archivados).map(function (c) {
+    vistos[String(c.ruc)] = true;
+    return Object.assign({}, c, licStatsCompetidor_(stats[String(c.ruc)], c));
+  });
+  // Postores que aún no tienen ficha propia: aparecen igual (se les crea al editarlos)
+  Object.keys(stats).forEach(function (ruc) {
+    if (vistos[ruc]) return;
+    lista.push(Object.assign({ ruc: ruc, nombre: stats[ruc].nombre, origen: 'postores', campos_web: [] }, licStatsCompetidor_(stats[ruc], {})));
   });
   return { success: true, data: lista };
 }
 
-function licExperiencia() {
-  return { success: true, data: leerFilasLic_('experiencia') };
+function licEsVerdadero_(v) {
+  return v === true || String(v).toUpperCase() === 'TRUE';
+}
+
+function licStatsCompetidor_(s, c) {
+  if (!s) {
+    return {
+      procesos: licParseArray_(c.procesos), entidades: licParseArray_(c.entidades), ofertas: licParseArray_(c.ofertas),
+      n_procesos: licParseArray_(c.procesos).length, ganados: Number(c.ganados) || 0
+    };
+  }
+  var pcts = s.ofertas.map(function (o) { return o.pct_vr; }).filter(function (x) { return x !== null && !isNaN(x); });
+  return {
+    procesos: s.procesos, n_procesos: s.procesos.length, entidades: s.entidades, ofertas: s.ofertas, ganados: s.ganados,
+    pct_vr_promedio: pcts.length ? Math.round(pcts.reduce(function (a, b) { return a + b; }, 0) / pcts.length * 10) / 10 : null
+  };
+}
+
+function licExperiencia(data) {
+  return { success: true, data: leerFilasLic_('experiencia', (data || {}).archivados) };
 }
 
 // Filtros opcionales: categoria, dni
 function licDocumentos(data) {
   data = data || {};
-  var lista = leerFilasLic_('documentos');
+  var lista = leerFilasLic_('documentos', data.archivados);
   if (data.categoria) lista = lista.filter(function (d) { return d.categoria === data.categoria; });
   if (data.dni) lista = lista.filter(function (d) { return String(d.dni) === String(data.dni); });
   lista = lista.map(function (d) { return Object.assign({}, d, { apariciones: licParseArray_(d.apariciones) }); });
@@ -8068,8 +8073,8 @@ function licPropuestas() {
   return { success: true, data: lista };
 }
 
-function licPersonal() {
-  var lista = leerFilasLic_('personal').map(function (p) {
+function licPersonal(data) {
+  var lista = leerFilasLic_('personal', (data || {}).archivados).map(function (p) {
     return Object.assign({}, p, {
       tipos: licParseObjeto_(p.tipos),
       cargos: licParseArray_(p.cargos),
@@ -8080,15 +8085,16 @@ function licPersonal() {
 }
 
 // Cada contrato trae sus facturas anidadas (ordenadas por fecha).
-function licContratos() {
-  var facturas = leerFilasLic_('facturas');
+function licContratos(data) {
+  data = data || {};
+  var facturas = leerFilasLic_('facturas', data.archivados);
   var porContrato = {};
   facturas.forEach(function (f) {
     var k = f.contrato;
     if (!k) return;
     (porContrato[k] || (porContrato[k] = [])).push(f);
   });
-  var lista = leerFilasLic_('contratos').map(function (c) {
+  var lista = leerFilasLic_('contratos', data.archivados).map(function (c) {
     var propias = (porContrato[c.contrato] || []).slice().sort(function (a, b) {
       return String(a.fecha || '').localeCompare(String(b.fecha || ''));
     });
@@ -8101,183 +8107,48 @@ function licContratos() {
 // ESCRITURAS EDITABLES (admin, con lock + auditoria automatica del router)
 // ============================================================
 
-var LIC_CAMPOS_DOC_EDITABLES_ = ['verificado', 'vence', 'notas', 'titulo', 'fecha', 'monto'];
-
-function licActualizarDocumento(data, userId) {
+// Atajos compatibles con las pantallas anteriores: todos pasan por licGuardar
+// (misma validación, historial y protección frente al import).
+function licAtajo_(entidad, data, userId) {
   data = data || {};
-  var id = String(data.id || '');
-  if (!id) return { success: false, error: 'Falta el id del documento' };
-  return withLock_(function () {
-    var hoja = hojaLic_('documentos');
-    var datos = hoja.getDataRange().getValues();
-    var headers = datos[0];
-    var fila = -1;
-    for (var i = 1; i < datos.length; i++) {
-      if (String(datos[i][0]) === id) { fila = i; break; }
-    }
-    if (fila < 0) return { success: false, error: 'Documento no encontrado' };
-
-    var cambios = {};
-    LIC_CAMPOS_DOC_EDITABLES_.forEach(function (campo) {
-      if (data[campo] !== undefined) cambios[campo] = data[campo];
-    });
-    if (!Object.keys(cambios).length) return { success: false, error: 'Nada que actualizar' };
-    cambios.editado_por = userId || '';
-    cambios.editado_en = new Date().toISOString();
-
-    Object.keys(cambios).forEach(function (campo) {
-      var c = headers.indexOf(campo);
-      if (c >= 0) hoja.getRange(fila + 1, c + 1).setValue(cambios[campo]);
-    });
-    return { success: true, data: Object.assign({ id: id }, cambios), message: 'Documento actualizado' };
-  });
+  var esq = LIC_ENTIDADES_[entidad];
+  var clave = {};
+  esq.clave.forEach(function (c) { clave[c] = data[c]; });
+  var cambios = {};
+  Object.keys(esq.campos).forEach(function (c) { if (data[c] !== undefined) cambios[c] = data[c]; });
+  return licGuardar({ entidad: entidad, clave: clave, cambios: cambios }, userId);
 }
-
-// Alta manual de un documento desde el panel (no viene del vault).
+function licActualizarDocumento(data, userId) { return licAtajo_('documentos', data, userId); }
+function licActualizarProceso(data, userId) { return licAtajo_('procesos', data, userId); }
+function licActualizarPersona(data, userId) { return licAtajo_('personal', data, userId); }
+function licActualizarContrato(data, userId) { return licAtajo_('contratos', data, userId); }
+function licActualizarFactura(data, userId) { return licAtajo_('facturas', data, userId); }
 function licCrearDocumento(data, userId) {
   data = data || {};
-  var categoria = String(data.categoria || '').trim();
-  var titulo = String(data.titulo || '').trim();
-  if (!categoria) return { success: false, error: 'Falta la categoría del documento' };
-  if (!titulo && !data.tipo) return { success: false, error: 'Falta el título o el tipo del documento' };
-
-  return withLock_(function () {
-    var hoja = hojaLic_('documentos');
-    var headers = LIC_HOJAS_.documentos;
-    var id = 'DOC-' + Utilities.getUuid().slice(0, 8).toUpperCase();
-    var ahora = new Date().toISOString();
-    var valores = {
-      id: id,
-      categoria: categoria,
-      tipo: String(data.tipo || ''),
-      titulo: titulo,
-      entidad: String(data.entidad || ''),
-      dni: String(data.dni || ''),
-      nombre: String(data.nombre || ''),
-      fecha: String(data.fecha || ''),
-      periodo_desde: String(data.periodo_desde || ''),
-      periodo_hasta: String(data.periodo_hasta || ''),
-      monto: data.monto === undefined || data.monto === null || data.monto === '' ? '' : Number(data.monto),
-      archivo_vault: String(data.archivo_vault || ''),
-      usos: 0,
-      verificado: data.verificado || '',
-      vence: data.vence || '',
-      notas: String(data.notas || ''),
-      editado_por: userId || '',
-      editado_en: ahora
-    };
-    var fila = headers.map(function (h) { return valores[h] !== undefined ? valores[h] : ''; });
-    hoja.appendRow(fila);
-    return { success: true, data: valores, message: 'Documento creado' };
-  });
+  var cambios = {};
+  Object.keys(LIC_ENTIDADES_.documentos.campos).forEach(function (c) { if (data[c] !== undefined && data[c] !== '') cambios[c] = data[c]; });
+  return licGuardar({ entidad: 'documentos', crear: true, clave: {}, cambios: cambios }, userId);
 }
 
-var LIC_CAMPOS_PROCESO_EDITABLES_ = ['estado_seguimiento', 'notas'];
-
-function licActualizarProceso(data, userId) {
-  data = data || {};
-  var nom = String(data.nomenclatura || '');
-  if (!nom) return { success: false, error: 'Falta la nomenclatura del proceso' };
-  return withLock_(function () {
-    var hoja = hojaLic_('procesos');
-    var datos = hoja.getDataRange().getValues();
-    var headers = datos[0];
-    var fila = -1;
-    for (var i = 1; i < datos.length; i++) {
-      if (String(datos[i][0]) === nom) { fila = i; break; }
-    }
-    if (fila < 0) return { success: false, error: 'Proceso no encontrado' };
-
-    var cambios = {};
-    LIC_CAMPOS_PROCESO_EDITABLES_.forEach(function (campo) {
-      if (data[campo] !== undefined) cambios[campo] = data[campo];
-    });
-    if (!Object.keys(cambios).length) return { success: false, error: 'Nada que actualizar' };
-    cambios.actualizado = new Date().toISOString();
-
-    Object.keys(cambios).forEach(function (campo) {
-      var c = headers.indexOf(campo);
-      if (c >= 0) hoja.getRange(fila + 1, c + 1).setValue(cambios[campo]);
-    });
-    // registrado_por no es columna propia: se guarda en el detalle de auditoria (ctx.data)
-    return { success: true, data: Object.assign({ nomenclatura: nom, editado_por: userId || '' }, cambios), message: 'Proceso actualizado' };
-  });
-}
-
-// Helper comun a licActualizarPersona/Contrato/Factura: encuentra la fila por
-// una clave simple o compuesta y aplica solo los campos editables permitidos.
-function licActualizarFilaLic_(clave, camposClave, valoresClave, campoEditables, data, userId, extraCampos) {
-  return withLock_(function () {
-    var hoja = hojaLic_(clave);
-    var datos = hoja.getDataRange().getValues();
-    var headers = datos[0];
-    var claveIdx = camposClave.map(function (c) { return headers.indexOf(c); });
-    var fila = -1;
-    for (var i = 1; i < datos.length; i++) {
-      var coincide = claveIdx.every(function (idx, j) { return idx >= 0 && String(datos[i][idx]) === String(valoresClave[j]); });
-      if (coincide) { fila = i; break; }
-    }
-    if (fila < 0) return { success: false, error: 'No se encontró la fila (' + camposClave.join('+') + ')' };
-
-    var cambios = {};
-    campoEditables.forEach(function (campo) {
-      if (data[campo] !== undefined) cambios[campo] = data[campo];
-    });
-    if (!Object.keys(cambios).length) return { success: false, error: 'Nada que actualizar' };
-    Object.assign(cambios, extraCampos || {});
-
-    Object.keys(cambios).forEach(function (campo) {
-      var c = headers.indexOf(campo);
-      if (c >= 0) hoja.getRange(fila + 1, c + 1).setValue(cambios[campo]);
-    });
-    var base = {};
-    camposClave.forEach(function (c, j) { base[c] = valoresClave[j]; });
-    return { success: true, data: Object.assign(base, cambios), message: 'Actualizado' };
-  });
-}
-
-function licActualizarPersona(data, userId) {
-  data = data || {};
-  var dni = String(data.dni || '');
-  if (!dni) return { success: false, error: 'Falta el DNI' };
-  return licActualizarFilaLic_('personal', ['dni'], [dni], LIC_PERSONAL_SOLO_WEB_, data, userId);
-}
-
-function licActualizarContrato(data, userId) {
-  data = data || {};
-  var contrato = String(data.contrato || '');
-  if (!contrato) return { success: false, error: 'Falta el contrato' };
-  return licActualizarFilaLic_('contratos', ['contrato'], [contrato], LIC_CONTRATOS_SOLO_WEB_, data, userId);
-}
-
-function licActualizarFactura(data, userId) {
-  data = data || {};
-  var contrato = String(data.contrato || '');
-  var numero = String(data.numero || '');
-  if (!contrato || !numero) return { success: false, error: 'Falta el contrato o el número de factura' };
-  return licActualizarFilaLic_('facturas', ['contrato', 'numero'], [contrato, numero], LIC_FACTURAS_SOLO_WEB_, data, userId);
-}
-
-// Filas editadas desde el panel despues de 'desde' (ISO), para que el vault
-// pueda traer de vuelta el seguimiento y el acervo verificado.
+// Todo lo editado en la web después de 'desde' (ISO), para llevarlo de vuelta
+// al vault: por ficha, solo los campos que se cambiaron en la web.
 function licExportarCambios(data) {
   data = data || {};
   var desde = String(data.desde || '');
-  var procesos = leerFilasLic_('procesos')
-    .filter(function (p) { return p.actualizado && (!desde || String(p.actualizado) > desde); })
-    .map(function (p) {
-      return { nomenclatura: p.nomenclatura, estado_seguimiento: p.estado_seguimiento, notas: p.notas, actualizado: p.actualizado };
-    });
-  var documentos = leerFilasLic_('documentos')
-    .filter(function (d) { return d.editado_en && (!desde || String(d.editado_en) > desde); })
-    .map(function (d) {
-      return {
-        id: d.id, verificado: d.verificado, vence: d.vence, notas: d.notas,
-        titulo: d.titulo, fecha: d.fecha, monto: d.monto,
-        editado_por: d.editado_por, editado_en: d.editado_en
-      };
-    });
-  return { success: true, data: { procesos: procesos, documentos: documentos } };
+  var out = {};
+  Object.keys(LIC_ENTIDADES_).forEach(function (e) {
+    var esq = LIC_ENTIDADES_[e];
+    out[e] = leerFilasLic_(e, true)
+      .filter(function (f) { return f.editado_en && (!desde || String(f.editado_en) > desde); })
+      .map(function (f) {
+        var r = {};
+        esq.clave.forEach(function (c) { r[c] = f[c]; });
+        (f.origen === 'web' ? Object.keys(esq.campos) : (f.campos_web || [])).forEach(function (c) { r[c] = f[c]; });
+        r.origen = f.origen; r.archivado = f.archivado; r.editado_por = f.editado_por; r.editado_en = f.editado_en;
+        return r;
+      });
+  });
+  return { success: true, data: out };
 }
 
 // ============================================================
@@ -8364,4 +8235,391 @@ function licSubirFoto(data) {
     hoja.appendRow([ruta, archivo.getId(), archivo.getName(), archivo.getSize(), new Date()]);
     return { success: true, data: { ruta: ruta, id: archivo.getId() } };
   });
+}
+
+// PDF nuevo subido desde el panel (documento que no vino del vault).
+// data = { categoria, nombre, base64, mime } → queda en
+// Licitaciones/acervo/<categoria>/_web/<nombre> y se agrega al índice.
+// Devuelve archivo_vault con la MISMA forma que usa el vault
+// ('01_GERENCIA/acervo/...'), para que el panel lo abra igual que los demás.
+function licSubirDocumento(data) {
+  data = data || {};
+  var categoria = String(data.categoria || '');
+  if (!/^(personal|experiencia|equipos|empresa|tecnico|otro)$/.test(categoria)) return { success: false, error: 'Elige de qué tipo es el documento' };
+  if (data.mime !== 'application/pdf') return { success: false, error: 'El archivo debe ser PDF' };
+  var err = validarArchivoSubido_(data.base64, data.mime, 'documento');
+  if (err) return err;
+  var nombre = String(data.nombre || 'documento.pdf').replace(/[\\\/:*?"<>|#%]/g, '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  if (!/\.pdf$/i.test(nombre)) nombre += '.pdf';
+  nombre = Utilities.formatDate(new Date(), 'America/Lima', 'yyyyMMdd-HHmmss') + ' ' + nombre;
+  var carpeta = licCarpetaRaiz_();
+  ['acervo', categoria, '_web'].forEach(function (parte) {
+    var it = carpeta.getFoldersByName(parte);
+    carpeta = it.hasNext() ? it.next() : carpeta.createFolder(parte);
+  });
+  var archivo = carpeta.createFile(Utilities.newBlob(Utilities.base64Decode(data.base64), 'application/pdf', nombre));
+  var ruta = 'acervo/' + categoria + '/_web/' + nombre;
+  withLock_(function () {
+    hojaLic_('archivos').appendRow([ruta, archivo.getId(), nombre, archivo.getSize(), new Date()]);
+    return { success: true };
+  });
+  return { success: true, data: { archivo_vault: '01_GERENCIA/' + ruta, id: archivo.getId() } };
+}
+
+// ============================================================
+// LICITACIONES — EDICIÓN DESDE EL PANEL ("fácil de usar, difícil de malograr")
+//
+// Un solo motor para todas las fichas (procesos, postores, competidores,
+// experiencia, documentos, personal, contratos, facturas, servicios):
+//   licGuardar   → edita campos o crea una ficha nueva (validando tipos)
+//   licArchivar  → archiva / restaura (NUNCA se borra nada)
+//   licHistorial → quién cambió qué, con el valor anterior
+//   licDeshacer  → vuelve un cambio del historial a su valor anterior
+//
+// Reglas de convivencia con el vault (licImportar, 16_licitaciones.gs):
+//   · Cada campo editado en la web queda en `campos_web` y un import posterior
+//     ya no lo pisa: lo que se corrige en la web gana.
+//   · Las fichas creadas en la web tienen origen 'web' y un import nunca las borra.
+//   · Las claves (DNI, RUC, nomenclatura, n.º de contrato…) no se editan una vez
+//     creadas: otras hojas las usan para enlazarse.
+// El esquema del panel (src/pages/admin/licitaciones/licEsquemas.ts) debe
+// mantener los mismos campos que LIC_ENTIDADES_.
+// ============================================================
+
+var LIC_COMUNES_ = ['origen', 'campos_web', 'archivado', 'editado_por', 'editado_en'];
+
+// Tipos: t texto · l texto largo · n número · d fecha (AAAA-MM-DD) · b sí/no
+//        j lista (JSON) · o:a|b|c opción cerrada (la primera vacía = "sin definir")
+var LIC_ENTIDADES_ = {
+  procesos: {
+    clave: ['nomenclatura'], obligatorios: ['nomenclatura', 'entidad', 'objeto'],
+    campos: {
+      codigo_seace: 't', anio: 't', entidad: 't', linea: 't', objeto: 'l', ley: 't', vr: 'n', resultado: 't',
+      nuestro_monto: 'n', nuestro_pct_vr: 'n', n_postores: 'n', ganador_ruc: 't', ganador: 't', notas: 'l',
+      estado_seguimiento: 'o:|pendiente|en_seguimiento|a_la_espera|cerrado'
+    }
+  },
+  postores: {
+    clave: ['nomenclatura', 'ruc'], obligatorios: ['nomenclatura', 'ruc', 'razon_social'],
+    campos: { razon_social: 't', consorcio: 't', mype: 't', monto: 'n', pct_vr: 'n', es_telcom: 'b', gano: 'b' }
+  },
+  competidores: {
+    clave: ['ruc'], obligatorios: ['ruc', 'nombre'],
+    campos: { nombre: 't', zona: 't', contacto: 't', telefono: 't', fortalezas: 'l', amenaza: 'o:|alta|media|baja', notas: 'l' }
+  },
+  experiencia: {
+    clave: ['proceso'], obligatorios: ['proceso', 'entidad'],
+    campos: {
+      entidad: 't', objeto: 'l', monto_adjudicado: 'n', monto_facturado: 'n', pct_telcom: 'n', acreditable: 'n',
+      estado: 't', fecha_contrato: 't', notas: 'l'
+    }
+  },
+  documentos: {
+    clave: ['id'], autoId: 'DOC', obligatorios: ['categoria', 'titulo'],
+    campos: {
+      categoria: 'o:personal|experiencia|equipos|empresa|tecnico|anexo|otro', tipo: 't', titulo: 't', entidad: 't',
+      dni: 't', nombre: 't', fecha: 'd', periodo_desde: 'd', periodo_hasta: 'd', monto: 'n', archivo_vault: 't',
+      verificado: 'o:|si|no', vence: 'd', notas: 'l'
+    }
+  },
+  personal: {
+    clave: ['dni'], obligatorios: ['dni', 'nombre'],
+    campos: {
+      nombre: 't', profesion: 't', colegiatura: 't', telefono: 't', correo: 't', disponible: 'o:|si|no',
+      empleado_vinculado: 't', notas: 'l'
+    }
+  },
+  contratos: {
+    clave: ['contrato'], obligatorios: ['contrato'],
+    campos: {
+      proceso: 't', monto_contrato: 'n', monto_adjudicado: 'n', pct_telcom: 'n', fecha_inicio: 'd', fecha_fin: 'd',
+      estado: 'o:|vigente|culminado|en_liquidacion', notas: 'l'
+    }
+  },
+  facturas: {
+    clave: ['contrato', 'numero'], obligatorios: ['contrato', 'numero', 'monto'],
+    campos: { fecha: 'd', monto: 'n', verificado: 'o:|si|no', notas: 'l' }
+  },
+  servicios: {
+    clave: ['id'], autoId: 'SRV', obligatorios: ['nombre', 'estado'],
+    campos: {
+      nombre: 't', proceso: 't', entidad: 't', zona: 't', contrato: 't', fecha_inicio: 'd', fecha_fin: 'd', monto: 'n',
+      estado: 'o:por_iniciar|en_ejecucion|suspendido|terminado', responsable: 't', personal: 'j', proyecto_id: 't',
+      proximo_hito: 't', fecha_hito: 'd', notas: 'l'
+    }
+  }
+};
+
+// Formatos de clave que se validan al CREAR (no se tocan las que vienen del vault)
+var LIC_FORMATO_CLAVE_ = {
+  dni: { re: /^\d{8}$/, error: 'El DNI debe tener 8 números' },
+  ruc: { re: /^\d{11}$/, error: 'El RUC debe tener 11 números' }
+};
+
+var LIC_ETIQUETA_ENTIDAD_ = {
+  procesos: 'licitación', postores: 'postor', competidores: 'competidor', experiencia: 'experiencia',
+  documentos: 'documento', personal: 'persona', contratos: 'contrato', facturas: 'factura', servicios: 'servicio'
+};
+
+function licNombreUsuario_(userId) {
+  try {
+    var p = perfilUsuario_(userId);
+    return (p && (p.nombre || p.email)) || String(userId || '');
+  } catch (e) {
+    return String(userId || '');
+  }
+}
+
+function licClaveTexto_(entidad, o) {
+  return LIC_ENTIDADES_[entidad].clave.map(function (c) { return String(o[c] === undefined || o[c] === null ? '' : o[c]); }).join(' · ');
+}
+
+// Convierte el valor recibido al tipo del campo. Lanza Error con un mensaje
+// para personas (se muestra tal cual en el panel).
+function licNormalizarValor_(tipo, v, etiqueta) {
+  if (v === undefined || v === null) v = '';
+  if (tipo === 'n') {
+    if (v === '') return '';
+    var n = Number(String(v).replace(/[,\s]/g, '').replace(/^S\/\.?/i, ''));
+    if (isNaN(n)) throw new Error('"' + etiqueta + '" debe ser un número');
+    return n;
+  }
+  if (tipo === 'd') {
+    v = String(v).trim();
+    if (v === '') return '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error('"' + etiqueta + '" debe ser una fecha válida');
+    return v;
+  }
+  if (tipo === 'b') return v === true || v === 'true' || v === 'si' || v === 'Sí' || v === 1 ? true : false;
+  if (tipo === 'j') {
+    if (Array.isArray(v)) return JSON.stringify(v);
+    if (v === '') return '[]';
+    try { JSON.parse(v); return String(v); } catch (e) { throw new Error('"' + etiqueta + '" no es una lista válida'); }
+  }
+  if (tipo.indexOf('o:') === 0) {
+    var opciones = tipo.slice(2).split('|');
+    v = String(v);
+    if (opciones.indexOf(v) < 0) throw new Error('"' + etiqueta + '" no admite el valor ' + v);
+    return v;
+  }
+  v = String(v);
+  if (v.length > 5000) throw new Error('"' + etiqueta + '" es demasiado largo');
+  return tipo === 'l' ? v : v.trim();
+}
+
+// Valor de celda comparable (lo que se guarda en el historial)
+function licTextoCelda_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, 'America/Lima', 'yyyy-MM-dd');
+  if (v === undefined || v === null) return '';
+  return String(v);
+}
+
+function licBuscarFila_(datos, headers, camposClave, valores) {
+  var idx = camposClave.map(function (c) { return headers.indexOf(c); });
+  for (var i = 1; i < datos.length; i++) {
+    var ok = idx.every(function (ix, j) { return ix >= 0 && licTextoCelda_(datos[i][ix]) === String(valores[j]); });
+    if (ok) return i;
+  }
+  return -1;
+}
+
+function licRegistrarHistorial_(entradas) {
+  if (!entradas.length) return;
+  var hoja = hojaLic_('historial');
+  var filas = entradas.map(function (e) {
+    return LIC_HOJAS_.historial.map(function (h) { return e[h] === undefined ? '' : e[h]; });
+  });
+  hoja.getRange(hoja.getLastRow() + 1, 1, filas.length, LIC_HOJAS_.historial.length).setValues(filas);
+}
+
+function licFilaAObjeto_(headers, fila) {
+  var o = {};
+  headers.forEach(function (h, i) { o[h] = licTextoCeldaLectura_(fila[i]); });
+  o.campos_web = licParseArray_(o.campos_web);
+  return o;
+}
+
+// data = { entidad, clave: {campo: valor}, cambios: {campo: valor}, crear?: true }
+function licGuardar(data, userId) {
+  data = data || {};
+  var entidad = String(data.entidad || '');
+  var esq = LIC_ENTIDADES_[entidad];
+  if (!esq) return { success: false, error: 'Tipo de ficha desconocido: ' + entidad };
+  var cambiosIn = data.cambios || {};
+  var claveIn = data.clave || {};
+  var crear = data.crear === true;
+
+  // 1) Validar y normalizar ANTES de tocar la hoja
+  var cambios = {};
+  try {
+    Object.keys(cambiosIn).forEach(function (campo) {
+      if (esq.clave.indexOf(campo) >= 0) return; // la clave va aparte
+      var tipo = esq.campos[campo];
+      if (!tipo) throw new Error('El campo "' + campo + '" no se puede editar');
+      cambios[campo] = licNormalizarValor_(tipo, cambiosIn[campo], campo);
+    });
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+
+  return withLock_(function () {
+    var hoja = hojaLic_(entidad);
+    var headers = LIC_HOJAS_[entidad];
+    var datos = hoja.getDataRange().getValues();
+    var usuario = licNombreUsuario_(userId);
+    var ahora = new Date().toISOString();
+    var claveValores;
+
+    if (crear) {
+      var nueva = {};
+      if (esq.autoId) {
+        nueva.id = esq.autoId + '-' + Utilities.getUuid().slice(0, 8).toUpperCase();
+      } else {
+        for (var k = 0; k < esq.clave.length; k++) {
+          var c = esq.clave[k];
+          var val = String(claveIn[c] === undefined ? '' : claveIn[c]).trim();
+          if (!val) return { success: false, error: 'Falta "' + c + '"' };
+          if (LIC_FORMATO_CLAVE_[c] && !LIC_FORMATO_CLAVE_[c].re.test(val)) return { success: false, error: LIC_FORMATO_CLAVE_[c].error };
+          nueva[c] = val;
+        }
+      }
+      claveValores = esq.clave.map(function (c) { return nueva[c]; });
+      if (licBuscarFila_(datos, headers, esq.clave, claveValores) > 0) {
+        return { success: false, error: 'Ya existe una ficha con ' + esq.clave.join(' + ') + ' = ' + claveValores.join(' · ') + '. Búscala y edítala en vez de crearla de nuevo.' };
+      }
+      Object.keys(cambios).forEach(function (c) { nueva[c] = cambios[c]; });
+      var faltan = esq.obligatorios.filter(function (c) { return nueva[c] === undefined || nueva[c] === ''; });
+      if (faltan.length) return { success: false, error: 'Falta completar: ' + faltan.join(', ') };
+      nueva.origen = 'web';
+      nueva.campos_web = JSON.stringify(Object.keys(cambios));
+      nueva.editado_por = usuario;
+      nueva.editado_en = ahora;
+      var fila = headers.map(function (h) { return nueva[h] === undefined ? '' : nueva[h]; });
+      hoja.getRange(hoja.getLastRow() + 1, 1, 1, headers.length).setNumberFormat('@').setValues([fila]);
+      licRegistrarHistorial_([{
+        id: 'H-' + Utilities.getUuid().slice(0, 8), fecha: ahora, usuario: usuario, entidad: entidad,
+        clave: JSON.stringify(licObjetoClave_(esq, nueva)), campo: '', antes: '', despues: '', accion: 'crear'
+      }]);
+      return { success: true, data: licFilaAObjeto_(headers, fila), message: 'Listo: ficha creada (' + LIC_ETIQUETA_ENTIDAD_[entidad] + ')' };
+    }
+
+    claveValores = esq.clave.map(function (c) { return String(claveIn[c] === undefined ? '' : claveIn[c]); });
+    var i = licBuscarFila_(datos, headers, esq.clave, claveValores);
+    if (i < 0) return { success: false, error: 'No se encontró la ficha (' + claveValores.join(' · ') + '). Recarga la página.' };
+    var filaAct = datos[i].slice();
+    while (filaAct.length < headers.length) filaAct.push('');
+    var historial = [];
+    var camposWeb = licParseArray_(filaAct[headers.indexOf('campos_web')]);
+    Object.keys(cambios).forEach(function (campo) {
+      var col = headers.indexOf(campo);
+      var antes = licTextoCelda_(filaAct[col]);
+      var despues = licTextoCelda_(cambios[campo]);
+      if (antes === despues) return;
+      filaAct[col] = cambios[campo];
+      if (camposWeb.indexOf(campo) < 0) camposWeb.push(campo);
+      historial.push({
+        id: 'H-' + Utilities.getUuid().slice(0, 8), fecha: ahora, usuario: usuario, entidad: entidad,
+        clave: JSON.stringify(licObjetoClave_(esq, claveIn)), campo: campo, antes: antes, despues: despues, accion: 'editar'
+      });
+    });
+    if (!historial.length) return { success: true, data: licFilaAObjeto_(headers, filaAct), message: 'No había cambios que guardar' };
+    filaAct[headers.indexOf('campos_web')] = JSON.stringify(camposWeb);
+    filaAct[headers.indexOf('editado_por')] = usuario;
+    filaAct[headers.indexOf('editado_en')] = ahora;
+    if (entidad === 'procesos') filaAct[headers.indexOf('actualizado')] = ahora;
+    hoja.getRange(i + 1, 1, 1, headers.length).setNumberFormat('@').setValues([filaAct]);
+    licRegistrarHistorial_(historial);
+    return { success: true, data: licFilaAObjeto_(headers, filaAct), message: historial.length === 1 ? 'Cambio guardado' : historial.length + ' cambios guardados' };
+  });
+}
+
+function licObjetoClave_(esq, o) {
+  var r = {};
+  esq.clave.forEach(function (c) { r[c] = String(o[c] === undefined ? '' : o[c]); });
+  return r;
+}
+
+// data = { entidad, clave, archivar: true|false }
+function licArchivar(data, userId) {
+  data = data || {};
+  var entidad = String(data.entidad || '');
+  var esq = LIC_ENTIDADES_[entidad];
+  if (!esq) return { success: false, error: 'Tipo de ficha desconocido: ' + entidad };
+  var archivar = data.archivar !== false;
+  return withLock_(function () {
+    var hoja = hojaLic_(entidad);
+    var headers = LIC_HOJAS_[entidad];
+    var datos = hoja.getDataRange().getValues();
+    var valores = esq.clave.map(function (c) { return String((data.clave || {})[c] || ''); });
+    var i = licBuscarFila_(datos, headers, esq.clave, valores);
+    if (i < 0) return { success: false, error: 'No se encontró la ficha. Recarga la página.' };
+    var col = headers.indexOf('archivado');
+    var antes = licTextoCelda_(datos[i][col]);
+    var ahora = new Date().toISOString();
+    var nuevo = archivar ? ahora : '';
+    hoja.getRange(i + 1, col + 1).setValue(nuevo);
+    licRegistrarHistorial_([{
+      id: 'H-' + Utilities.getUuid().slice(0, 8), fecha: ahora, usuario: licNombreUsuario_(userId), entidad: entidad,
+      clave: JSON.stringify(licObjetoClave_(esq, data.clave || {})), campo: 'archivado', antes: antes, despues: nuevo,
+      accion: archivar ? 'archivar' : 'restaurar'
+    }]);
+    return { success: true, message: archivar ? 'Archivado. Puedes recuperarlo en "Ver archivados".' : 'Recuperado' };
+  });
+}
+
+// data = { entidad?, clave?: {..}, limite? } → últimos cambios (más recientes primero)
+function licHistorial(data) {
+  data = data || {};
+  var claveTxt = data.clave ? JSON.stringify(licObjetoClave_(LIC_ENTIDADES_[data.entidad] || { clave: [] }, data.clave)) : '';
+  var lista = leerFilasLic_('historial', true).filter(function (h) {
+    if (data.entidad && h.entidad !== data.entidad) return false;
+    if (claveTxt && h.clave !== claveTxt) return false;
+    return true;
+  });
+  lista.reverse();
+  var limite = Math.min(Number(data.limite) || 50, 300);
+  return { success: true, data: lista.slice(0, limite) };
+}
+
+// data = { id } — vuelve un cambio a su valor anterior, solo si nadie lo tocó después
+function licDeshacer(data, userId) {
+  data = data || {};
+  var h = leerFilasLic_('historial', true).filter(function (x) { return x.id === data.id; })[0];
+  if (!h) return { success: false, error: 'No se encontró ese cambio en el historial' };
+  var clave = licParseObjeto_(h.clave);
+  if (h.accion === 'crear') return licArchivar({ entidad: h.entidad, clave: clave, archivar: true }, userId);
+  if (h.accion === 'archivar' || h.accion === 'restaurar') {
+    return licArchivar({ entidad: h.entidad, clave: clave, archivar: h.accion === 'restaurar' }, userId);
+  }
+  var esq = LIC_ENTIDADES_[h.entidad];
+  if (!esq) return { success: false, error: 'Tipo de ficha desconocido' };
+  var hoja = hojaLic_(h.entidad);
+  var headers = LIC_HOJAS_[h.entidad];
+  var datos = hoja.getDataRange().getValues();
+  var i = licBuscarFila_(datos, headers, esq.clave, esq.clave.map(function (c) { return clave[c]; }));
+  if (i < 0) return { success: false, error: 'La ficha ya no existe' };
+  var actual = licTextoCelda_(datos[i][headers.indexOf(h.campo)]);
+  if (actual !== String(h.despues)) {
+    return { success: false, error: 'Ese dato se volvió a cambiar después. Deshaz primero el cambio más reciente.' };
+  }
+  var cambios = {};
+  cambios[h.campo] = h.antes;
+  var r = licGuardar({ entidad: h.entidad, clave: clave, cambios: cambios }, userId);
+  if (r.success) r.message = 'Cambio deshecho: "' + h.campo + '" volvió a su valor anterior';
+  return r;
+}
+
+// ── Servicios en ejecución: con lo facturado de su contrato ─────────
+function licServicios(data) {
+  data = data || {};
+  var facturas = leerFilasLic_('facturas');
+  var lista = leerFilasLic_('servicios', data.archivados).map(function (s) {
+    var propias = s.contrato ? facturas.filter(function (f) { return String(f.contrato) === String(s.contrato); }) : [];
+    return Object.assign({}, s, {
+      personal: licParseArray_(s.personal),
+      facturado: Math.round(propias.reduce(function (a, f) { return a + (Number(f.monto) || 0); }, 0) * 100) / 100,
+      n_facturas: propias.length
+    });
+  });
+  return { success: true, data: lista };
 }

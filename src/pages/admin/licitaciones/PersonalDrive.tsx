@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   FaFolder, FaFolderOpen, FaFilePdf, FaDownload, FaExternalLinkAlt, FaCamera, FaChevronRight, FaArrowLeft, FaSpinner, FaUserTie,
+  FaPen, FaPlus, FaIdCard, FaPhone, FaEnvelope,
 } from 'react-icons/fa'
 import { api, LicDocumento, LicPersonal } from '../../../api/appScriptApi'
 import { useArchivosLic, useSubirFotoLic } from '../../../api/licArchivos'
 import { useToast } from '../../../context/ToastContext'
 import { fecha, ocultarDni } from './licUtils'
 import { nombreTipo } from './DocumentosVistas'
+import FichaEditable, { EtiquetaEdicion } from './FichaEditable'
 
 // ============================================================
 // "Drive" del personal clave, estilo Terran (pedido del dueño 28/09/2026):
@@ -15,12 +17,15 @@ import { nombreTipo } from './DocumentosVistas'
 //   reutilizable (cortado de la propuesta y verificado página por página):
 //   Abrir · Descargar · Ver en la propuesta (contexto).
 // La foto se guarda en la carpeta de la persona en el acervo (foto.jpg).
+// Las carpetas salen de los documentos y TAMBIÉN de la lista de personal
+// (una persona agregada en la web, sin documentos todavía, igual aparece).
+// "Editar datos" y "Agregar persona" usan la FichaEditable (entidad 'personal').
 // ============================================================
 
 interface Persona {
   dni: string
   nombre: string
-  carpeta: string // 01_GERENCIA/acervo/personal/<DNI - NOMBRE>
+  carpeta: string // 01_GERENCIA/acervo/personal/<DNI - NOMBRE> ('' si aún no tiene carpeta en el acervo)
   docs: LicDocumento[]
   procesos: string[]
 }
@@ -78,14 +83,12 @@ function Foto({ persona, version, grande = false }: { persona: Persona; version:
 }
 
 // ── Archivo (PDF individual) ─────────────────────────────────────
-function Archivo({ persona, d, pagina, archivoPropuesta, estado, edicion, abierto, onEditar }: {
+function Archivo({ persona, d, pagina, archivoPropuesta, estado, onEditar }: {
   persona: Persona
   d: LicDocumento
   pagina?: number | null
   archivoPropuesta?: string | null
   estado: JSX.Element
-  edicion: JSX.Element
-  abierto: boolean
   onEditar: () => void
 }) {
   const arch = useArchivosLic()
@@ -103,7 +106,7 @@ function Archivo({ persona, d, pagina, archivoPropuesta, estado, edicion, abiert
           <p className="text-xs text-slate-400 mt-1">{d.fecha ? fecha(d.fecha) : 'Sin fecha'}{d.periodo_desde ? ` · ${fecha(d.periodo_desde)} – ${d.periodo_hasta ? fecha(d.periodo_hasta) : 'actualidad'}` : ''}</p>
         </div>
       </div>
-      <div className="px-4 pb-3">{estado}</div>
+      <div className="px-4 pb-3 flex flex-wrap items-center gap-1.5">{estado}<EtiquetaEdicion fila={d as unknown as Record<string, unknown>} /></div>
       <div className="mt-auto grid grid-cols-3 border-t border-slate-700 text-xs">
         <a
           href={url || undefined}
@@ -125,7 +128,7 @@ function Archivo({ persona, d, pagina, archivoPropuesta, estado, edicion, abiert
           onClick={onEditar}
           className="flex items-center justify-center gap-1.5 py-2.5 text-slate-200 hover:bg-slate-700/60 border-l border-slate-700"
         >
-          {abierto ? 'Cerrar' : 'Estado'}
+          <FaPen className="text-[10px]" /> Editar
         </button>
       </div>
       {arch.ver(archivoPropuesta) && (
@@ -136,7 +139,6 @@ function Archivo({ persona, d, pagina, archivoPropuesta, estado, edicion, abiert
           Ver dónde está en la propuesta{pagina ? ` (pág. ${pagina})` : ''} <FaExternalLinkAlt className="text-[9px]" />
         </button>
       )}
-      {abierto && <div className="p-3 border-t border-slate-700">{edicion}</div>}
     </div>
   )
 }
@@ -145,27 +147,34 @@ interface Props {
   lista: LicDocumento[]
   busqueda: string
   estadoDe: (d: LicDocumento) => JSX.Element
-  edicionDe: (d: LicDocumento) => JSX.Element
+  /** abre la ficha del documento */
+  onEditarDoc: (d: LicDocumento) => void
+  /** abre el alta de un documento con estos datos ya puestos (persona) */
+  onNuevoDocumento: (inicial: Record<string, unknown>) => void
+  /** mostrar también las personas archivadas */
+  archivados?: boolean
 }
 
-export default function PersonalDrive({ lista, busqueda, estadoDe, edicionDe }: Props) {
+export default function PersonalDrive({ lista, busqueda, estadoDe, onEditarDoc, onNuevoDocumento, archivados = false }: Props) {
   const toast = useToast()
   const arch = useArchivosLic()
   const subirFoto_ = useSubirFotoLic()
   const [fichas, setFichas] = useState<Record<string, LicPersonal>>({})
   const [elegida, setElegida] = useState<string | null>(null)
   const [modo, setModo] = useState<'procesos' | 'todos'>('procesos')
-  const [abiertoDoc, setAbiertoDoc] = useState<string | null>(null)
+  // Ficha de persona abierta: undefined = cerrada, null = persona nueva
+  const [fichaPersona, setFichaPersona] = useState<LicPersonal | null | undefined>(undefined)
   const [plegados, setPlegados] = useState<Record<string, boolean>>({})
   const [versionFoto, setVersionFoto] = useState(() => Date.now())
   const [subiendo, setSubiendo] = useState(false)
   const inputFoto = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    api.licPersonal().then((r) => {
+  const cargarFichas = () => {
+    api.licPersonal({ archivados: true }).then((r) => {
       if (r.success && r.data) setFichas(Object.fromEntries(r.data.map((p) => [String(p.dni), p])))
     })
-  }, [])
+  }
+  useEffect(() => { cargarFichas() }, [])
 
   const personas = useMemo<Persona[]>(() => {
     const mapa = new Map<string, Persona>()
@@ -178,12 +187,28 @@ export default function PersonalDrive({ lista, busqueda, estadoDe, edicionDe }: 
       if (!p.carpeta && carpeta) p.carpeta = carpeta
       mapa.set(clave, p)
     })
+    // Personas de la lista de personal que aún no tienen documentos
+    Object.values(fichas).forEach((f) => {
+      const dni = String(f.dni)
+      if (!mapa.has(dni)) mapa.set(dni, { dni, nombre: f.nombre, carpeta: '', docs: [], procesos: [] })
+      else mapa.get(dni)!.nombre = f.nombre || mapa.get(dni)!.nombre // el nombre corregido en la web gana
+    })
     const q = busqueda.trim().toLowerCase()
     return [...mapa.values()]
+      .filter((p) => archivados || !fichas[String(p.dni)]?.archivado)
       .filter((p) => !q || p.nombre.toLowerCase().includes(q) || String(p.dni).includes(q)
         || p.docs.some((d) => (d.titulo || '').toLowerCase().includes(q)))
       .sort((a, b) => b.docs.length - a.docs.length)
-  }, [lista, busqueda])
+  }, [lista, busqueda, fichas, archivados])
+
+  const modalPersona = fichaPersona !== undefined && (
+    <FichaEditable
+      entidad="personal"
+      fila={fichaPersona as unknown as Record<string, unknown> | null}
+      onCerrar={() => setFichaPersona(undefined)}
+      onGuardado={() => { setFichaPersona(undefined); cargarFichas() }}
+    />
+  )
 
   const persona = personas.find((p) => (p.dni || p.nombre) === elegida) || null
 
@@ -205,8 +230,14 @@ export default function PersonalDrive({ lista, busqueda, estadoDe, edicionDe }: 
 
   // ── Vista: carpetas ─────────────────────────────────────────────
   if (!persona) {
-    if (!personas.length) return <p className="text-primary-400">No hay personal con documentos (o la búsqueda no coincide).</p>
     return (
+      <div className="space-y-4">
+      <div className="flex justify-end">
+        <button onClick={() => setFichaPersona(null)} className="px-4 py-2 text-sm bg-accent-energy text-[#111827] font-semibold inline-flex items-center gap-2">
+          <FaPlus /> Agregar persona
+        </button>
+      </div>
+      {!personas.length && <p className="text-primary-400">No hay personal con documentos (o la búsqueda no coincide).</p>}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {personas.map((p) => {
           const f = fichas[String(p.dni)]
@@ -224,6 +255,7 @@ export default function PersonalDrive({ lista, busqueda, estadoDe, edicionDe }: 
               </div>
               <p className="mt-3 font-display font-bold text-white leading-tight text-sm">{p.nombre}</p>
               <p className="text-xs text-slate-400 font-mono">{ocultarDni(p.dni)}</p>
+              {f && <div className="mt-1"><EtiquetaEdicion fila={f as unknown as Record<string, unknown>} /></div>}
               <p className="text-xs text-slate-300 mt-1">
                 {p.docs.length} documentos · {p.procesos.length} procesos
                 {f?.anios_experiencia ? ` · ${f.anios_experiencia} años exp.` : ''}
@@ -234,6 +266,8 @@ export default function PersonalDrive({ lista, busqueda, estadoDe, edicionDe }: 
             </button>
           )
         })}
+      </div>
+      {modalPersona}
       </div>
     )
   }
@@ -259,9 +293,7 @@ export default function PersonalDrive({ lista, busqueda, estadoDe, edicionDe }: 
       pagina={pag}
       archivoPropuesta={arch}
       estado={estadoDe(d)}
-      edicion={edicionDe(d)}
-      abierto={abiertoDoc === clave}
-      onEditar={() => setAbiertoDoc(abiertoDoc === clave ? null : clave)}
+      onEditar={() => onEditarDoc(d)}
     />
   )
 
@@ -280,7 +312,7 @@ export default function PersonalDrive({ lista, busqueda, estadoDe, edicionDe }: 
       <div className="placa-acero p-5 flex flex-col sm:flex-row gap-5">
         <div className="shrink-0">
           <Foto persona={persona} version={versionFoto} grande />
-          {(arch.disponible || arch.cargando) && (
+          {persona.carpeta && (arch.disponible || arch.cargando) && (
             <>
               <button
                 onClick={() => inputFoto.current?.click()}
@@ -295,8 +327,37 @@ export default function PersonalDrive({ lista, busqueda, estadoDe, edicionDe }: 
         </div>
         <div className="flex-1 min-w-0">
           <p className="rotulo-estencil mb-2">Personal clave</p>
-          <h2 className="text-2xl font-display font-bold text-white">{persona.nombre}</h2>
-          <p className="text-sm text-slate-400 font-mono mb-3">{ocultarDni(persona.dni)}</p>
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-2xl font-display font-bold text-white">{persona.nombre}</h2>
+              <p className="text-sm text-slate-400 font-mono">{ocultarDni(persona.dni)}</p>
+              {ficha?.profesion && <p className="text-sm text-slate-300">{ficha.profesion}</p>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {ficha && (
+                <button onClick={() => setFichaPersona(ficha)} className="px-3 py-1.5 text-xs bg-accent-energy text-[#111827] font-semibold inline-flex items-center gap-1.5">
+                  <FaPen /> Editar datos
+                </button>
+              )}
+              <button
+                onClick={() => onNuevoDocumento({ categoria: 'personal', dni: persona.dni, nombre: persona.nombre })}
+                className="px-3 py-1.5 text-xs border border-slate-500 text-slate-200 hover:border-accent-energy inline-flex items-center gap-1.5"
+              >
+                <FaPlus /> Agregar documento
+              </button>
+            </div>
+          </div>
+          {ficha && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-300 my-2">
+              <EtiquetaEdicion fila={ficha as unknown as Record<string, unknown>} />
+              {ficha.colegiatura && <span className="inline-flex items-center gap-1.5"><FaIdCard className="text-slate-500" /> CIP {ficha.colegiatura}</span>}
+              {ficha.telefono && <span className="inline-flex items-center gap-1.5"><FaPhone className="text-slate-500" /> {ficha.telefono}</span>}
+              {ficha.correo && <span className="inline-flex items-center gap-1.5"><FaEnvelope className="text-slate-500" /> {ficha.correo}</span>}
+              {ficha.disponible === 'si' && <span className="text-emerald-300">Disponible para propuestas</span>}
+              {ficha.disponible === 'no' && <span className="text-amber-300">No disponible</span>}
+            </div>
+          )}
+          <div className="mb-3" />
           <div className="grid grid-cols-3 gap-3 max-w-md">
             {[
               [String(persona.docs.length), 'documentos'],
@@ -327,6 +388,10 @@ export default function PersonalDrive({ lista, busqueda, estadoDe, edicionDe }: 
           </button>
         ))}
       </div>
+
+      {!persona.docs.length && (
+        <p className="text-sm text-slate-400">Todavía no tiene documentos. Usa "Agregar documento" para subir su CV, título o certificados.</p>
+      )}
 
       {modo === 'todos' ? (
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -365,6 +430,7 @@ export default function PersonalDrive({ lista, busqueda, estadoDe, edicionDe }: 
           })}
         </div>
       )}
+      {modalPersona}
     </div>
   )
 }

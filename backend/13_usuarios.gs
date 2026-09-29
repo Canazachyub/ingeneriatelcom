@@ -378,7 +378,7 @@ function invalidarLecturas_() {
 
 // Lecturas del modulo Licitaciones que no siguen el prefijo get/obtener/...
 // (nombradas asi en docs/PLAN_LICITACIONES_ADMIN.md, el diseno ya aprobado).
-var LECTURAS_LIC_ = ['licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia', 'licDocumentos', 'licPersonal', 'licContratos', 'licPropuestas', 'licCarpetaDrive', 'licArchivosDrive'];
+var LECTURAS_LIC_ = ['licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia', 'licDocumentos', 'licPersonal', 'licContratos', 'licPropuestas', 'licCarpetaDrive', 'licArchivosDrive', 'licHistorial', 'licServicios'];
 
 // Acciones de solo lectura (no se auditan ni invalidan cache).
 function esAccionDeLectura_(action) {

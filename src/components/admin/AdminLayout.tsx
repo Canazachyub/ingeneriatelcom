@@ -26,6 +26,7 @@ import { FaSatelliteDish, FaChartArea, FaBook,
   FaListAlt,
   FaUserFriends,
   FaFolderOpen,
+  FaHardHat,
 } from 'react-icons/fa'
 import { useAuth } from '../../context/AuthContext'
 import { MODULOS, Modulo, puede, nombreDe, rolDe } from '../../utils/roles'
@@ -94,6 +95,7 @@ const navigationSections: { title: string; items: NavItem[] }[] = [
     title: 'Licitaciones',
     items: [
       { name: 'Inicio', href: '/admin/licitaciones', icon: FaGavel, modulo: 'licitaciones' },
+      { name: 'Servicios en ejecución', href: '/admin/licitaciones/servicios', icon: FaHardHat, modulo: 'licitaciones' },
       { name: 'Buscar licitaciones', href: '/admin/licitaciones/radar', icon: FaSatelliteDish, modulo: 'licitaciones' },
       { name: 'Mis licitaciones', href: '/admin/licitaciones/procesos', icon: FaListAlt, modulo: 'licitaciones', tambienActivo: ['/admin/licitaciones/estadisticas'] },
       { name: 'Carpeta de la empresa', href: '/admin/licitaciones/personal', icon: FaFolderOpen, modulo: 'licitaciones', tambienActivo: ['/admin/licitaciones/documentos', '/admin/licitaciones/contratos', '/admin/licitaciones/experiencia'] },

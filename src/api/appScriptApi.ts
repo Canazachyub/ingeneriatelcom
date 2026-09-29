@@ -1,3 +1,4 @@
+import type { EntidadLic } from '../pages/admin/licitaciones/licEsquemas'
 import { config } from '../config/env'
 import * as licLocal from './licLocal'
 import { JobPosting, JobApplication } from '../types/job.types'
@@ -117,7 +118,55 @@ export interface RegistroAuditoria {
 // Los nombres de campo son EXACTAMENTE los del JSON que exporta el vault
 // (ver exportar_web.py): sin capa de normalizacion, a proposito.
 
-export interface LicProceso {
+// Columnas de edición comunes a toda ficha editable (ver backend/17_lic_edicion.gs)
+export interface LicEdicionMeta {
+  origen?: string // 'vault' | 'web' | 'postores'
+  campos_web?: string[] // campos corregidos en la web (el import ya no los pisa)
+  archivado?: string // ISO si está archivada
+  editado_por?: string
+  editado_en?: string
+}
+
+export interface LicOferta {
+  proceso: string
+  monto: number
+  pct_vr: number | null
+}
+
+export interface LicServicio extends LicEdicionMeta {
+  id: string
+  nombre: string
+  proceso: string
+  entidad: string
+  zona: string
+  contrato: string
+  fecha_inicio: string
+  fecha_fin: string
+  monto: number | ''
+  estado: string // por_iniciar | en_ejecucion | suspendido | terminado
+  responsable: string
+  personal: string[] // DNI del personal clave
+  proyecto_id: string
+  proximo_hito: string
+  fecha_hito: string
+  notas: string
+  facturado?: number
+  n_facturas?: number
+}
+
+export interface LicCambio {
+  id: string
+  fecha: string
+  usuario: string
+  entidad: string
+  clave: string // JSON de la clave
+  campo: string
+  antes: string
+  despues: string
+  accion: 'editar' | 'crear' | 'archivar' | 'restaurar'
+}
+
+export interface LicProceso extends LicEdicionMeta {
   nomenclatura: string
   codigo_seace: string
   anio: string
@@ -140,7 +189,7 @@ export interface LicProceso {
   actualizado: string
 }
 
-export interface LicPostor {
+export interface LicPostor extends LicEdicionMeta {
   nomenclatura: string
   ruc: string
   razon_social: string
@@ -160,18 +209,24 @@ export interface LicAccion {
   motivo: string
 }
 
-export interface LicCompetidor {
+export interface LicCompetidor extends LicEdicionMeta {
   ruc: string
   nombre: string
   procesos: string[]
   n_procesos: number | ''
   entidades: string[]
-  ofertas: number[]
+  ofertas: LicOferta[]
   pct_vr_promedio: number | null
   ganados: number | ''
+  zona?: string
+  contacto?: string
+  telefono?: string
+  fortalezas?: string
+  amenaza?: string // alta | media | baja
+  notas?: string
 }
 
-export interface LicExperiencia {
+export interface LicExperiencia extends LicEdicionMeta {
   proceso: string
   entidad: string
   objeto: string
@@ -181,6 +236,7 @@ export interface LicExperiencia {
   acreditable: number | '' | null
   estado: string
   fecha_contrato: string
+  notas?: string
 }
 
 export interface LicAparicion {
@@ -199,7 +255,7 @@ export interface LicPropuesta {
   secciones: { id: string; categoria: string; tipo: string; titulo: string; desde: number | null; hasta: number | null }[]
 }
 
-export interface LicDocumento {
+export interface LicDocumento extends Omit<LicEdicionMeta, 'editado_por' | 'editado_en'> {
   id: string
   categoria: string
   tipo: string
@@ -236,7 +292,7 @@ export interface LicTitulo {
   id: string
 }
 
-export interface LicPersonal {
+export interface LicPersonal extends LicEdicionMeta {
   dni: string
   nombre: string
   documentos: number | ''
@@ -247,9 +303,14 @@ export interface LicPersonal {
   anios_experiencia: number | ''
   empleado_vinculado: string
   notas: string
+  profesion?: string
+  colegiatura?: string
+  telefono?: string
+  correo?: string
+  disponible?: string
 }
 
-export interface LicFactura {
+export interface LicFactura extends LicEdicionMeta {
   contrato: string
   numero: string
   fecha: string
@@ -260,7 +321,7 @@ export interface LicFactura {
   notas: string
 }
 
-export interface LicContrato {
+export interface LicContrato extends LicEdicionMeta {
   contrato: string
   documentos: number | ''
   tipos: Record<string, number>
@@ -273,6 +334,8 @@ export interface LicContrato {
   en_seace_telcom: boolean
   estado: string
   notas: string
+  fecha_inicio?: string
+  fecha_fin?: string
   facturas: LicFactura[]
 }
 
@@ -290,6 +353,11 @@ export interface LicResumen {
   contratos_con_sustento: number
   facturas: number
   facturado_total: number
+}
+
+export interface OpcionesLecturaLic {
+  /** incluir también las fichas archivadas */
+  archivados?: boolean
 }
 
 export interface LicImportPayload {
@@ -1424,9 +1492,9 @@ class AppScriptApi {
     return this.request('licResumen', 'POST', {})
   }
 
-  async licProcesos(): Promise<ApiResponse<LicProceso[]>> {
-    if (LIC_LOCAL) return licLocal.licProcesos()
-    return this.request('licProcesos', 'POST', {})
+  async licProcesos(opciones: OpcionesLecturaLic = {}): Promise<ApiResponse<LicProceso[]>> {
+    if (LIC_LOCAL) return licLocal.licProcesos(opciones)
+    return this.request('licProcesos', 'POST', { ...opciones })
   }
 
   async licProceso(nom: string): Promise<ApiResponse<{ proceso: LicProceso; postores: LicPostor[]; acciones: LicAccion[] }>> {
@@ -1434,14 +1502,14 @@ class AppScriptApi {
     return this.request('licProceso', 'POST', { nom })
   }
 
-  async licCompetidores(): Promise<ApiResponse<LicCompetidor[]>> {
-    if (LIC_LOCAL) return licLocal.licCompetidores()
-    return this.request('licCompetidores', 'POST', {})
+  async licCompetidores(opciones: OpcionesLecturaLic = {}): Promise<ApiResponse<LicCompetidor[]>> {
+    if (LIC_LOCAL) return licLocal.licCompetidores(opciones)
+    return this.request('licCompetidores', 'POST', { ...opciones })
   }
 
-  async licExperiencia(): Promise<ApiResponse<LicExperiencia[]>> {
-    if (LIC_LOCAL) return licLocal.licExperiencia()
-    return this.request('licExperiencia', 'POST', {})
+  async licExperiencia(opciones: OpcionesLecturaLic = {}): Promise<ApiResponse<LicExperiencia[]>> {
+    if (LIC_LOCAL) return licLocal.licExperiencia(opciones)
+    return this.request('licExperiencia', 'POST', { ...opciones })
   }
 
   // Propuestas completas con su índice (hoja lic_propuestas; se importa con propuestas.json)
@@ -1467,7 +1535,39 @@ class AppScriptApi {
     return this.request('licSubirFoto', 'POST', data)
   }
 
-  async licDocumentos(filtros?: { categoria?: string; dni?: string }): Promise<ApiResponse<LicDocumento[]>> {
+  // PDF nuevo desde el panel → Drive (Licitaciones/acervo/<categoria>/_web/)
+  async licSubirDocumento(data: { categoria: string; nombre: string; mime: string; base64: string }): Promise<ApiResponse<{ archivo_vault: string; id: string }>> {
+    if (LIC_LOCAL) return licLocal.licSubirDocumento(data)
+    return this.request('licSubirDocumento', 'POST', data)
+  }
+
+  // ── Edición genérica de fichas (backend/17_lic_edicion.gs) ──────────────
+  async licGuardar(data: { entidad: EntidadLic; clave: Record<string, string>; cambios: Record<string, unknown>; crear?: boolean }): Promise<ApiResponse<Record<string, unknown>>> {
+    if (LIC_LOCAL) return licLocal.licGuardar(data)
+    return this.request('licGuardar', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async licArchivar(data: { entidad: EntidadLic; clave: Record<string, string>; archivar: boolean }): Promise<ApiResponse<null>> {
+    if (LIC_LOCAL) return licLocal.licArchivar(data)
+    return this.request('licArchivar', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async licHistorial(data: { entidad?: EntidadLic; clave?: Record<string, string>; limite?: number } = {}): Promise<ApiResponse<LicCambio[]>> {
+    if (LIC_LOCAL) return licLocal.licHistorial(data)
+    return this.request('licHistorial', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async licDeshacer(id: string): Promise<ApiResponse<Record<string, unknown>>> {
+    if (LIC_LOCAL) return licLocal.licDeshacer(id)
+    return this.request('licDeshacer', 'POST', { id })
+  }
+
+  async licServicios(opciones: OpcionesLecturaLic = {}): Promise<ApiResponse<LicServicio[]>> {
+    if (LIC_LOCAL) return licLocal.licServicios(opciones)
+    return this.request('licServicios', 'POST', { ...opciones })
+  }
+
+  async licDocumentos(filtros?: { categoria?: string; dni?: string; archivados?: boolean }): Promise<ApiResponse<LicDocumento[]>> {
     if (LIC_LOCAL) return licLocal.licDocumentos(filtros)
     return this.request('licDocumentos', 'POST', (filtros || {}) as Record<string, unknown>)
   }
@@ -1510,19 +1610,19 @@ class AppScriptApi {
     return this.request('licActualizarProceso', 'POST', data as unknown as Record<string, unknown>)
   }
 
-  async licExportarCambios(desde?: string): Promise<ApiResponse<{ procesos: Partial<LicProceso>[]; documentos: Partial<LicDocumento>[] }>> {
+  async licExportarCambios(desde?: string): Promise<ApiResponse<Record<string, Record<string, unknown>[]>>> {
     if (LIC_LOCAL) return licLocal.licExportarCambios(desde)
     return this.request('licExportarCambios', 'POST', desde ? { desde } : {})
   }
 
-  async licPersonal(): Promise<ApiResponse<LicPersonal[]>> {
-    if (LIC_LOCAL) return licLocal.licPersonal()
-    return this.request('licPersonal', 'POST', {})
+  async licPersonal(opciones: OpcionesLecturaLic = {}): Promise<ApiResponse<LicPersonal[]>> {
+    if (LIC_LOCAL) return licLocal.licPersonal(opciones)
+    return this.request('licPersonal', 'POST', { ...opciones })
   }
 
-  async licContratos(): Promise<ApiResponse<LicContrato[]>> {
-    if (LIC_LOCAL) return licLocal.licContratos()
-    return this.request('licContratos', 'POST', {})
+  async licContratos(opciones: OpcionesLecturaLic = {}): Promise<ApiResponse<LicContrato[]>> {
+    if (LIC_LOCAL) return licLocal.licContratos(opciones)
+    return this.request('licContratos', 'POST', { ...opciones })
   }
 
   async licActualizarPersona(data: { dni: string; empleado_vinculado?: string; notas?: string }): Promise<ApiResponse<Partial<LicPersonal>>> {

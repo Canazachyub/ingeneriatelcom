@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
-import { FaFolderOpen, FaSearch, FaPlus, FaTimes, FaSave, FaSpinner, FaCheck, FaExclamationTriangle } from 'react-icons/fa'
+import { FaFolderOpen, FaSearch, FaPlus, FaTimes, FaSpinner, FaFilePdf, FaArrowRight, FaCheck } from 'react-icons/fa'
 import { api, LicDocumento, LicPropuesta } from '../../../api/appScriptApi'
 import { VISTAS, Vista, agrupar, FilaDocumento, VistaPropuestas, PanelDrive } from './DocumentosVistas'
 import PersonalDrive from './PersonalDrive'
+import FichaEditable, { VerArchivados } from './FichaEditable'
 import AdminLayout from '../../../components/admin/AdminLayout'
 import ErrorCarga from '../../../components/admin/ErrorCarga'
 import EmptyState from '../../../components/common/EmptyState'
@@ -12,10 +12,16 @@ import TableSkeleton from '../../../components/common/TableSkeleton'
 import { useToast } from '../../../context/ToastContext'
 import { fecha, Pestanas } from './licUtils'
 
-const CATEGORIAS = ['personal', 'experiencia', 'equipos', 'empresa', 'anexos'] as const
-const ETIQUETA_CATEGORIA: Record<string, string> = {
-  personal: 'Personal', experiencia: 'Experiencia', equipos: 'Equipos', empresa: 'Empresa', anexos: 'Anexos',
-}
+// De qué es el PDF nuevo (mismas categorías que acepta licSubirDocumento)
+const CATEGORIAS_PDF: { v: string; t: string }[] = [
+  { v: 'personal', t: 'Personal clave (CV, título, certificado…)' },
+  { v: 'experiencia', t: 'Experiencia (contrato, conformidad, factura…)' },
+  { v: 'equipos', t: 'Vehículos y equipos' },
+  { v: 'empresa', t: 'Empresa (vigencia de poder, RUC…)' },
+  { v: 'tecnico', t: 'Técnico' },
+  { v: 'otro', t: 'Otro' },
+]
+const MAX_PDF = 10 * 1024 * 1024
 
 function diasParaVencer(v: string): number | null {
   if (!v) return null
@@ -30,26 +36,6 @@ function VenceBadge({ vence }: { vence: string }) {
   if (d < 0) return <span className="px-2 py-0.5 rounded-full text-[11px] bg-red-500/20 text-red-400">Venció {fecha(vence)}</span>
   if (d <= 30) return <span className="px-2 py-0.5 rounded-full text-[11px] bg-amber-500/20 text-amber-300">Vence {fecha(vence)}</span>
   return <span className="text-primary-400 text-xs">{fecha(vence)}</span>
-}
-
-interface FormNuevo {
-  categoria: string
-  tipo: string
-  titulo: string
-  entidad: string
-  dni: string
-  nombre: string
-  fecha: string
-  periodo_desde: string
-  periodo_hasta: string
-  monto: string
-  archivo_vault: string
-  notas: string
-}
-
-const FORM_VACIO: FormNuevo = {
-  categoria: 'personal', tipo: '', titulo: '', entidad: '', dni: '', nombre: '',
-  fecha: '', periodo_desde: '', periodo_hasta: '', monto: '', archivo_vault: '', notas: '',
 }
 
 // Estado del documento en palabras: revisado / pendiente / con problema + vencimiento
@@ -67,6 +53,102 @@ function EstadoDoc({ verificado, vence }: { verificado: string; vence: string })
   )
 }
 
+function aBase64(archivo: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(((r.result as string) || '').split(',')[1] || '')
+    r.onerror = reject
+    r.readAsDataURL(archivo)
+  })
+}
+
+// ── Paso 1 del alta: el PDF y de qué es ─────────────────────────
+// Sube el PDF (opcional) y pasa a la ficha con archivo_vault/categoría ya puestos.
+function PasoPdf({ inicial, onCerrar, onListo }: {
+  inicial: Record<string, unknown>
+  onCerrar: () => void
+  onListo: (inicial: Record<string, unknown>) => void
+}) {
+  const [categoria, setCategoria] = useState(String(inicial.categoria || 'personal'))
+  const [archivo, setArchivo] = useState<File | null>(null)
+  const [error, setError] = useState('')
+  const [subiendo, setSubiendo] = useState(false)
+  const input = useRef<HTMLInputElement>(null)
+
+  const elegir = (f: File | undefined) => {
+    setError('')
+    if (!f) return
+    if (f.type !== 'application/pdf' && !/\.pdf$/i.test(f.name)) { setError('El archivo debe ser PDF'); return }
+    if (f.size > MAX_PDF) { setError(`El PDF pesa ${(f.size / 1024 / 1024).toFixed(1)} MB: el máximo es 10 MB`); return }
+    setArchivo(f)
+  }
+
+  const seguir = async (conPdf: boolean) => {
+    const base: Record<string, unknown> = { ...inicial, categoria }
+    if (!conPdf || !archivo) { onListo(base); return }
+    setSubiendo(true)
+    setError('')
+    try {
+      const r = await api.licSubirDocumento({ categoria, nombre: archivo.name, mime: 'application/pdf', base64: await aBase64(archivo) })
+      if (!r.success || !r.data) { setError(r.error || 'No se pudo subir el PDF'); return }
+      onListo({ ...base, archivo_vault: r.data.archivo_vault, titulo: base.titulo || archivo.name.replace(/\.pdf$/i, '') })
+    } catch {
+      setError('No se pudo leer el archivo')
+    } finally {
+      setSubiendo(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget && !subiendo) onCerrar() }}>
+      <div className="w-full max-w-lg bg-[#0f172a] border-2 border-accent-energy">
+        <div className="flex items-start gap-3 p-5 border-b border-slate-700">
+          <div className="flex-1">
+            <p className="rotulo-estencil mb-1">Nuevo documento · Paso 1 de 2</p>
+            <h2 className="text-xl font-display font-bold text-white">¿Qué documento vas a agregar?</h2>
+            {inicial.nombre ? <p className="text-sm text-slate-400 mt-1">Para: {String(inicial.nombre)}</p> : null}
+          </div>
+          <button onClick={onCerrar} disabled={subiendo} className="p-2 text-slate-400 hover:text-white" aria-label="Cerrar"><FaTimes /></button>
+        </div>
+        <div className="p-5 space-y-5">
+          <label className="block text-xs text-slate-300">
+            <span className="block mb-1">1. ¿De qué es? <span className="text-accent-energy">*</span></span>
+            <select value={categoria} onChange={(e) => setCategoria(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white focus:outline-none focus:border-accent-energy">
+              {CATEGORIAS_PDF.map((c) => <option key={c.v} value={c.v}>{c.t}</option>)}
+            </select>
+          </label>
+          <div className="text-xs text-slate-300">
+            <span className="block mb-1">2. El PDF (máx. 10 MB)</span>
+            <button type="button" onClick={() => input.current?.click()} disabled={subiendo}
+              className={`w-full flex items-center gap-3 px-4 py-4 border-2 border-dashed text-left ${archivo ? 'border-accent-energy bg-accent-energy/5' : 'border-slate-600 hover:border-slate-400'}`}>
+              <FaFilePdf className={`text-2xl ${archivo ? 'text-red-300' : 'text-slate-500'}`} />
+              <span className="flex-1 min-w-0">
+                {archivo
+                  ? <><span className="block text-white truncate">{archivo.name}</span><span className="text-slate-400">{(archivo.size / 1024 / 1024).toFixed(1)} MB · pulsa para cambiarlo</span></>
+                  : <span className="text-slate-300">Pulsa aquí para elegir el PDF</span>}
+              </span>
+              {archivo && <FaCheck className="text-accent-energy" />}
+            </button>
+            <input ref={input} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => { elegir(e.target.files?.[0]); e.target.value = '' }} />
+          </div>
+          {error && <p className="text-sm text-red-300">{error}</p>}
+        </div>
+        <div className="flex flex-wrap items-center gap-3 p-4 border-t border-slate-700">
+          <button onClick={() => seguir(false)} disabled={subiendo} className="text-xs text-slate-400 hover:text-slate-200 underline">
+            No tengo el PDF, solo anotar los datos
+          </button>
+          <span className="flex-1" />
+          <button onClick={() => seguir(true)} disabled={!archivo || subiendo}
+            className="px-5 py-2 text-sm bg-accent-energy text-[#111827] font-bold inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+            {subiendo ? <><FaSpinner className="animate-spin" /> Subiendo…</> : <>Siguiente <FaArrowRight /></>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function LicDocumentosPage() {
   const toast = useToast()
   const [lista, setLista] = useState<LicDocumento[]>([])
@@ -77,124 +159,32 @@ export default function LicDocumentosPage() {
   const [vista, setVista] = useState<Vista>('personal')
   const [propuestas, setPropuestas] = useState<LicPropuesta[]>([])
   const [busqueda, setBusqueda] = useState(() => searchParams.get('dni') || '')
-  const [editando, setEditando] = useState<Record<string, Partial<LicDocumento>>>({})
-  const [guardandoId, setGuardandoId] = useState<string | null>(null)
-  // Fila abierta para editar (una a la vez): la tabla muestra solo el estado
-  const [abierto, setAbierto] = useState<string | null>(null)
-  const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState<FormNuevo>(FORM_VACIO)
-  const [creando, setCreando] = useState(false)
+  const [archivados, setArchivados] = useState(false)
+  // Ficha abierta: documento a editar, o alta (paso 1: PDF → paso 2: ficha)
+  const [editar, setEditar] = useState<LicDocumento | null>(null)
+  const [pasoPdf, setPasoPdf] = useState<Record<string, unknown> | null>(null)
+  const [nuevo, setNuevo] = useState<Record<string, unknown> | null>(null)
 
   const cargar = async () => {
     setCargando(true)
     setError('')
-    const [r, rp] = await Promise.all([api.licDocumentos(), api.licPropuestas()])
+    const [r, rp] = await Promise.all([api.licDocumentos({ archivados }), api.licPropuestas()])
     setCargando(false)
     if (rp.success && rp.data) setPropuestas(rp.data)
     if (r.success && r.data) setLista(r.data)
     else setError(r.error || 'Error desconocido')
   }
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar() }, [archivados]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const agregar = (inicial: Record<string, unknown> = {}) => setPasoPdf(inicial)
 
-  const valorEditado = <K extends keyof LicDocumento>(d: LicDocumento, campo: K): LicDocumento[K] =>
-    (editando[d.id]?.[campo] as LicDocumento[K]) ?? d[campo]
-
-  const marcarEdicion = (id: string, cambios: Partial<LicDocumento>) => {
-    setEditando((prev) => ({ ...prev, [id]: { ...prev[id], ...cambios } }))
-  }
-
-  const guardarFila = async (d: LicDocumento) => {
-    const cambios = editando[d.id]
-    if (!cambios) return
-    setGuardandoId(d.id)
-    const r = await api.licActualizarDocumento({ id: d.id, ...cambios } as { id: string; verificado?: string; vence?: string; notas?: string })
-    setGuardandoId(null)
-    if (r.success) {
-      setLista((prev) => prev.map((x) => (x.id === d.id ? { ...x, ...cambios } : x)))
-      setEditando((prev) => { const { [d.id]: _quitado, ...resto } = prev; return resto })
-      toast.success('Documento actualizado')
-    } else {
-      toast.error(r.error || 'No se pudo guardar')
-    }
-  }
-
-  const crearDocumento = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!form.categoria || !form.titulo.trim()) {
-      toast.error('Completa al menos la categoría y el título')
-      return
-    }
-    setCreando(true)
-    const r = await api.licCrearDocumento({
-      ...form,
-      monto: form.monto ? Number(form.monto) : undefined,
-    })
-    setCreando(false)
-    if (r.success && r.data) {
-      toast.success('Documento creado')
-      setLista((prev) => [r.data as LicDocumento, ...prev])
-      setShowModal(false)
-      setForm(FORM_VACIO)
-    } else {
-      toast.error(r.error || 'No se pudo crear el documento')
-    }
-  }
-
-
-  // Estado y editor de un documento (se usan en las listas y en el Drive del personal)
-  const estadoDe = (doc: LicDocumento) => (
-    <EstadoDoc verificado={valorEditado(doc, 'verificado') || ''} vence={valorEditado(doc, 'vence') || ''} />
-  )
-  const edicionDe = (doc: LicDocumento) => (
-                            <div className="grid sm:grid-cols-[auto_auto_1fr_auto] gap-4 items-end bg-primary-950/60 p-3 border border-primary-800">
-                              <label className="text-xs text-primary-300">
-                                ¿Ya lo revisaste?
-                                <select
-                                  value={valorEditado(doc, 'verificado') || ''}
-                                  onChange={(e) => marcarEdicion(doc.id, { verificado: e.target.value })}
-                                  className="block mt-1 bg-primary-800 border border-primary-700 px-2 py-2 text-sm text-white focus:outline-none focus:border-accent-electric"
-                                >
-                                  <option value="">Todavía no</option>
-                                  <option value="si">Sí, está bien</option>
-                                  <option value="no">Tiene un problema</option>
-                                </select>
-                              </label>
-                              <label className="text-xs text-primary-300">
-                                ¿Cuándo vence? (si aplica)
-                                <input
-                                  type="date"
-                                  value={valorEditado(doc, 'vence') || ''}
-                                  onChange={(e) => marcarEdicion(doc.id, { vence: e.target.value })}
-                                  className="block mt-1 bg-primary-800 border border-primary-700 px-2 py-2 text-sm text-white focus:outline-none focus:border-accent-electric"
-                                />
-                              </label>
-                              <label className="text-xs text-primary-300">
-                                Nota
-                                <input
-                                  type="text"
-                                  value={valorEditado(doc, 'notas') || ''}
-                                  onChange={(e) => marcarEdicion(doc.id, { notas: e.target.value })}
-                                  placeholder="Ej.: pedir copia legalizada"
-                                  className="block w-full mt-1 bg-primary-800 border border-primary-700 px-2 py-2 text-sm text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric"
-                                />
-                              </label>
-                              <button
-                                onClick={async () => { await guardarFila(doc); setAbierto(null) }}
-                                disabled={!editando[doc.id] || guardandoId === doc.id}
-                                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-accent-energy text-[#111827] font-semibold text-sm disabled:opacity-40"
-                              >
-                                {guardandoId === doc.id ? <FaSpinner className="animate-spin" /> : <FaSave />} Guardar
-                              </button>
-                            </div>
-                          )
+  const estadoDe = (doc: LicDocumento) => <EstadoDoc verificado={doc.verificado || ''} vence={doc.vence || ''} />
 
   const grupos = useMemo(
     () => (vista === 'propuestas' ? [] : agrupar(lista, vista, busqueda)),
     [lista, vista, busqueda],
   )
-
 
   return (
     <AdminLayout>
@@ -207,9 +197,12 @@ export default function LicDocumentosPage() {
             </h1>
             <p className="text-primary-400">Los papeles que importan, cada uno con la propuesta completa de la que salió. Los anexos ya no se listan sueltos.</p>
           </div>
-          <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2 shrink-0">
-            <FaPlus /> Agregar documento
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <VerArchivados activo={archivados} onChange={setArchivados} />
+            <button onClick={() => agregar()} className="btn-primary flex items-center gap-2">
+              <FaPlus /> Agregar documento
+            </button>
+          </div>
         </div>
 
         <PanelDrive />
@@ -220,7 +213,7 @@ export default function LicDocumentosPage() {
               {VISTAS.map((v) => (
                 <button
                   key={v.id}
-                  onClick={() => { setVista(v.id); setAbierto(null) }}
+                  onClick={() => setVista(v.id)}
                   className={`flex items-center gap-2 px-3 py-3 text-sm font-semibold border transition-colors text-left ${vista === v.id
                     ? 'bg-accent-energy text-[#111827] border-accent-energy'
                     : 'bg-primary-900/60 border-primary-700 text-primary-200 hover:border-primary-500'}`}
@@ -255,7 +248,7 @@ export default function LicDocumentosPage() {
             title="El acervo todavía está vacío"
             hint="Se llena al importar documentos.json desde el vault (catálogo de personal, experiencia, equipos, empresa y anexos), o agregando documentos a mano con el botón de arriba."
             action={
-              <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2">
+              <button onClick={() => agregar()} className="btn-primary flex items-center gap-2">
                 <FaPlus /> Agregar el primero
               </button>
             }
@@ -263,7 +256,14 @@ export default function LicDocumentosPage() {
         ) : vista === 'propuestas' ? (
           <VistaPropuestas propuestas={propuestas} documentos={lista} />
         ) : vista === 'personal' ? (
-          <PersonalDrive lista={lista} busqueda={busqueda} estadoDe={estadoDe} edicionDe={edicionDe} />
+          <PersonalDrive
+            lista={lista}
+            busqueda={busqueda}
+            estadoDe={estadoDe}
+            onEditarDoc={setEditar}
+            onNuevoDocumento={agregar}
+            archivados={archivados}
+          />
         ) : grupos.length === 0 ? (
           <EmptyState icon={<FaSearch />} title="Nada por aquí" hint="No hay documentos de este tema, o la búsqueda no coincide." />
         ) : (
@@ -278,180 +278,43 @@ export default function LicDocumentosPage() {
                 </header>
                 <ul>
                   {g.docs.map((u) => (
-                    <FilaDocumento
-                      key={u.doc.id}
-                      u={u}
-                      abierto={abierto === u.doc.id}
-                      onEditar={() => setAbierto(abierto === u.doc.id ? null : u.doc.id)}
-                      estado={estadoDe(u.doc)}
-                      edicion={edicionDe(u.doc)}
-                    />
+                    <FilaDocumento key={u.doc.id} u={u} estado={estadoDe(u.doc)} onEditar={() => setEditar(u.doc)} />
                   ))}
                 </ul>
               </section>
             ))}
           </div>
         )}
-
-        <AnimatePresence>
-          {showModal && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-              onClick={() => setShowModal(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-primary-900 rounded-xl border border-primary-800 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between p-6 border-b border-primary-800">
-                  <h2 className="text-xl font-display font-semibold text-white">Agregar documento</h2>
-                  <button onClick={() => setShowModal(false)} className="text-primary-400 hover:text-white">
-                    <FaTimes />
-                  </button>
-                </div>
-                <form onSubmit={crearDocumento} className="p-6 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-primary-200 mb-1">Categoría</label>
-                      <select
-                        value={form.categoria}
-                        onChange={(e) => setForm({ ...form, categoria: e.target.value })}
-                        className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white focus:outline-none focus:border-accent-electric"
-                      >
-                        {CATEGORIAS.map((c) => <option key={c} value={c}>{ETIQUETA_CATEGORIA[c]}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-primary-200 mb-1">Tipo</label>
-                      <input
-                        type="text"
-                        value={form.tipo}
-                        onChange={(e) => setForm({ ...form, tipo: e.target.value })}
-                        placeholder="Ej: DNI, certificado, contrato…"
-                        className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-primary-200 mb-1">Título *</label>
-                    <input
-                      type="text"
-                      value={form.titulo}
-                      onChange={(e) => setForm({ ...form, titulo: e.target.value })}
-                      required
-                      className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white focus:outline-none focus:border-accent-electric"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-primary-200 mb-1">Nombre (personal)</label>
-                      <input
-                        type="text"
-                        value={form.nombre}
-                        onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                        className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white focus:outline-none focus:border-accent-electric"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-primary-200 mb-1">DNI</label>
-                      <input
-                        type="text"
-                        value={form.dni}
-                        onChange={(e) => setForm({ ...form, dni: e.target.value })}
-                        className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white focus:outline-none focus:border-accent-electric"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-primary-200 mb-1">Entidad (experiencia)</label>
-                      <input
-                        type="text"
-                        value={form.entidad}
-                        onChange={(e) => setForm({ ...form, entidad: e.target.value })}
-                        className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white focus:outline-none focus:border-accent-electric"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-primary-200 mb-1">Fecha</label>
-                      <input
-                        type="date"
-                        value={form.fecha}
-                        onChange={(e) => setForm({ ...form, fecha: e.target.value })}
-                        className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white focus:outline-none focus:border-accent-electric"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-primary-200 mb-1">Monto (S/.)</label>
-                      <input
-                        type="number"
-                        value={form.monto}
-                        onChange={(e) => setForm({ ...form, monto: e.target.value })}
-                        className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white focus:outline-none focus:border-accent-electric"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-primary-200 mb-1">Periodo desde</label>
-                      <input
-                        type="date"
-                        value={form.periodo_desde}
-                        onChange={(e) => setForm({ ...form, periodo_desde: e.target.value })}
-                        className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white focus:outline-none focus:border-accent-electric"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-primary-200 mb-1">Periodo hasta</label>
-                      <input
-                        type="date"
-                        value={form.periodo_hasta}
-                        onChange={(e) => setForm({ ...form, periodo_hasta: e.target.value })}
-                        className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white focus:outline-none focus:border-accent-electric"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-primary-200 mb-1">Referencia en el vault (opcional)</label>
-                    <input
-                      type="text"
-                      value={form.archivo_vault}
-                      onChange={(e) => setForm({ ...form, archivo_vault: e.target.value })}
-                      placeholder="Ruta relativa del archivo en el vault…"
-                      className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white placeholder-primary-500 focus:outline-none focus:border-accent-electric"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-primary-200 mb-1">Notas</label>
-                    <textarea
-                      value={form.notas}
-                      onChange={(e) => setForm({ ...form, notas: e.target.value })}
-                      rows={2}
-                      className="w-full px-4 py-2 bg-primary-800 border border-primary-700 rounded-lg text-white focus:outline-none focus:border-accent-electric resize-none"
-                    />
-                  </div>
-                  <p className="flex items-start gap-2 text-xs text-amber-300">
-                    <FaExclamationTriangle className="mt-0.5 shrink-0" />
-                    Este documento se guarda solo en el panel: si luego se reimporta el catálogo del vault, no se pierde
-                    (el import respeta las filas que no vienen en el JSON).
-                  </p>
-                  <div className="flex justify-end gap-3 pt-4 border-t border-primary-800">
-                    <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-primary-300 hover:text-white transition-colors">
-                      Cancelar
-                    </button>
-                    <button type="submit" disabled={creando} className="btn-primary flex items-center gap-2">
-                      {creando ? <FaSpinner className="animate-spin" /> : <FaCheck />} Crear documento
-                    </button>
-                  </div>
-                </form>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
       </div>
+
+      {pasoPdf && (
+        <PasoPdf
+          inicial={pasoPdf}
+          onCerrar={() => setPasoPdf(null)}
+          onListo={(inicial) => { setPasoPdf(null); setNuevo(inicial) }}
+        />
+      )}
+      {nuevo && (
+        <FichaEditable
+          entidad="documentos"
+          fila={null}
+          inicial={nuevo}
+          titulo={nuevo.archivo_vault ? 'Paso 2 de 2: datos del documento' : 'Datos del documento (sin PDF)'}
+          onCerrar={() => {
+            if (nuevo.archivo_vault) toast.info('El PDF quedó subido pero sin ficha: vuelve a "Agregar documento" para registrarlo')
+            setNuevo(null)
+          }}
+          onGuardado={() => { setNuevo(null); cargar() }}
+        />
+      )}
+      {editar && (
+        <FichaEditable
+          entidad="documentos"
+          fila={editar as unknown as Record<string, unknown>}
+          onCerrar={() => setEditar(null)}
+          onGuardado={() => { setEditar(null); cargar() }}
+        />
+      )}
     </AdminLayout>
   )
 }

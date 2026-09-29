@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { api, LIC_LOCAL, LicDocumento, LicPropuesta } from '../../../api/appScriptApi'
 import { fecha, money, ocultarDni } from './licUtils'
 import { CLAVE_INDICE_DRIVE, useArchivosLic } from '../../../api/licArchivos'
+import { EtiquetaEdicion } from './FichaEditable'
 
 // ============================================================
 // Documentos "con contexto" (pedido del dueño, 28/09/2026):
@@ -107,12 +108,11 @@ export function agrupar(lista: LicDocumento[], vista: Exclude<Vista, 'propuestas
 interface FilaProps {
   u: DocUnico
   estado: JSX.Element
-  abierto: boolean
+  /** abre la ficha editable del documento */
   onEditar: () => void
-  edicion: JSX.Element
 }
 
-export function FilaDocumento({ u, estado, abierto, onEditar, edicion }: FilaProps) {
+export function FilaDocumento({ u, estado, onEditar }: FilaProps) {
   const [verTodas, setVerTodas] = useState(false)
   const arch = useArchivosLic()
   const d = u.doc
@@ -131,7 +131,7 @@ export function FilaDocumento({ u, estado, abierto, onEditar, edicion }: FilaPro
     <li className="border-b border-primary-800/60 last:border-b-0">
       <div className="flex flex-col md:flex-row md:items-center gap-3 px-4 py-3">
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-accent-energy font-semibold">{nombreTipo(d.tipo)}</p>
+          <p className="text-xs text-accent-energy font-semibold flex flex-wrap items-center gap-2">{nombreTipo(d.tipo)} <EtiquetaEdicion fila={d as unknown as Record<string, unknown>} /></p>
           <p className="text-white leading-snug">{d.titulo || nombreTipo(d.tipo)}</p>
           <p className="text-xs text-primary-400 mt-0.5">
             {d.fecha ? fecha(d.fecha) : 'Sin fecha'}
@@ -187,11 +187,10 @@ export function FilaDocumento({ u, estado, abierto, onEditar, edicion }: FilaPro
             </button>
           )}
           <button onClick={onEditar} className="px-3 py-1.5 text-xs border border-primary-700 text-primary-200 hover:border-accent-energy">
-            {abierto ? 'Cerrar' : 'Editar'}
+            Editar
           </button>
         </div>
       </div>
-      {abierto && <div className="px-4 pb-4">{edicion}</div>}
     </li>
   )
 }

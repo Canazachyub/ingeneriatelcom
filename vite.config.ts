@@ -135,6 +135,14 @@ function licLocalPlugin(dataDir: string): Plugin {
                 ? { ...EDICIONES_VACIAS, ...JSON.parse(fs.readFileSync(edicionesPath, 'utf8')) }
                 : { ...EDICIONES_VACIAS }
 
+              // Motor genérico de edición (src/api/licLocal.ts): el cliente manda
+              // el documento de ediciones COMPLETO ya validado; aquí solo se guarda
+              // con una copia de respaldo del anterior (ediciones_web.json.bak).
+              if (cuerpo.completo && typeof cuerpo.completo === 'object' && !Array.isArray(cuerpo.completo)) {
+                if (fs.existsSync(edicionesPath)) fs.copyFileSync(edicionesPath, edicionesPath + '.bak')
+                escribirAtomico(edicionesPath, JSON.stringify(cuerpo.completo, null, 1))
+                return enviarJson(res, 200, { success: true })
+              }
               if (cuerpo.entidad === 'documentos_nuevos') {
                 if (!cuerpo.documento || !cuerpo.documento.id) return enviarJson(res, 400, { success: false, error: 'Falta el documento' })
                 actuales.documentos_nuevos = [...actuales.documentos_nuevos, cuerpo.documento]
@@ -176,6 +184,28 @@ function licLocalPlugin(dataDir: string): Plugin {
             return enviarJson(res, 200, { success: true, data: { ruta: path.relative(vaultRoot, path.join(dir, 'foto.' + ext)).split(path.sep).join('/') } })
           } catch (e) {
             return enviarJson(res, 500, { success: false, error: 'No se pudo guardar la foto: ' + (e as Error).message })
+          }
+        }
+
+        // POST /__lic/documento {categoria, nombre, base64, mime} — PDF nuevo subido
+        // desde el panel: se guarda en 01_GERENCIA/acervo/<categoria>/_web/.
+        if (req.method === 'POST' && pathname === '/__lic/documento') {
+          try {
+            const cuerpo = JSON.parse((await leerCuerpo(req)) || '{}')
+            const categoria = String(cuerpo.categoria || '')
+            if (!/^(personal|experiencia|equipos|empresa|tecnico|otro)$/.test(categoria)) return enviarJson(res, 400, { success: false, error: 'Elige de qué tipo es el documento' })
+            if (cuerpo.mime !== 'application/pdf') return enviarJson(res, 400, { success: false, error: 'El archivo debe ser PDF' })
+            const datos = Buffer.from(String(cuerpo.base64 || ''), 'base64')
+            if (!datos.length || datos.length > 10 * 1024 * 1024) return enviarJson(res, 400, { success: false, error: 'PDF vacío o mayor a 10 MB' })
+            let nombre = String(cuerpo.nombre || 'documento.pdf').replace(/[\\/:*?"<>|#%]/g, '').replace(/\s+/g, ' ').trim().slice(0, 120)
+            if (!/\.pdf$/i.test(nombre)) nombre += '.pdf'
+            const sello = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)
+            const dir = path.join(vaultRoot, '01_GERENCIA', 'acervo', categoria, '_web')
+            fs.mkdirSync(dir, { recursive: true })
+            fs.writeFileSync(path.join(dir, `${sello} ${nombre}`), datos)
+            return enviarJson(res, 200, { success: true, data: { archivo_vault: `01_GERENCIA/acervo/${categoria}/_web/${sello} ${nombre}`, id: '' } })
+          } catch (e) {
+            return enviarJson(res, 500, { success: false, error: 'No se pudo guardar el PDF: ' + (e as Error).message })
           }
         }
 

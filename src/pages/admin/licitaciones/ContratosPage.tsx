@@ -1,19 +1,24 @@
 import { Fragment, useEffect, useState } from 'react'
-import { FaFileContract, FaChevronDown, FaChevronUp, FaExclamationTriangle, FaSave, FaSpinner } from 'react-icons/fa'
+import { FaFileContract, FaChevronDown, FaChevronUp, FaExclamationTriangle, FaPen, FaPlus } from 'react-icons/fa'
 import { api, LicContrato } from '../../../api/appScriptApi'
 import AdminLayout from '../../../components/admin/AdminLayout'
 import ErrorCarga from '../../../components/admin/ErrorCarga'
 import EmptyState from '../../../components/common/EmptyState'
 import TableSkeleton from '../../../components/common/TableSkeleton'
-import { useToast } from '../../../context/ToastContext'
 import { fecha, money, pct, Pestanas } from './licUtils'
+import FichaEditable, { EtiquetaEdicion, VerArchivados } from './FichaEditable'
+import type { EntidadLic } from './licEsquemas'
 
-const ESTADOS_CONTRATO = [
-  { value: '', label: 'Sin definir' },
-  { value: 'vigente', label: 'Vigente' },
-  { value: 'culminado', label: 'Culminado' },
-  { value: 'en_liquidacion', label: 'En liquidación' },
-]
+const ESTADO_CONTRATO: Record<string, string> = {
+  vigente: 'Vigente',
+  culminado: 'Culminado',
+  en_liquidacion: 'En liquidación',
+}
+
+const VERIFICADO: Record<string, { t: string; c: string }> = {
+  si: { t: '✔ Verificada', c: 'text-emerald-300' },
+  no: { t: '✖ No coincide', c: 'text-red-300' },
+}
 
 function pctFacturado(c: LicContrato): number | null {
   const base = Number(c.monto_adjudicado) || Number(c.monto_contrato) || 0
@@ -22,88 +27,56 @@ function pctFacturado(c: LicContrato): number | null {
   return Math.round((facturado / base) * 1000) / 10
 }
 
+// Ficha abierta en el panel lateral (contrato o factura; fila null = crear)
+interface FichaAbierta {
+  entidad: EntidadLic
+  fila: Record<string, unknown> | null
+  inicial?: Record<string, unknown>
+  clavesFijas?: string[]
+  titulo?: string
+}
+
 export default function LicContratosPage() {
-  const toast = useToast()
   const [lista, setLista] = useState<LicContrato[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [expandido, setExpandido] = useState<string | null>(null)
-  const [estadoEdit, setEstadoEdit] = useState<Record<string, { estado: string; notas: string }>>({})
-  const [guardandoContrato, setGuardandoContrato] = useState<string | null>(null)
-  const [facturaEdit, setFacturaEdit] = useState<Record<string, { verificado: string; notas: string }>>({})
-  const [guardandoFactura, setGuardandoFactura] = useState<string | null>(null)
+  const [archivados, setArchivados] = useState(false)
+  const [ficha, setFicha] = useState<FichaAbierta | null>(null)
 
   const cargar = async () => {
     setCargando(true)
     setError('')
-    const r = await api.licContratos()
+    const r = await api.licContratos({ archivados })
     setCargando(false)
     if (r.success && r.data) setLista(r.data)
     else setError(r.error || 'Error desconocido')
   }
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar() }, [archivados]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const valorContrato = (c: LicContrato, campo: 'estado' | 'notas') => estadoEdit[c.contrato]?.[campo] ?? c[campo] ?? ''
-  const marcarContrato = (contrato: string, cambios: Partial<{ estado: string; notas: string }>) => {
-    setEstadoEdit((prev) => {
-      const base = prev[contrato] || { estado: '', notas: '' }
-      return { ...prev, [contrato]: { ...base, ...cambios } }
-    })
-  }
-  const guardarContrato = async (c: LicContrato) => {
-    const cambios = estadoEdit[c.contrato]
-    if (!cambios) return
-    setGuardandoContrato(c.contrato)
-    const r = await api.licActualizarContrato({ contrato: c.contrato, ...cambios })
-    setGuardandoContrato(null)
-    if (r.success) {
-      setLista((prev) => prev.map((x) => (x.contrato === c.contrato ? { ...x, ...cambios } : x)))
-      setEstadoEdit((prev) => { const { [c.contrato]: _q, ...resto } = prev; return resto })
-      toast.success('Contrato actualizado')
-    } else {
-      toast.error(r.error || 'No se pudo guardar')
-    }
-  }
-
-  const claveFactura = (contrato: string, numero: string) => `${contrato}\u0001${numero}`
-  const valorFactura = (contrato: string, numero: string, actual: { verificado: string; notas: string }, campo: 'verificado' | 'notas') =>
-    facturaEdit[claveFactura(contrato, numero)]?.[campo] ?? actual[campo] ?? ''
-  const marcarFactura = (contrato: string, numero: string, cambios: Partial<{ verificado: string; notas: string }>) => {
-    const k = claveFactura(contrato, numero)
-    setFacturaEdit((prev) => {
-      const base = prev[k] || { verificado: '', notas: '' }
-      return { ...prev, [k]: { ...base, ...cambios } }
-    })
-  }
-  const guardarFactura = async (contrato: string, numero: string) => {
-    const k = claveFactura(contrato, numero)
-    const cambios = facturaEdit[k]
-    if (!cambios) return
-    setGuardandoFactura(k)
-    const r = await api.licActualizarFactura({ contrato, numero, ...cambios })
-    setGuardandoFactura(null)
-    if (r.success) {
-      setLista((prev) => prev.map((c) => (c.contrato !== contrato ? c : {
-        ...c,
-        facturas: c.facturas.map((f) => (f.numero === numero ? { ...f, ...cambios } : f)),
-      })))
-      setFacturaEdit((prev) => { const { [k]: _q, ...resto } = prev; return resto })
-      toast.success('Factura actualizada')
-    } else {
-      toast.error(r.error || 'No se pudo guardar')
-    }
+  const guardado = () => {
+    setFicha(null)
+    cargar()
   }
 
   return (
     <AdminLayout>
       <Pestanas grupo="carpeta" />
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-white flex items-center gap-3">
-            <FaFileContract className="text-accent-electric" /> Contratos y facturación
-          </h1>
-          <p className="text-primary-400">Contratos firmados, cuánto se facturó de cada uno y sus documentos.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-display font-bold text-white flex items-center gap-3">
+              <FaFileContract className="text-accent-electric" /> Contratos y facturación
+            </h1>
+            <p className="text-primary-400">Contratos firmados, cuánto se facturó de cada uno y sus documentos.</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <VerArchivados activo={archivados} onChange={setArchivados} />
+            <button onClick={() => setFicha({ entidad: 'contratos', fila: null })} className="btn-primary flex items-center gap-2">
+              <FaPlus /> Agregar contrato
+            </button>
+          </div>
         </div>
 
         {cargando ? (
@@ -111,7 +84,7 @@ export default function LicContratosPage() {
         ) : error ? (
           <ErrorCarga que="los contratos" error={error} onReintentar={cargar} />
         ) : lista.length === 0 ? (
-          <EmptyState icon={<FaFileContract />} title="Todavía no hay contratos importados" hint="Se llena al importar contratos.json y facturas.json desde el vault." />
+          <EmptyState icon={<FaFileContract />} title="Todavía no hay contratos" hint="Se llenan al importar contratos.json y facturas.json desde el vault, o con 'Agregar contrato'." />
         ) : (
           <div className="bg-primary-900/50 backdrop-blur-sm rounded-xl border border-primary-800 overflow-x-auto">
             <table className="w-full text-sm">
@@ -131,15 +104,22 @@ export default function LicContratosPage() {
                 {lista.map((c) => {
                   const abierto = expandido === c.contrato
                   const pf = pctFacturado(c)
+                  const facturado = c.facturado !== '' && c.facturado != null
+                    ? c.facturado
+                    : c.facturas.reduce((a, f) => a + (Number(f.monto) || 0), 0)
                   return (
                     <Fragment key={c.contrato}>
                       <tr
-                        className={`hover:bg-primary-800/30 transition-colors cursor-pointer ${!c.en_seace_telcom ? 'bg-amber-500/5' : ''}`}
+                        className={`hover:bg-primary-800/30 transition-colors cursor-pointer ${c.archivado ? 'opacity-60' : ''} ${c.en_seace_telcom === false ? 'bg-amber-500/5' : ''}`}
                         onClick={() => setExpandido(abierto ? null : c.contrato)}
                       >
                         <td className="px-4 py-3">
                           <p className="text-white font-mono text-xs">{c.contrato}</p>
-                          {!c.en_seace_telcom && (
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            {c.estado && <span className="text-[10px] text-primary-300">{ESTADO_CONTRATO[c.estado] || c.estado}</span>}
+                            <EtiquetaEdicion fila={c as unknown as Record<string, unknown>} />
+                          </div>
+                          {c.en_seace_telcom === false && (
                             <span className="inline-flex items-center gap-1 mt-1 text-[10px] text-amber-300" title="Experiencia fuera del SEACE de Telcom">
                               <FaExclamationTriangle /> Fuera del SEACE Telcom
                             </span>
@@ -149,12 +129,12 @@ export default function LicContratosPage() {
                         <td className="px-4 py-3 text-right text-primary-200 tabular-nums">
                           {money(c.monto_contrato)} / {money(c.monto_adjudicado)}
                         </td>
-                        <td className="px-4 py-3 text-right text-primary-200 tabular-nums">{money(c.facturado)}</td>
+                        <td className="px-4 py-3 text-right text-primary-200 tabular-nums">{money(facturado)}</td>
                         <td className="px-4 py-3 text-right tabular-nums">
                           {pf === null ? '—' : <span className={pf >= 90 ? 'text-emerald-400' : pf >= 50 ? 'text-amber-300' : 'text-primary-300'}>{pct(pf)}</span>}
                         </td>
                         <td className="px-4 py-3 text-right text-primary-200 tabular-nums">{c.n_facturas || c.facturas.length}</td>
-                        <td className="px-4 py-3 text-right text-primary-200 tabular-nums">{c.documentos}</td>
+                        <td className="px-4 py-3 text-right text-primary-200 tabular-nums">{c.documentos || '—'}</td>
                         <td className="px-4 py-3 text-right text-primary-500">{abierto ? <FaChevronUp /> : <FaChevronDown />}</td>
                       </tr>
                       {abierto && (
@@ -162,46 +142,40 @@ export default function LicContratosPage() {
                           <td colSpan={8} className="px-4 py-4">
                             <div className="grid lg:grid-cols-[1fr_320px] gap-6">
                               <div>
-                                <p className="font-mono text-[10px] tracking-[0.15em] uppercase text-primary-500 mb-2">
-                                  Facturas ({c.facturas.length})
-                                </p>
+                                <div className="flex items-center justify-between gap-3 mb-2">
+                                  <p className="font-mono text-[10px] tracking-[0.15em] uppercase text-primary-500">
+                                    Facturas ({c.facturas.length})
+                                  </p>
+                                  <button
+                                    onClick={() => setFicha({
+                                      entidad: 'facturas', fila: null, inicial: { contrato: c.contrato }, clavesFijas: ['contrato'],
+                                      titulo: `Factura del contrato ${c.contrato}`,
+                                    })}
+                                    className="px-2.5 py-1 text-xs bg-accent-energy text-[#111827] font-semibold inline-flex items-center gap-1.5"
+                                  >
+                                    <FaPlus className="text-[10px]" /> Agregar factura
+                                  </button>
+                                </div>
                                 {c.facturas.length === 0 ? (
                                   <p className="text-primary-600 text-sm">Sin facturas registradas para este contrato.</p>
                                 ) : (
                                   <div className="space-y-1.5">
                                     {c.facturas.map((f) => {
-                                      const k = claveFactura(c.contrato, f.numero)
-                                      const tieneCambios = !!facturaEdit[k]
+                                      const v = VERIFICADO[f.verificado]
                                       return (
-                                        <div key={f.numero} className="flex flex-wrap items-center gap-3 p-2.5 rounded-lg border border-primary-800 bg-primary-900/40 text-xs">
+                                        <div key={f.numero} className={`flex flex-wrap items-center gap-3 p-2.5 rounded-lg border border-primary-800 bg-primary-900/40 text-xs ${f.archivado ? 'opacity-60' : ''}`}>
                                           <span className="font-mono text-white w-24 shrink-0">{f.numero}</span>
                                           <span className="text-primary-400 w-24 shrink-0">{fecha(f.fecha)}</span>
                                           <span className="text-primary-200 tabular-nums w-28 shrink-0">{money(f.monto)}</span>
-                                          <select
-                                            value={valorFactura(c.contrato, f.numero, f, 'verificado')}
-                                            onChange={(e) => marcarFactura(c.contrato, f.numero, { verificado: e.target.value })}
-                                            className="bg-primary-800 border border-primary-700 rounded px-2 py-1 text-white"
+                                          <span className={`w-24 shrink-0 ${v ? v.c : 'text-primary-500'}`}>{v ? v.t : 'Pendiente'}</span>
+                                          <span className="flex-1 min-w-[100px] text-primary-400 truncate" title={f.notas}>{f.notas}</span>
+                                          <EtiquetaEdicion fila={f as unknown as Record<string, unknown>} />
+                                          <button
+                                            onClick={() => setFicha({ entidad: 'facturas', fila: f as unknown as Record<string, unknown>, titulo: `Factura ${f.numero}` })}
+                                            className="inline-flex items-center gap-1 px-2 py-1 border border-primary-700 text-primary-200 hover:border-accent-energy"
                                           >
-                                            <option value="">Pendiente</option>
-                                            <option value="si">Verificado</option>
-                                            <option value="no">No coincide</option>
-                                          </select>
-                                          <input
-                                            type="text"
-                                            value={valorFactura(c.contrato, f.numero, f, 'notas')}
-                                            onChange={(e) => marcarFactura(c.contrato, f.numero, { notas: e.target.value })}
-                                            placeholder="Notas…"
-                                            className="flex-1 min-w-[100px] bg-primary-800 border border-primary-700 rounded px-2 py-1 text-white placeholder-primary-500"
-                                          />
-                                          {tieneCambios && (
-                                            <button
-                                              onClick={() => guardarFactura(c.contrato, f.numero)}
-                                              disabled={guardandoFactura === k}
-                                              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-accent-electric/20 text-accent-electric hover:bg-accent-electric/30 disabled:opacity-60"
-                                            >
-                                              {guardandoFactura === k ? <FaSpinner className="animate-spin" /> : <FaSave />}
-                                            </button>
-                                          )}
+                                            <FaPen className="text-[10px]" /> Editar
+                                          </button>
                                         </div>
                                       )
                                     })}
@@ -209,30 +183,24 @@ export default function LicContratosPage() {
                                 )}
                               </div>
                               <div className="space-y-2">
-                                <p className="font-mono text-[10px] tracking-[0.15em] uppercase text-primary-500">Seguimiento del contrato</p>
-                                <select
-                                  value={valorContrato(c, 'estado')}
-                                  onChange={(e) => marcarContrato(c.contrato, { estado: e.target.value })}
-                                  className="w-full px-3 py-1.5 bg-primary-800 border border-primary-700 rounded-lg text-white text-sm"
+                                <p className="font-mono text-[10px] tracking-[0.15em] uppercase text-primary-500">Datos del contrato</p>
+                                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                                  <dt className="text-primary-500">Estado</dt>
+                                  <dd className="text-primary-200">{ESTADO_CONTRATO[c.estado] || c.estado || 'Sin definir'}</dd>
+                                  <dt className="text-primary-500">Inicio</dt>
+                                  <dd className="text-primary-200">{c.fecha_inicio ? fecha(c.fecha_inicio) : '—'}</dd>
+                                  <dt className="text-primary-500">Fin</dt>
+                                  <dd className="text-primary-200">{c.fecha_fin ? fecha(c.fecha_fin) : '—'}</dd>
+                                  <dt className="text-primary-500">Participación</dt>
+                                  <dd className="text-primary-200">{c.pct_telcom !== '' && c.pct_telcom != null ? pct(c.pct_telcom) : '—'}</dd>
+                                </dl>
+                                {c.notas && <p className="text-xs text-primary-300 whitespace-pre-line border-l-2 border-primary-700 pl-2">{c.notas}</p>}
+                                <button
+                                  onClick={() => setFicha({ entidad: 'contratos', fila: c as unknown as Record<string, unknown>, titulo: `Contrato ${c.contrato}` })}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-accent-energy text-[#111827] font-semibold text-xs"
                                 >
-                                  {ESTADOS_CONTRATO.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                </select>
-                                <textarea
-                                  value={valorContrato(c, 'notas')}
-                                  onChange={(e) => marcarContrato(c.contrato, { notas: e.target.value })}
-                                  rows={3}
-                                  placeholder="Notas del contrato…"
-                                  className="w-full px-3 py-1.5 bg-primary-800 border border-primary-700 rounded-lg text-white text-sm placeholder-primary-500 resize-none"
-                                />
-                                {!!estadoEdit[c.contrato] && (
-                                  <button
-                                    onClick={() => guardarContrato(c)}
-                                    disabled={guardandoContrato === c.contrato}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-electric/20 text-accent-electric hover:bg-accent-electric/30 text-xs disabled:opacity-60"
-                                  >
-                                    {guardandoContrato === c.contrato ? <FaSpinner className="animate-spin" /> : <FaSave />} Guardar
-                                  </button>
-                                )}
+                                  <FaPen /> Editar contrato
+                                </button>
                               </div>
                             </div>
                           </td>
@@ -246,6 +214,18 @@ export default function LicContratosPage() {
           </div>
         )}
       </div>
+
+      {ficha && (
+        <FichaEditable
+          entidad={ficha.entidad}
+          fila={ficha.fila}
+          inicial={ficha.inicial}
+          clavesFijas={ficha.clavesFijas}
+          titulo={ficha.titulo}
+          onCerrar={() => setFicha(null)}
+          onGuardado={guardado}
+        />
+      )}
     </AdminLayout>
   )
 }

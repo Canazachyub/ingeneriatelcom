@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { FaAward } from 'react-icons/fa'
+import { FaAward, FaPen, FaPlus } from 'react-icons/fa'
 import { api, LicExperiencia } from '../../../api/appScriptApi'
 import AdminLayout from '../../../components/admin/AdminLayout'
 import ErrorCarga from '../../../components/admin/ErrorCarga'
 import EmptyState from '../../../components/common/EmptyState'
 import TableSkeleton from '../../../components/common/TableSkeleton'
 import { fecha, money, pct, Pestanas } from './licUtils'
+import FichaEditable, { EtiquetaEdicion, VerArchivados } from './FichaEditable'
 
 function EstadoBadge({ estado }: { estado: string }) {
   const e = (estado || '').toLowerCase()
@@ -18,30 +19,42 @@ export default function LicExperienciaPage() {
   const [lista, setLista] = useState<LicExperiencia[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
+  const [archivados, setArchivados] = useState(false)
+  // Ficha abierta: undefined = cerrada, null = crear nueva
+  const [ficha, setFicha] = useState<LicExperiencia | null | undefined>(undefined)
 
   const cargar = async () => {
     setCargando(true)
     setError('')
-    const r = await api.licExperiencia()
+    const r = await api.licExperiencia({ archivados })
     setCargando(false)
     if (r.success && r.data) setLista(r.data)
     else setError(r.error || 'Error desconocido')
   }
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar() }, [archivados]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totalAdjudicado = lista.reduce((acc, e) => acc + (Number(e.monto_adjudicado) || 0), 0)
-  const totalAcreditable = lista.reduce((acc, e) => acc + (Number(e.acreditable) || 0), 0)
+  const vigentes = lista.filter((e) => !e.archivado)
+  const totalAdjudicado = vigentes.reduce((acc, e) => acc + (Number(e.monto_adjudicado) || 0), 0)
+  const totalAcreditable = vigentes.reduce((acc, e) => acc + (Number(e.acreditable) || 0), 0)
 
   return (
     <AdminLayout>
       <Pestanas grupo="carpeta" />
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-white flex items-center gap-3">
-            <FaAward className="text-accent-electric" /> Experiencia
-          </h1>
-          <p className="text-primary-400">Lo que podemos declarar como experiencia en una propuesta (contratos y órdenes de servicio).</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-display font-bold text-white flex items-center gap-3">
+              <FaAward className="text-accent-electric" /> Experiencia
+            </h1>
+            <p className="text-primary-400">Lo que podemos declarar como experiencia en una propuesta (contratos y órdenes de servicio).</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <VerArchivados activo={archivados} onChange={setArchivados} />
+            <button onClick={() => setFicha(null)} className="btn-primary flex items-center gap-2">
+              <FaPlus /> Agregar experiencia
+            </button>
+          </div>
         </div>
 
         {cargando ? (
@@ -49,13 +62,13 @@ export default function LicExperienciaPage() {
         ) : error ? (
           <ErrorCarga que="la experiencia" error={error} onReintentar={cargar} />
         ) : lista.length === 0 ? (
-          <EmptyState icon={<FaAward />} title="Todavía no hay experiencia importada" hint="Se completa al importar experiencia.json desde el vault (skill experiencia-seace)." />
+          <EmptyState icon={<FaAward />} title="Todavía no hay experiencia importada" hint="Se completa al importar experiencia.json desde el vault, o con 'Agregar experiencia'." />
         ) : (
           <>
             <div className="grid sm:grid-cols-3 gap-4">
               <div className="panel-hud p-4">
                 <p className="font-mono text-[10px] tracking-[0.15em] uppercase text-primary-500">Contratos</p>
-                <p className="text-2xl font-display font-bold text-white mt-1">{lista.length}</p>
+                <p className="text-2xl font-display font-bold text-white mt-1">{vigentes.length}</p>
               </div>
               <div className="panel-hud p-4">
                 <p className="font-mono text-[10px] tracking-[0.15em] uppercase text-primary-500">Total adjudicado</p>
@@ -78,13 +91,15 @@ export default function LicExperienciaPage() {
                     <th className="px-4 py-3 font-medium text-right" title="Monto que vale como experiencia">Vale como experiencia</th>
                     <th className="px-4 py-3 font-medium">Estado</th>
                     <th className="px-4 py-3 font-medium">Contrato</th>
+                    <th className="px-4 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-primary-800/60">
                   {lista.map((e, i) => (
-                    <tr key={i} className="hover:bg-primary-800/30 transition-colors">
+                    <tr key={e.proceso || i} className={`hover:bg-primary-800/30 transition-colors ${e.archivado ? 'opacity-60' : ''}`}>
                       <td className="px-4 py-3 text-white max-w-xs">
                         <p className="font-mono text-xs">{e.proceso}</p>
+                        <div className="mt-1"><EtiquetaEdicion fila={e as unknown as Record<string, unknown>} /></div>
                         <p className="text-primary-500 text-xs mt-0.5 truncate" title={e.objeto}>{e.objeto}</p>
                       </td>
                       <td className="px-4 py-3 text-primary-300 max-w-[200px] truncate" title={e.entidad}>{e.entidad}</td>
@@ -92,7 +107,15 @@ export default function LicExperienciaPage() {
                       <td className="px-4 py-3 text-right text-primary-200 tabular-nums">{pct(e.pct_telcom)}</td>
                       <td className="px-4 py-3 text-right text-white font-medium tabular-nums">{money(e.acreditable)}</td>
                       <td className="px-4 py-3"><EstadoBadge estado={e.estado} /></td>
-                      <td className="px-4 py-3 text-primary-400 text-xs">{fecha(e.fecha_contrato)}</td>
+                      <td className="px-4 py-3 text-primary-400 text-xs">{/^\d{4}-\d{2}-\d{2}/.test(e.fecha_contrato || '') ? fecha(e.fecha_contrato) : e.fecha_contrato || '—'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => setFicha(e)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs border border-primary-700 text-primary-200 hover:border-accent-energy"
+                        >
+                          <FaPen className="text-[10px]" /> Editar
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -101,6 +124,16 @@ export default function LicExperienciaPage() {
           </>
         )}
       </div>
+
+      {ficha !== undefined && (
+        <FichaEditable
+          entidad="experiencia"
+          fila={ficha as unknown as Record<string, unknown> | null}
+          titulo={ficha ? ficha.proceso : undefined}
+          onCerrar={() => setFicha(undefined)}
+          onGuardado={() => { setFicha(undefined); cargar() }}
+        />
+      )}
     </AdminLayout>
   )
 }

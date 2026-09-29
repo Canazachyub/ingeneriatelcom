@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FaUsers, FaSearch, FaGraduationCap, FaFolderOpen, FaSave, FaSpinner, FaLink, FaCheckCircle } from 'react-icons/fa'
+import { FaUsers, FaSearch, FaGraduationCap, FaFolderOpen, FaSave, FaSpinner, FaLink, FaCheckCircle, FaPen, FaPlus, FaPhone, FaEnvelope, FaIdCard } from 'react-icons/fa'
 import { api, Employee, LicPersonal } from '../../../api/appScriptApi'
 import AdminLayout from '../../../components/admin/AdminLayout'
 import ErrorCarga from '../../../components/admin/ErrorCarga'
@@ -8,6 +8,7 @@ import EmptyState from '../../../components/common/EmptyState'
 import TableSkeleton from '../../../components/common/TableSkeleton'
 import { useToast } from '../../../context/ToastContext'
 import { fecha, Pestanas, ocultarDni } from './licUtils'
+import FichaEditable, { EtiquetaEdicion, VerArchivados } from './FichaEditable'
 
 function BarraExperiencia({ anios, max }: { anios: number; max: number }) {
   const ancho = max > 0 ? Math.max(3, (anios / max) * 100) : 0
@@ -18,9 +19,9 @@ function BarraExperiencia({ anios, max }: { anios: number; max: number }) {
   )
 }
 
+// Vinculación rápida con un empleado (el resto de datos se edita en la ficha)
 interface Edicion {
   empleado_vinculado: string
-  notas: string
 }
 
 export default function LicPersonalPage() {
@@ -32,18 +33,21 @@ export default function LicPersonalPage() {
   const [busqueda, setBusqueda] = useState('')
   const [edicion, setEdicion] = useState<Record<string, Edicion>>({})
   const [guardandoDni, setGuardandoDni] = useState<string | null>(null)
+  const [archivados, setArchivados] = useState(false)
+  // Ficha abierta: undefined = cerrada, null = persona nueva
+  const [ficha, setFicha] = useState<LicPersonal | null | undefined>(undefined)
 
   const cargar = async () => {
     setCargando(true)
     setError('')
-    const [rp, re] = await Promise.all([api.licPersonal(), api.getEmployees()])
+    const [rp, re] = await Promise.all([api.licPersonal({ archivados }), api.getEmployees()])
     setCargando(false)
     if (rp.success && rp.data) setLista(rp.data)
     else setError(rp.error || 'Error desconocido')
     if (re.success && re.data) setEmpleados(re.data)
   }
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar() }, [archivados]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const empleadosPorDni = useMemo(() => {
     const m = new Map<string, Employee>()
@@ -63,7 +67,7 @@ export default function LicPersonalPage() {
 
   const marcar = (dni: string, cambios: Partial<Edicion>) => {
     setEdicion((prev) => {
-      const base: Edicion = prev[dni] || { empleado_vinculado: '', notas: '' }
+      const base: Edicion = prev[dni] || { empleado_vinculado: '' }
       return { ...prev, [dni]: { ...base, ...cambios } }
     })
   }
@@ -87,11 +91,19 @@ export default function LicPersonalPage() {
     <AdminLayout>
       <Pestanas grupo="carpeta" />
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-white flex items-center gap-3">
-            <FaUsers className="text-accent-electric" /> Personal clave
-          </h1>
-          <p className="text-primary-400">Nuestros profesionales: títulos, cargos y años de experiencia para presentarlos en una propuesta.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-display font-bold text-white flex items-center gap-3">
+              <FaUsers className="text-accent-electric" /> Personal clave
+            </h1>
+            <p className="text-primary-400">Nuestros profesionales: títulos, cargos y años de experiencia para presentarlos en una propuesta.</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <VerArchivados activo={archivados} onChange={setArchivados} />
+            <button onClick={() => setFicha(null)} className="btn-primary flex items-center gap-2">
+              <FaPlus /> Agregar persona
+            </button>
+          </div>
         </div>
 
         {!cargando && !error && lista.length > 0 && (
@@ -122,11 +134,13 @@ export default function LicPersonalPage() {
               const tieneCambios = !!edicion[p.dni]
               const cargosOrdenados = [...(p.cargos || [])].sort((a, b) => String(a.desde || '').localeCompare(String(b.desde || '')))
               return (
-                <div key={p.dni} className="panel-hud p-5 space-y-4">
+                <div key={p.dni} className={`panel-hud p-5 space-y-4 ${p.archivado ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-white font-semibold">{p.nombre}</p>
                       <p className="text-primary-500 text-xs font-mono" title="DNI oculto en la lista">{ocultarDni(p.dni)}</p>
+                      {p.profesion && <p className="text-xs text-primary-300 mt-0.5">{p.profesion}</p>}
+                      <div className="mt-1"><EtiquetaEdicion fila={p as unknown as Record<string, unknown>} /></div>
                     </div>
                     {empleado ? (
                       <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] bg-emerald-500/20 text-emerald-300 shrink-0">
@@ -136,6 +150,17 @@ export default function LicPersonalPage() {
                       <span className="text-[11px] text-primary-500 shrink-0">Sin vincular</span>
                     )}
                   </div>
+
+                  {(p.colegiatura || p.telefono || p.correo || p.disponible) && (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-primary-300">
+                      {p.colegiatura && <span className="inline-flex items-center gap-1.5"><FaIdCard className="text-primary-500" /> CIP {p.colegiatura}</span>}
+                      {p.telefono && <span className="inline-flex items-center gap-1.5"><FaPhone className="text-primary-500" /> {p.telefono}</span>}
+                      {p.correo && <span className="inline-flex items-center gap-1.5"><FaEnvelope className="text-primary-500" /> {p.correo}</span>}
+                      {p.disponible === 'si' && <span className="text-emerald-300">Disponible para propuestas</span>}
+                      {p.disponible === 'no' && <span className="text-amber-300">No disponible</span>}
+                    </div>
+                  )}
+                  {p.notas && <p className="text-xs text-primary-400 italic">{p.notas}</p>}
 
                   <div>
                     <div className="flex items-center justify-between text-xs text-primary-400 mb-1">
@@ -171,12 +196,20 @@ export default function LicPersonalPage() {
                     </div>
                   )}
 
-                  <Link
-                    to={`/admin/licitaciones/documentos?dni=${encodeURIComponent(p.dni)}`}
-                    className="inline-flex items-center gap-1.5 text-xs text-accent-electric hover:underline"
-                  >
-                    <FaFolderOpen /> {p.documentos || 0} documento(s) en el acervo
-                  </Link>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Link
+                      to={`/admin/licitaciones/documentos?dni=${encodeURIComponent(p.dni)}`}
+                      className="inline-flex items-center gap-1.5 text-xs text-accent-electric hover:underline"
+                    >
+                      <FaFolderOpen /> {p.documentos || 0} documento(s) en el acervo
+                    </Link>
+                    <button
+                      onClick={() => setFicha(p)}
+                      className="ml-auto px-3 py-1.5 text-xs bg-accent-energy text-[#111827] font-semibold inline-flex items-center gap-1.5"
+                    >
+                      <FaPen /> Editar datos
+                    </button>
+                  </div>
 
                   <div className="pt-3 border-t border-primary-800 space-y-2">
                     <div>
@@ -186,16 +219,6 @@ export default function LicPersonalPage() {
                         value={valor(p, 'empleado_vinculado')}
                         onChange={(e) => marcar(p.dni, { empleado_vinculado: e.target.value })}
                         placeholder={empleado ? empleado.name : 'Ej: SUE-12345678 o nombre exacto'}
-                        className="w-full px-3 py-1.5 bg-primary-800 border border-primary-700 rounded-lg text-white text-sm placeholder-primary-500 focus:outline-none focus:border-accent-electric"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-primary-400 mb-1 block">Notas</label>
-                      <input
-                        type="text"
-                        value={valor(p, 'notas')}
-                        onChange={(e) => marcar(p.dni, { notas: e.target.value })}
-                        placeholder="Observaciones…"
                         className="w-full px-3 py-1.5 bg-primary-800 border border-primary-700 rounded-lg text-white text-sm placeholder-primary-500 focus:outline-none focus:border-accent-electric"
                       />
                     </div>
@@ -215,6 +238,14 @@ export default function LicPersonalPage() {
           </div>
         )}
       </div>
+      {ficha !== undefined && (
+        <FichaEditable
+          entidad="personal"
+          fila={ficha as unknown as Record<string, unknown> | null}
+          onCerrar={() => setFicha(undefined)}
+          onGuardado={() => { setFicha(undefined); cargar() }}
+        />
+      )}
     </AdminLayout>
   )
 }

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FaGavel, FaSearch, FaChevronRight } from 'react-icons/fa'
+import { FaGavel, FaSearch, FaChevronRight, FaPlus } from 'react-icons/fa'
 import { api, LicProceso } from '../../../api/appScriptApi'
 import AdminLayout from '../../../components/admin/AdminLayout'
 import ErrorCarga from '../../../components/admin/ErrorCarga'
 import EmptyState from '../../../components/common/EmptyState'
 import TableSkeleton from '../../../components/common/TableSkeleton'
 import { money, pct, ResultadoBadge, Pestanas } from './licUtils'
+import FichaEditable, { EtiquetaEdicion, VerArchivados } from './FichaEditable'
 
 export default function LicProcesosPage() {
   const [lista, setLista] = useState<LicProceso[]>([])
@@ -16,17 +17,19 @@ export default function LicProcesosPage() {
   const [filtroAnio, setFiltroAnio] = useState('')
   const [filtroEntidad, setFiltroEntidad] = useState('')
   const [filtroResultado, setFiltroResultado] = useState('')
+  const [archivados, setArchivados] = useState(false)
+  const [creando, setCreando] = useState(false)
 
   const cargar = async () => {
     setCargando(true)
     setError('')
-    const r = await api.licProcesos()
+    const r = await api.licProcesos({ archivados })
     setCargando(false)
     if (r.success && r.data) setLista(r.data)
     else setError(r.error || 'Error desconocido')
   }
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar() }, [archivados]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const anios = useMemo(() => Array.from(new Set(lista.map((p) => p.anio).filter(Boolean))).sort().reverse(), [lista])
   const entidades = useMemo(() => Array.from(new Set(lista.map((p) => p.entidad).filter(Boolean))).sort(), [lista])
@@ -47,14 +50,19 @@ export default function LicProcesosPage() {
     <AdminLayout>
       <Pestanas grupo="licitaciones" />
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-white flex items-center gap-3">
-            <FaGavel className="text-accent-electric" /> Lista de licitaciones
-          </h1>
-          <p className="text-primary-400">Todas las licitaciones en las que participamos o que seguimos. Haz clic en una para ver el detalle.</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-display font-bold text-white flex items-center gap-3">
+              <FaGavel className="text-accent-electric" /> Lista de licitaciones
+            </h1>
+            <p className="text-primary-400">Todas las licitaciones en las que participamos o que seguimos. Haz clic en una para ver el detalle.</p>
+          </div>
+          <button onClick={() => setCreando(true)} className="btn-primary flex items-center gap-2 shrink-0">
+            <FaPlus /> Agregar licitación
+          </button>
         </div>
 
-        {!cargando && !error && lista.length > 0 && (
+        {!cargando && !error && (
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-primary-500" />
@@ -90,6 +98,7 @@ export default function LicProcesosPage() {
               <option value="">Todos los resultados</option>
               {resultados.map((r) => <option key={r} value={r} className="capitalize">{r}</option>)}
             </select>
+            <VerArchivados activo={archivados} onChange={setArchivados} />
           </div>
         )}
 
@@ -121,12 +130,13 @@ export default function LicProcesosPage() {
               </thead>
               <tbody className="divide-y divide-primary-800/60">
                 {filtrados.map((p) => (
-                  <tr key={p.nomenclatura} className="hover:bg-primary-800/30 transition-colors">
+                  <tr key={p.nomenclatura} className={`hover:bg-primary-800/30 transition-colors ${p.archivado ? 'opacity-60' : ''}`}>
                     <td className="px-4 py-3">
                       <Link to={`/admin/licitaciones/procesos/${encodeURIComponent(p.nomenclatura)}`} className="text-white font-mono text-xs hover:text-accent-electric">
                         {p.nomenclatura}
                       </Link>
                       <p className="text-primary-500 text-xs mt-0.5 max-w-xs truncate">{p.objeto}</p>
+                      <div className="mt-1"><EtiquetaEdicion fila={p as unknown as Record<string, unknown>} /></div>
                     </td>
                     <td className="px-4 py-3 text-primary-300">{p.anio}</td>
                     <td className="px-4 py-3 text-primary-300 max-w-[220px] truncate" title={p.entidad}>{p.entidad}</td>
@@ -145,6 +155,15 @@ export default function LicProcesosPage() {
           </div>
         )}
       </div>
+
+      {creando && (
+        <FichaEditable
+          entidad="procesos"
+          fila={null}
+          onCerrar={() => setCreando(false)}
+          onGuardado={() => { setCreando(false); cargar() }}
+        />
+      )}
     </AdminLayout>
   )
 }

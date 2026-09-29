@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  FaGavel, FaSatelliteDish, FaListAlt, FaFolderOpen, FaUserFriends, FaArrowRight, FaTrophy, FaDoorOpen, FaBan,
+  FaGavel, FaSatelliteDish, FaListAlt, FaFolderOpen, FaUserFriends, FaArrowRight, FaTrophy, FaDoorOpen, FaBan, FaHardHat, FaPlus,
 } from 'react-icons/fa'
-import { api, LicProceso, LicResumen } from '../../../api/appScriptApi'
+import { api, LicProceso, LicResumen, LicServicio } from '../../../api/appScriptApi'
+import { TarjetaServicio } from './ServiciosPage'
 import AdminLayout from '../../../components/admin/AdminLayout'
 import ErrorCarga from '../../../components/admin/ErrorCarga'
 
@@ -57,10 +58,14 @@ export default function InicioPage() {
   const [resumen, setResumen] = useState<LicResumen | null>(null)
   const [abiertas, setAbiertas] = useState<LicProceso[]>([])
   const [error, setError] = useState('')
+  const [servicios, setServicios] = useState<LicServicio[] | null>(null)
+  const [personas, setPersonas] = useState<Map<string, string>>(new Map())
 
   const cargar = async () => {
     setError('')
-    const [r, p] = await Promise.all([api.licResumen(), api.licProcesos()])
+    const [r, p, s, pe] = await Promise.all([api.licResumen(), api.licProcesos(), api.licServicios(), api.licPersonal()])
+    setServicios(s.success && s.data ? s.data.filter((x) => x.estado !== 'terminado') : [])
+    if (pe.success && pe.data) setPersonas(new Map(pe.data.map((x) => [String(x.dni), x.nombre])))
     if (r.success && r.data) setResumen(r.data)
     else setError(r.error || 'Error desconocido')
     if (p.success && p.data) {
@@ -78,6 +83,31 @@ export default function InicioPage() {
             <FaGavel className="text-accent-energy" /> Licitaciones
           </h1>
           <p className="text-primary-300 mt-1">¿Qué quieres hacer hoy?</p>
+        </div>
+
+        {/* Lo que estamos atendiendo ahora */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="font-mono text-[11px] tracking-[0.25em] uppercase text-slate-400">
+              <span className="text-accent-energy mr-2">◆</span>Servicios en ejecución
+            </p>
+            <Link to="/admin/licitaciones/servicios" className="text-sm text-accent-energy hover:underline inline-flex items-center gap-1.5">
+              Ver y editar <FaArrowRight className="text-xs" />
+            </Link>
+          </div>
+          {!servicios ? (
+            <div className="grid lg:grid-cols-2 gap-4">{[0, 1].map((i) => <div key={i} className="placa-acero h-40 animate-pulse" />)}</div>
+          ) : servicios.length ? (
+            <div className="grid lg:grid-cols-2 gap-4">
+              {servicios.map((s) => <TarjetaServicio key={s.id} s={s} personas={personas} />)}
+            </div>
+          ) : (
+            <Link to="/admin/licitaciones/servicios" className="placa-acero p-5 flex items-center gap-4 hover:brightness-125">
+              <FaHardHat className="text-3xl text-slate-500" />
+              <span className="flex-1 text-slate-300">Aún no registras los servicios que están atendiendo. <b className="text-white">Agrégalos aquí</b> para ver plazos, entregas y facturación.</span>
+              <FaPlus className="text-accent-energy" />
+            </Link>
+          )}
         </div>
 
         {/* 4 botones grandes */}

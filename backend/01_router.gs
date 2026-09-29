@@ -143,17 +143,17 @@ var ROUTES = {
   // === LICITACIONES (16_licitaciones.gs) — hoy solo admin (ver docs/PLAN_LICITACIONES_ADMIN.md) ===
   licImportar: { nivel: 'admin', handler: function (ctx) { return licImportar(ctx.data); } },
   licResumen: { nivel: 'admin', handler: function () { return licResumen(); } },
-  licProcesos: { nivel: 'admin', handler: function () { return licProcesos(); } },
+  licProcesos: { nivel: 'admin', handler: function (ctx) { return licProcesos(ctx.data); } },
   licProceso: { nivel: 'admin', handler: function (ctx) { return licProceso(arg_(ctx, 'nom')); } },
-  licCompetidores: { nivel: 'admin', handler: function () { return licCompetidores(); } },
-  licExperiencia: { nivel: 'admin', handler: function () { return licExperiencia(); } },
+  licCompetidores: { nivel: 'admin', handler: function (ctx) { return licCompetidores(ctx.data); } },
+  licExperiencia: { nivel: 'admin', handler: function (ctx) { return licExperiencia(ctx.data); } },
   licDocumentos: { nivel: 'admin', handler: function (ctx) { return licDocumentos(ctx.data); } },
   licActualizarDocumento: { nivel: 'admin', handler: function (ctx) { return licActualizarDocumento(ctx.data, ctx.userId); } },
   licCrearDocumento: { nivel: 'admin', handler: function (ctx) { return licCrearDocumento(ctx.data, ctx.userId); } },
   licActualizarProceso: { nivel: 'admin', handler: function (ctx) { return licActualizarProceso(ctx.data, ctx.userId); } },
   licExportarCambios: { nivel: 'admin', handler: function (ctx) { return licExportarCambios(ctx.data); } },
-  licPersonal: { nivel: 'admin', handler: function () { return licPersonal(); } },
-  licContratos: { nivel: 'admin', handler: function () { return licContratos(); } },
+  licPersonal: { nivel: 'admin', handler: function (ctx) { return licPersonal(ctx.data); } },
+  licContratos: { nivel: 'admin', handler: function (ctx) { return licContratos(ctx.data); } },
   licActualizarPersona: { nivel: 'admin', handler: function (ctx) { return licActualizarPersona(ctx.data, ctx.userId); } },
   licActualizarContrato: { nivel: 'admin', handler: function (ctx) { return licActualizarContrato(ctx.data, ctx.userId); } },
   licActualizarFactura: { nivel: 'admin', handler: function (ctx) { return licActualizarFactura(ctx.data, ctx.userId); } },
@@ -161,7 +161,14 @@ var ROUTES = {
   licCarpetaDrive: { nivel: 'admin', handler: function () { return licCarpetaDrive(); } },
   licIndexarDrive: { nivel: 'admin', handler: function () { return licIndexarDrive(); } },
   licArchivosDrive: { nivel: 'admin', handler: function () { return licArchivosDrive(); } },
-  licSubirFoto: { nivel: 'admin', handler: function (ctx) { return licSubirFoto(ctx.data); } }
+  licSubirFoto: { nivel: 'admin', handler: function (ctx) { return licSubirFoto(ctx.data); } },
+  licSubirDocumento: { nivel: 'admin', handler: function (ctx) { return licSubirDocumento(ctx.data); } },
+  // Edición genérica de fichas (17_lic_edicion.gs)
+  licGuardar: { nivel: 'admin', handler: function (ctx) { return licGuardar(ctx.data, ctx.userId); } },
+  licArchivar: { nivel: 'admin', handler: function (ctx) { return licArchivar(ctx.data, ctx.userId); } },
+  licHistorial: { nivel: 'admin', handler: function (ctx) { return licHistorial(ctx.data); } },
+  licDeshacer: { nivel: 'admin', handler: function (ctx) { return licDeshacer(ctx.data, ctx.userId); } },
+  licServicios: { nivel: 'admin', handler: function (ctx) { return licServicios(ctx.data); } }
 };
 
 // Modulo del panel que exige cada accion de nivel 'auth' (escalon 2).
