@@ -40,4 +40,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
+          # Conserva los assets de versiones anteriores: una página guardada en el
+          # navegador sigue encontrando su CSS/JS (antes se veía sin estilos).
+          keep_files: true
           cname: ingenieriatelcom.com
