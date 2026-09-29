@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-29T09:06:52.815Z con tools/build-backend.mjs
+// Generado: 2026-09-29T09:19:33.822Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -8692,10 +8692,12 @@ function licAsistenciaServicio(data) {
   var trabajadores = dnis.map(function (dni) {
     var propias = marcas.filter(function (m) { return String(m.dni) === dni; });
     var dias = {};
-    propias.forEach(function (m) { if (m.evento === 'entrada') dias[m.fecha] = true; });
+    // Día trabajado = cualquier marca ese día (el kiosko registra entrada, salida_manana, salida_tarde…)
+    propias.forEach(function (m) { if (m.fecha) dias[m.fecha] = true; });
     var deHoy = propias.filter(function (m) { return m.fecha === hoy; });
-    var entrada = deHoy.filter(function (m) { return m.evento === 'entrada'; })[0];
-    var salida = deHoy.filter(function (m) { return m.evento === 'salida'; }).slice(-1)[0];
+    deHoy.sort(function (a, b) { return String(a.hora).localeCompare(String(b.hora)); });
+    var entrada = deHoy.filter(function (m) { return String(m.evento).indexOf('entrada') === 0; })[0];
+    var salida = deHoy.filter(function (m) { return String(m.evento).indexOf('salida') === 0; }).slice(-1)[0];
     var ultima = propias.slice().sort(function (a, b) { return String(a.fecha + a.hora).localeCompare(String(b.fecha + b.hora)); }).slice(-1)[0];
     var t = roster[dni] || {};
     return {
