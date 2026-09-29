@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FaTimes, FaSave, FaSpinner, FaArchive, FaUndo, FaHistory, FaPen, FaCheck, FaSearch, FaExclamationTriangle, FaBoxOpen } from 'react-icons/fa'
-import { api, LicCambio, LicPersonal } from '../../../api/appScriptApi'
+import { api, LicCambio, LicPersonal, Project } from '../../../api/appScriptApi'
 import { useToast } from '../../../context/ToastContext'
 import { ESQUEMAS, EntidadLic, CampoLic, claveDe, todosLosCampos, aTextoCampo, validarCampo, aValorEnvio } from './licEsquemas'
 
@@ -248,6 +248,7 @@ function Campo({ c, valor, error, obligatorio, marcado, cambiado, onChange }: {
   )
   else if (c.tipo === 'd') control = <input type="date" value={valor} onChange={(e) => onChange(e.target.value)} className={input + borde} />
   else if (c.tipo === 'personas') control = <SelectorPersonas valor={valor} onChange={onChange} />
+  else if (c.tipo === 'proyecto') control = <SelectorProyecto valor={valor} onChange={onChange} clase={input + borde} />
   else if (c.soloLectura) control = <input value={valor || '—'} readOnly className={input + ' opacity-60 cursor-not-allowed'} />
   else control = (
     <div className="relative">
@@ -299,6 +300,34 @@ function SelectorPersonas({ valor, onChange }: { valor: string; onChange: (v: st
         {!visibles.length && <p className="px-3 py-3 text-slate-500">Sin coincidencias. Agrega a la persona en Personal clave.</p>}
       </div>
     </div>
+  )
+}
+
+// Proyectos de Gestión > Proyectos (la asistencia del servicio sale de sus asignaciones)
+function SelectorProyecto({ valor, onChange, clase }: { valor: string; onChange: (v: string) => void; clase: string }) {
+  const [proyectos, setProyectos] = useState<Project[] | null>(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    api.getProjects().then((r) => {
+      if (r.success && r.data) setProyectos(r.data)
+      else { setProyectos([]); setError(r.error || 'No se pudieron cargar los proyectos') }
+    })
+  }, [])
+  if (proyectos === null) return <p className="text-slate-400 py-2"><FaSpinner className="inline animate-spin mr-2" />Cargando proyectos…</p>
+  if (error && !proyectos.length) {
+    return (
+      <div>
+        <input value={valor} onChange={(e) => onChange(e.target.value)} placeholder="Código del proyecto (ej. PROY001)" className={clase} />
+        <span className="block mt-1 text-amber-300/80">{error}. Escribe el código a mano o elígelo en la web publicada.</span>
+      </div>
+    )
+  }
+  return (
+    <select value={valor} onChange={(e) => onChange(e.target.value)} className={clase}>
+      <option value="">Sin proyecto</option>
+      {valor && !proyectos.some((p) => p.id === valor) && <option value={valor}>{valor} (no encontrado)</option>}
+      {proyectos.map((p) => <option key={p.id} value={p.id}>{p.name}{p.city ? ` · ${p.city}` : ''}</option>)}
+    </select>
   )
 }
 

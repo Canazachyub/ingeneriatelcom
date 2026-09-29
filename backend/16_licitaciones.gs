@@ -102,9 +102,16 @@ function hojaLic_(clave) {
     hoja.getRange(1, 1, 1, headers.length).setFontWeight('bold');
     hoja.setFrozenRows(1);
   } else if (hoja.getLastColumn() < headers.length) {
+    // Hoja creada con una versión anterior: se agregan las columnas nuevas AL
+    // FINAL, solo si las que ya tiene coinciden en orden (si no, se detiene
+    // para no escribir datos en la columna equivocada).
     var actuales = hoja.getRange(1, 1, 1, Math.max(hoja.getLastColumn(), 1)).getValues()[0];
-    var faltan = headers.slice(actuales.length);
-    hoja.getRange(1, actuales.length + 1, 1, faltan.length).setValues([faltan]).setFontWeight('bold');
+    var enOrden = actuales.every(function (c, i) { return c === headers[i] || (i === 0 && c === '' && actuales.length === 1); });
+    if (!enOrden) throw new Error('La hoja ' + nombre + ' tiene columnas en otro orden que el esperado. Revísala antes de seguir.');
+    var desde = actuales.length === 1 && actuales[0] === '' ? 0 : actuales.length;
+    var faltan = headers.slice(desde);
+    hoja.getRange(1, 1, hoja.getMaxRows(), Math.max(headers.length, hoja.getMaxColumns())).setNumberFormat('@');
+    hoja.getRange(1, desde + 1, 1, faltan.length).setValues([faltan]).setFontWeight('bold');
   }
   return hoja;
 }
@@ -587,4 +594,13 @@ function licSubirDocumento(data) {
     return { success: true };
   });
   return { success: true, data: { archivo_vault: '01_GERENCIA/' + ruta, id: archivo.getId() } };
+}
+
+// Ejecutar desde el editor (una vez, tras publicar una versión que agrega
+// columnas o hojas lic_*): crea las hojas que falten y completa cabeceras.
+// Es seguro repetirlo: no toca datos.
+function licPrepararHojas() {
+  var hechas = Object.keys(LIC_HOJAS_).map(function (k) { hojaLic_(k); return 'lic_' + k; });
+  Logger.log('Hojas de Licitaciones listas: ' + hechas.join(', '));
+  return hechas;
 }

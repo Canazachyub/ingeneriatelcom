@@ -49,7 +49,8 @@ var FUNCIONES_REQUERIDAS = [
   'licDocumentos', 'licActualizarDocumento', 'licCrearDocumento', 'licActualizarProceso', 'licExportarCambios',
   'licPersonal', 'licContratos', 'licActualizarPersona', 'licActualizarContrato', 'licActualizarFactura',
   'licPropuestas', 'licCarpetaDrive', 'licIndexarDrive', 'licArchivosDrive', 'licSubirFoto',
-  'licSubirDocumento', 'licGuardar', 'licArchivar', 'licHistorial', 'licDeshacer', 'licServicios'
+  'licSubirDocumento', 'licGuardar', 'licArchivar', 'licHistorial', 'licDeshacer', 'licServicios',
+  'licAsistenciaServicio', 'licArmarZip', 'licPrepararHojas'
 ];
 
 function ejecutarTestSalud() {
@@ -321,8 +322,12 @@ function ejecutarTestSalud() {
       if (!hLic) return; // ya reportado arriba, en el check de HOJAS_REQUERIDAS
       var cab = hLic.getRange(1, 1, 1, Math.max(1, hLic.getLastColumn())).getValues()[0];
       var faltan = LIC_HOJAS_[clave].filter(function (c) { return cab.indexOf(c) < 0; });
-      if (faltan.length) fail('lic_' + clave + ' no tiene las columnas: ' + faltan.join(', '));
-      else ok();
+      // Si las que tiene están en el orden esperado, las nuevas se agregan solas
+      // al usarla (hojaLic_) o con licPrepararHojas(): no es un fallo.
+      var enOrden = cab.every(function (c, i) { return c === LIC_HOJAS_[clave][i]; });
+      if (!faltan.length) ok();
+      else if (enOrden) warn('lic_' + clave + ': faltan ' + faltan.length + ' columnas nuevas (se agregan solas; o ejecuta licPrepararHojas)');
+      else fail('lic_' + clave + ' tiene columnas en otro orden y le faltan: ' + faltan.join(', '));
     });
   } catch (e) { fail('Verificacion de cabeceras lic_* fallo: ' + e.message); }
 

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FaHardHat, FaPlus, FaPen, FaMapMarkerAlt, FaCalendarAlt, FaUsers, FaExclamationTriangle, FaArrowRight, FaTrophy } from 'react-icons/fa'
-import { api, LicContrato, LicPersonal, LicProceso, LicServicio } from '../../../api/appScriptApi'
+import { FaHardHat, FaPlus, FaPen, FaMapMarkerAlt, FaCalendarAlt, FaUsers, FaExclamationTriangle, FaArrowRight, FaTrophy, FaClipboardCheck, FaSpinner, FaLink } from 'react-icons/fa'
+import { api, LIC_LOCAL, LicAsistenciaServicio, LicContrato, LicPersonal, LicProceso, LicServicio } from '../../../api/appScriptApi'
+import { useToast } from '../../../context/ToastContext'
 import AdminLayout from '../../../components/admin/AdminLayout'
 import ErrorCarga from '../../../components/admin/ErrorCarga'
 import FichaEditable, { EtiquetaEdicion, VerArchivados } from './FichaEditable'
@@ -38,7 +39,87 @@ function Barra({ pct, color }: { pct: number; color: string }) {
   )
 }
 
-export function TarjetaServicio({ s, personas, onEditar }: { s: LicServicio; personas: Map<string, string>; onEditar?: () => void }) {
+// Asistencia del personal del servicio, sacada del proyecto enlazado en
+// Gestión > Proyectos (se carga al pulsar, para no demorar la pantalla).
+function AsistenciaServicio({ s, onEnlazado }: { s: LicServicio; onEnlazado?: () => void }) {
+  const toast = useToast()
+  const [datos, setDatos] = useState<LicAsistenciaServicio | null>(null)
+  const [abierto, setAbierto] = useState(false)
+  const [error, setError] = useState('')
+  const [creando, setCreando] = useState(false)
+
+  const ver = async () => {
+    if (abierto) { setAbierto(false); return }
+    setAbierto(true); setError(''); setDatos(null)
+    const r = await api.licAsistenciaServicio(s.proyecto_id)
+    if (r.success && r.data) setDatos(r.data)
+    else setError(r.error || 'No se pudo leer la asistencia')
+  }
+
+  // Crea en Gestión > Proyectos un proyecto con los datos del servicio y lo enlaza
+  const crearProyecto = async () => {
+    setCreando(true)
+    const r = await api.createProject({ name: s.nombre, client: s.entidad, city: s.zona, description: `Servicio ${s.proceso || ''}`.trim(), startDate: s.fecha_inicio, endDate: s.fecha_fin, budget: Number(s.monto) || undefined })
+    const id = (r.data as unknown as { id?: string } | undefined)?.id
+    if (!r.success || !id) { setCreando(false); toast.error(r.error || 'No se pudo crear el proyecto'); return }
+    const g = await api.licGuardar({ entidad: 'servicios', clave: { id: s.id }, cambios: { proyecto_id: id } })
+    setCreando(false)
+    if (!g.success) { toast.error(g.error || 'Se creó el proyecto pero no se pudo enlazar'); return }
+    toast.success(`Proyecto ${id} creado y enlazado. Asígnale los trabajadores en Gestión > Proyectos.`)
+    onEnlazado?.()
+  }
+
+  if (!s.proyecto_id) {
+    if (!onEnlazado) return null
+    return (
+      <div className="p-3 border border-dashed border-slate-600 text-xs text-slate-300 flex flex-wrap items-center gap-3">
+        <FaClipboardCheck className="text-slate-500" />
+        <span className="flex-1">Enlaza un proyecto de Gestión para ver quién marcó asistencia en este servicio.</span>
+        {!LIC_LOCAL && (
+          <button onClick={crearProyecto} disabled={creando} className="px-2.5 py-1.5 border border-accent-energy text-accent-energy inline-flex items-center gap-1.5">
+            {creando ? <FaSpinner className="animate-spin" /> : <FaLink />} Crear proyecto con estos datos
+          </button>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div className="border border-slate-700">
+      <button onClick={ver} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800">
+        <FaClipboardCheck className="text-accent-energy" />
+        <span className="flex-1 text-left">Asistencia del personal (proyecto {s.proyecto_id})</span>
+        <span className="text-accent-energy">{abierto ? 'Ocultar' : 'Ver hoy'}</span>
+      </button>
+      {abierto && (
+        <div className="border-t border-slate-700 p-3 text-xs">
+          {error ? <p className="text-amber-300">{error}</p>
+            : !datos ? <p className="text-slate-400"><FaSpinner className="inline animate-spin mr-2" />Leyendo marcas…</p>
+            : !datos.trabajadores.length ? (
+              <p className="text-slate-400">El proyecto <b>{datos.proyecto.nombre}</b> no tiene trabajadores asignados. Asígnalos en <Link className="text-accent-energy" to="/admin/proyectos">Gestión &gt; Proyectos</Link>.</p>
+            ) : (
+              <table className="w-full">
+                <thead className="text-slate-500">
+                  <tr><th className="text-left font-normal pb-1">Trabajador</th><th className="font-normal">Hoy entró</th><th className="font-normal">Salió</th><th className="font-normal">Días este mes</th></tr>
+                </thead>
+                <tbody>
+                  {datos.trabajadores.map((t) => (
+                    <tr key={t.dni} className="border-t border-slate-800">
+                      <td className="py-1.5 text-slate-200">{t.nombre}<span className="block text-slate-500">{t.cargo}</span></td>
+                      <td className={`text-center font-mono ${t.entrada_hoy ? 'text-green-300' : 'text-red-300'}`}>{t.entrada_hoy || 'No marcó'}</td>
+                      <td className="text-center font-mono text-slate-300">{t.salida_hoy || '—'}</td>
+                      <td className="text-center font-mono text-white">{t.dias_mes}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function TarjetaServicio({ s, personas, onEditar, onRecargar }: { s: LicServicio; personas: Map<string, string>; onEditar?: () => void; onRecargar?: () => void }) {
   const ini = aFecha(s.fecha_inicio)
   const fin = aFecha(s.fecha_fin)
   const pctPlazo = ini && fin && fin > ini ? ((hoyLocal().getTime() - ini.getTime()) / (fin.getTime() - ini.getTime())) * 100 : null
@@ -117,6 +198,7 @@ export function TarjetaServicio({ s, personas, onEditar }: { s: LicServicio; per
           </div>
         )}
       </div>
+      <AsistenciaServicio s={s} onEnlazado={onEditar ? onRecargar : undefined} />
       {s.notas && <p className="text-xs text-slate-400 whitespace-pre-line border-t border-slate-800 pt-3">{s.notas}</p>}
     </div>
   )
@@ -231,7 +313,7 @@ export default function ServiciosPage() {
           </div>
         ) : (
           <div className="grid lg:grid-cols-2 gap-4">
-            {visibles.map((s) => <TarjetaServicio key={s.id} s={s} personas={personas} onEditar={() => setEditando(s)} />)}
+            {visibles.map((s) => <TarjetaServicio key={s.id} s={s} personas={personas} onEditar={() => setEditando(s)} onRecargar={cargar} />)}
           </div>
         )}
       </div>

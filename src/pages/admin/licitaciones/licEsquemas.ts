@@ -11,7 +11,8 @@ export type EntidadLic =
 
 // t texto · l texto largo · n número · m dinero · p porcentaje · d fecha · b sí/no
 // o opción cerrada · personas lista de DNI del personal clave
-export type TipoCampo = 't' | 'l' | 'n' | 'm' | 'p' | 'd' | 'b' | 'o' | 'personas'
+// proyecto: proyecto de Gestión > Proyectos (para ver la asistencia del servicio)
+export type TipoCampo = 't' | 'l' | 'n' | 'm' | 'p' | 'd' | 'b' | 'o' | 'personas' | 'proyecto'
 
 export interface CampoLic {
   k: string
@@ -218,6 +219,7 @@ export const ESQUEMAS: Record<EntidadLic, EsquemaLic> = {
       { titulo: 'Equipo', campos: [
         { k: 'responsable', etiqueta: 'Responsable', tipo: 't' },
         { k: 'personal', etiqueta: 'Personal clave asignado', tipo: 'personas', ancho: 'completo' },
+        { k: 'proyecto_id', etiqueta: 'Proyecto de Gestión (para ver la asistencia)', tipo: 'proyecto', ancho: 'completo', ayuda: 'El proyecto donde asignas a los trabajadores de este servicio' },
         { k: 'notas', etiqueta: 'Notas', tipo: 'l', ancho: 'completo' },
       ] },
     ],

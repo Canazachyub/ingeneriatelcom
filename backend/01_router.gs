@@ -168,7 +168,10 @@ var ROUTES = {
   licArchivar: { nivel: 'admin', handler: function (ctx) { return licArchivar(ctx.data, ctx.userId); } },
   licHistorial: { nivel: 'admin', handler: function (ctx) { return licHistorial(ctx.data); } },
   licDeshacer: { nivel: 'admin', handler: function (ctx) { return licDeshacer(ctx.data, ctx.userId); } },
-  licServicios: { nivel: 'admin', handler: function (ctx) { return licServicios(ctx.data); } }
+  licServicios: { nivel: 'admin', handler: function (ctx) { return licServicios(ctx.data); } },
+  // Servicio ↔ proyecto y armar propuesta (18_lic_propuesta.gs)
+  licAsistenciaServicio: { nivel: 'admin', handler: function (ctx) { return licAsistenciaServicio(ctx.data); } },
+  licArmarZip: { nivel: 'admin', handler: function (ctx) { return licArmarZip(ctx.data); } }
 };
 
 // Modulo del panel que exige cada accion de nivel 'auth' (escalon 2).

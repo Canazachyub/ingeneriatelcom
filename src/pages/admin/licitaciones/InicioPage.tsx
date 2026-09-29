@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  FaGavel, FaSatelliteDish, FaListAlt, FaFolderOpen, FaUserFriends, FaArrowRight, FaTrophy, FaDoorOpen, FaBan, FaHardHat, FaPlus,
+  FaGavel, FaSatelliteDish, FaListAlt, FaFolderOpen, FaUserFriends, FaArrowRight, FaTrophy, FaDoorOpen, FaBan, FaHardHat, FaPlus, FaFileArchive,
 } from 'react-icons/fa'
 import { api, LicProceso, LicResumen, LicServicio } from '../../../api/appScriptApi'
 import { TarjetaServicio } from './ServiciosPage'
@@ -38,6 +38,18 @@ const BLOQUES = [
     icono: <FaUserFriends />,
     titulo: 'Competencia',
     texto: 'Empresas que se presentan contra nosotros y cuánto suelen ofertar.',
+  },
+  {
+    a: '/admin/licitaciones/armar',
+    icono: <FaFileArchive />,
+    titulo: 'Armar propuesta',
+    texto: 'Elige personal y experiencia y descarga un ZIP con todos los PDF en carpetas.',
+  },
+  {
+    a: '/admin/licitaciones/servicios',
+    icono: <FaHardHat />,
+    titulo: 'Servicios en ejecución',
+    texto: 'Plazos, entregas, equipo, asistencia y facturación de lo que atendemos hoy.',
   },
 ]
 

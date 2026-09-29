@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-29T07:54:47.880Z con tools/build-backend.mjs
+// Generado: 2026-09-29T08:05:21.987Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -563,7 +563,10 @@ var ROUTES = {
   licArchivar: { nivel: 'admin', handler: function (ctx) { return licArchivar(ctx.data, ctx.userId); } },
   licHistorial: { nivel: 'admin', handler: function (ctx) { return licHistorial(ctx.data); } },
   licDeshacer: { nivel: 'admin', handler: function (ctx) { return licDeshacer(ctx.data, ctx.userId); } },
-  licServicios: { nivel: 'admin', handler: function (ctx) { return licServicios(ctx.data); } }
+  licServicios: { nivel: 'admin', handler: function (ctx) { return licServicios(ctx.data); } },
+  // Servicio ↔ proyecto y armar propuesta (18_lic_propuesta.gs)
+  licAsistenciaServicio: { nivel: 'admin', handler: function (ctx) { return licAsistenciaServicio(ctx.data); } },
+  licArmarZip: { nivel: 'admin', handler: function (ctx) { return licArmarZip(ctx.data); } }
 };
 
 // Modulo del panel que exige cada accion de nivel 'auth' (escalon 2).
@@ -6431,7 +6434,8 @@ var FUNCIONES_REQUERIDAS = [
   'licDocumentos', 'licActualizarDocumento', 'licCrearDocumento', 'licActualizarProceso', 'licExportarCambios',
   'licPersonal', 'licContratos', 'licActualizarPersona', 'licActualizarContrato', 'licActualizarFactura',
   'licPropuestas', 'licCarpetaDrive', 'licIndexarDrive', 'licArchivosDrive', 'licSubirFoto',
-  'licSubirDocumento', 'licGuardar', 'licArchivar', 'licHistorial', 'licDeshacer', 'licServicios'
+  'licSubirDocumento', 'licGuardar', 'licArchivar', 'licHistorial', 'licDeshacer', 'licServicios',
+  'licAsistenciaServicio', 'licArmarZip', 'licPrepararHojas'
 ];
 
 function ejecutarTestSalud() {
@@ -6703,8 +6707,12 @@ function ejecutarTestSalud() {
       if (!hLic) return; // ya reportado arriba, en el check de HOJAS_REQUERIDAS
       var cab = hLic.getRange(1, 1, 1, Math.max(1, hLic.getLastColumn())).getValues()[0];
       var faltan = LIC_HOJAS_[clave].filter(function (c) { return cab.indexOf(c) < 0; });
-      if (faltan.length) fail('lic_' + clave + ' no tiene las columnas: ' + faltan.join(', '));
-      else ok();
+      // Si las que tiene están en el orden esperado, las nuevas se agregan solas
+      // al usarla (hojaLic_) o con licPrepararHojas(): no es un fallo.
+      var enOrden = cab.every(function (c, i) { return c === LIC_HOJAS_[clave][i]; });
+      if (!faltan.length) ok();
+      else if (enOrden) warn('lic_' + clave + ': faltan ' + faltan.length + ' columnas nuevas (se agregan solas; o ejecuta licPrepararHojas)');
+      else fail('lic_' + clave + ' tiene columnas en otro orden y le faltan: ' + faltan.join(', '));
     });
   } catch (e) { fail('Verificacion de cabeceras lic_* fallo: ' + e.message); }
 
@@ -7222,7 +7230,7 @@ function invalidarLecturas_() {
 
 // Lecturas del modulo Licitaciones que no siguen el prefijo get/obtener/...
 // (nombradas asi en docs/PLAN_LICITACIONES_ADMIN.md, el diseno ya aprobado).
-var LECTURAS_LIC_ = ['licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia', 'licDocumentos', 'licPersonal', 'licContratos', 'licPropuestas', 'licCarpetaDrive', 'licArchivosDrive', 'licHistorial', 'licServicios'];
+var LECTURAS_LIC_ = ['licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia', 'licDocumentos', 'licPersonal', 'licContratos', 'licPropuestas', 'licCarpetaDrive', 'licArchivosDrive', 'licHistorial', 'licServicios', 'licAsistenciaServicio'];
 
 // Acciones de solo lectura (no se auditan ni invalidan cache).
 function esAccionDeLectura_(action) {
@@ -7779,9 +7787,16 @@ function hojaLic_(clave) {
     hoja.getRange(1, 1, 1, headers.length).setFontWeight('bold');
     hoja.setFrozenRows(1);
   } else if (hoja.getLastColumn() < headers.length) {
+    // Hoja creada con una versión anterior: se agregan las columnas nuevas AL
+    // FINAL, solo si las que ya tiene coinciden en orden (si no, se detiene
+    // para no escribir datos en la columna equivocada).
     var actuales = hoja.getRange(1, 1, 1, Math.max(hoja.getLastColumn(), 1)).getValues()[0];
-    var faltan = headers.slice(actuales.length);
-    hoja.getRange(1, actuales.length + 1, 1, faltan.length).setValues([faltan]).setFontWeight('bold');
+    var enOrden = actuales.every(function (c, i) { return c === headers[i] || (i === 0 && c === '' && actuales.length === 1); });
+    if (!enOrden) throw new Error('La hoja ' + nombre + ' tiene columnas en otro orden que el esperado. Revísala antes de seguir.');
+    var desde = actuales.length === 1 && actuales[0] === '' ? 0 : actuales.length;
+    var faltan = headers.slice(desde);
+    hoja.getRange(1, 1, hoja.getMaxRows(), Math.max(headers.length, hoja.getMaxColumns())).setNumberFormat('@');
+    hoja.getRange(1, desde + 1, 1, faltan.length).setValues([faltan]).setFontWeight('bold');
   }
   return hoja;
 }
@@ -8266,6 +8281,15 @@ function licSubirDocumento(data) {
   return { success: true, data: { archivo_vault: '01_GERENCIA/' + ruta, id: archivo.getId() } };
 }
 
+// Ejecutar desde el editor (una vez, tras publicar una versión que agrega
+// columnas o hojas lic_*): crea las hojas que falten y completa cabeceras.
+// Es seguro repetirlo: no toca datos.
+function licPrepararHojas() {
+  var hechas = Object.keys(LIC_HOJAS_).map(function (k) { hojaLic_(k); return 'lic_' + k; });
+  Logger.log('Hojas de Licitaciones listas: ' + hechas.join(', '));
+  return hechas;
+}
+
 // ============================================================
 // LICITACIONES — EDICIÓN DESDE EL PANEL ("fácil de usar, difícil de malograr")
 //
@@ -8622,4 +8646,112 @@ function licServicios(data) {
     });
   });
   return { success: true, data: lista };
+}
+
+// ============================================================
+// LICITACIONES — servicio ↔ proyecto (asistencia) y "Armar propuesta" (ZIP)
+// Fuente modular del backend GAS. NO editar appscript.js a mano.
+// ============================================================
+
+// Asistencia del personal de un servicio, leída del proyecto enlazado
+// (Gestión > Proyectos: asignaciones activas + marcas de asistencias_v2).
+// data = { proyecto_id } → { proyecto, hoy, trabajadores: [{dni, nombre, cargo,
+//   entrada_hoy, salida_hoy, dias_mes, ultima}] }
+function licAsistenciaServicio(data) {
+  data = data || {};
+  var id = String(data.proyecto_id || '');
+  if (!id) return { success: false, error: 'El servicio no tiene proyecto enlazado' };
+  var pr = getProjectById(id);
+  if (!pr || !pr.success || !pr.data) return { success: false, error: 'No se encontró el proyecto ' + id + ' en Gestión > Proyectos' };
+
+  var asig = SpreadsheetApp.openById(SHEET_ID).getSheetByName('asignaciones').getDataRange().getValues().slice(1)
+    .filter(function (r) { return String(r[1]) === id && r[5] === 'activa'; });
+  var roster = {};
+  leerRosterReal_(true).forEach(function (t) { roster[String(t.dni)] = t; });
+  var dnis = [];
+  asig.forEach(function (r) {
+    var dni = dniDesdeIdRoster_(r[2]);
+    if (dni && dnis.indexOf(dni) < 0) dnis.push(dni);
+  });
+
+  var hoy = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
+  var desde = hoy.slice(0, 8) + '01';
+  var marcas = dnis.length ? (getAsistenciasV2({ desde: desde }).data || []).filter(function (m) { return dnis.indexOf(String(m.dni)) >= 0; }) : [];
+  var trabajadores = dnis.map(function (dni) {
+    var propias = marcas.filter(function (m) { return String(m.dni) === dni; });
+    var dias = {};
+    propias.forEach(function (m) { if (m.evento === 'entrada') dias[m.fecha] = true; });
+    var deHoy = propias.filter(function (m) { return m.fecha === hoy; });
+    var entrada = deHoy.filter(function (m) { return m.evento === 'entrada'; })[0];
+    var salida = deHoy.filter(function (m) { return m.evento === 'salida'; }).slice(-1)[0];
+    var ultima = propias.slice().sort(function (a, b) { return String(a.fecha + a.hora).localeCompare(String(b.fecha + b.hora)); }).slice(-1)[0];
+    var t = roster[dni] || {};
+    return {
+      dni: dni, nombre: t.nombre || dni, cargo: t.cargo || '', activo: t.activo !== false,
+      entrada_hoy: entrada ? String(entrada.hora).slice(0, 5) : '',
+      salida_hoy: salida ? String(salida.hora).slice(0, 5) : '',
+      dias_mes: Object.keys(dias).length,
+      ultima: ultima ? ultima.fecha + ' ' + String(ultima.hora).slice(0, 5) + ' (' + ultima.evento + ')' : ''
+    };
+  });
+  var p = pr.data;
+  return {
+    success: true,
+    data: { proyecto: { id: id, nombre: p.nombre || p.name || id, ciudad: p.ciudad || '' }, hoy: hoy, desde: desde, trabajadores: trabajadores }
+  };
+}
+
+// ── Armar propuesta: ZIP con los PDF elegidos, en carpetas ────────────
+// data = { nombre: 'CP SER-SM-21-2026-ELSE-1', archivos: [{ ruta, destino }] }
+//   ruta    = archivo_vault del documento ('01_GERENCIA/acervo/...')
+//   destino = ruta dentro del ZIP ('3 Personal clave/CANAZA WILLY/CV.pdf')
+// Se guarda en Licitaciones/_zips/ (se limpian los de más de 7 días) y se
+// devuelve el enlace de descarga.
+var LIC_ZIP_MAX_BYTES_ = 45 * 1024 * 1024; // Apps Script no maneja blobs de más de ~50 MB
+
+function licRutaDrive_(ruta) {
+  var r = String(ruta || '').replace(/\\/g, '/');
+  var m = r.match(/^01_GERENCIA\/acervo\/(.+)$/);
+  if (m) return 'acervo/' + m[1];
+  m = r.match(/^01_GERENCIA\/experiencia\/_bruto\/([^\/]+)\/ofertas\/[^\/]+\/([^\/]+)$/);
+  if (m) return 'propuestas/' + m[1] + '/' + m[2];
+  return r;
+}
+
+function licArmarZip(data) {
+  data = data || {};
+  var archivos = data.archivos || [];
+  if (!archivos.length) return { success: false, error: 'No elegiste ningún documento' };
+  if (archivos.length > 300) return { success: false, error: 'Son demasiados documentos para un solo ZIP (máx. 300)' };
+  var indice = licArchivosDrive().data;
+  var blobs = [], faltan = [], total = 0, usados = {};
+  for (var i = 0; i < archivos.length; i++) {
+    var a = archivos[i];
+    var id = indice[licRutaDrive_(a.ruta)];
+    if (!id) { faltan.push(a.destino || a.ruta); continue; }
+    var destino = String(a.destino || '').replace(/[\\:*?"<>|]/g, '').replace(/\/+/g, '/').replace(/^\//, '').slice(0, 200) || ('documento-' + i + '.pdf');
+    if (usados[destino]) { var n = 2; while (usados[destino.replace(/\.pdf$/i, ' (' + n + ').pdf')]) n++; destino = destino.replace(/\.pdf$/i, ' (' + n + ').pdf'); }
+    usados[destino] = true;
+    var archivo = DriveApp.getFileById(id);
+    total += archivo.getSize();
+    if (total > LIC_ZIP_MAX_BYTES_) return { success: false, error: 'Los documentos elegidos pasan de 45 MB. Quita algunos o arma la propuesta en dos partes.' };
+    blobs.push(archivo.getBlob().setName(destino));
+  }
+  if (!blobs.length) return { success: false, error: 'Ninguno de los documentos elegidos está en Drive todavía. Pulsa "Actualizar" en Documentos.' };
+
+  var raiz = licCarpetaRaiz_();
+  var it = raiz.getFoldersByName('_zips');
+  var carpeta = it.hasNext() ? it.next() : raiz.createFolder('_zips');
+  var limite = Date.now() - 7 * 86400000;
+  var viejos = carpeta.getFiles();
+  while (viejos.hasNext()) { var v = viejos.next(); if (v.getDateCreated().getTime() < limite) v.setTrashed(true); }
+
+  var nombre = String(data.nombre || 'Propuesta').replace(/[\\\/:*?"<>|]/g, '').trim().slice(0, 80) || 'Propuesta';
+  nombre += ' - ' + Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd HHmm') + '.zip';
+  var zip = carpeta.createFile(Utilities.zip(blobs, nombre));
+  return {
+    success: true,
+    data: { url: 'https://drive.google.com/uc?export=download&id=' + zip.getId(), nombre: nombre, documentos: blobs.length, faltan: faltan, mb: Math.round(total / 1048576 * 10) / 10 },
+    message: 'ZIP listo con ' + blobs.length + ' documentos'
+  };
 }

@@ -76,6 +76,7 @@ const LicContratosPage = lazy(() => import('./pages/admin/licitaciones/Contratos
 const LicDocumentosPage = lazy(() => import('./pages/admin/licitaciones/DocumentosPage'))
 const LicRadarPage = lazy(() => import('./pages/admin/licitaciones/RadarPage'))
 const LicServiciosPage = lazy(() => import('./pages/admin/licitaciones/ServiciosPage'))
+const LicArmarPropuestaPage = lazy(() => import('./pages/admin/licitaciones/ArmarPropuestaPage'))
 
 import { useAuth } from './context/AuthContext'
 import { ToastProvider, useToast } from './context/ToastContext'
@@ -410,6 +411,16 @@ function App() {
       />
 
       {/* Licitaciones (lazy) */}
+      <Route
+        path="/admin/licitaciones/armar"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <LicArmarPropuestaPage />
+            </ProtectedRoute>
+          </Suspense>
+        }
+      />
       <Route
         path="/admin/licitaciones/servicios"
         element={

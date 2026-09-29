@@ -1,3 +1,4 @@
+import zlib from 'node:zlib'
 import { defineConfig, loadEnv, type Plugin, type Connect } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
@@ -79,6 +80,36 @@ function rutaPermitida(absPath: string, vaultRoot: string): boolean {
     return esDocumentos || esOfertaPropia
   }
   return false
+}
+
+// ZIP sin compresión (los PDF ya vienen comprimidos): suficiente para
+// "Armar propuesta" en modo local, sin dependencias nuevas.
+function zipSinCompresion(entradas: { nombre: string; datos: Buffer }[]): Buffer {
+  const partes: Buffer[] = []
+  const central: Buffer[] = []
+  let offset = 0
+  for (const e of entradas) {
+    const nombre = Buffer.from(e.nombre, 'utf8')
+    const crc = zlib.crc32(e.datos) >>> 0
+    const local = Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(0x0800, 6) // UTF-8
+    local.writeUInt16LE(0, 8); local.writeUInt32LE(0, 10); local.writeUInt32LE(crc, 14)
+    local.writeUInt32LE(e.datos.length, 18); local.writeUInt32LE(e.datos.length, 22)
+    local.writeUInt16LE(nombre.length, 26); local.writeUInt16LE(0, 28)
+    partes.push(local, nombre, e.datos)
+    const cen = Buffer.alloc(46)
+    cen.writeUInt32LE(0x02014b50, 0); cen.writeUInt16LE(20, 4); cen.writeUInt16LE(20, 6); cen.writeUInt16LE(0x0800, 8)
+    cen.writeUInt16LE(0, 10); cen.writeUInt32LE(0, 12); cen.writeUInt32LE(crc, 16)
+    cen.writeUInt32LE(e.datos.length, 20); cen.writeUInt32LE(e.datos.length, 24); cen.writeUInt16LE(nombre.length, 28)
+    cen.writeUInt32LE(offset, 42)
+    central.push(cen, nombre)
+    offset += 30 + nombre.length + e.datos.length
+  }
+  const tamCentral = central.reduce((a, b) => a + b.length, 0)
+  const fin = Buffer.alloc(22)
+  fin.writeUInt32LE(0x06054b50, 0); fin.writeUInt16LE(entradas.length, 8); fin.writeUInt16LE(entradas.length, 10)
+  fin.writeUInt32LE(tamCentral, 12); fin.writeUInt32LE(offset, 16)
+  return Buffer.concat([...partes, ...central, fin])
 }
 
 function licLocalPlugin(dataDir: string): Plugin {
@@ -207,6 +238,37 @@ function licLocalPlugin(dataDir: string): Plugin {
           } catch (e) {
             return enviarJson(res, 500, { success: false, error: 'No se pudo guardar el PDF: ' + (e as Error).message })
           }
+        }
+
+        // POST /__lic/zip {nombre, archivos:[{ruta, destino}]} → descarga el ZIP
+        if (req.method === 'POST' && pathname === '/__lic/zip') {
+          try {
+            const cuerpo = JSON.parse((await leerCuerpo(req)) || '{}')
+            const archivos = Array.isArray(cuerpo.archivos) ? cuerpo.archivos : []
+            if (!archivos.length) return enviarJson(res, 400, { success: false, error: 'No elegiste ningún documento' })
+            const entradas: { nombre: string; datos: Buffer }[] = []
+            const usados = new Set<string>()
+            const faltan: string[] = []
+            for (const a of archivos) {
+              const abs = path.resolve(vaultRoot, String(a.ruta || ''))
+              if (!rutaPermitida(abs, vaultRoot) || !fs.existsSync(abs)) { faltan.push(String(a.destino || a.ruta)); continue }
+              let destino = String(a.destino || path.basename(abs)).replace(/[\\:*?"<>|]/g, '').replace(/\/+/g, '/').replace(/^\//, '').slice(0, 200)
+              if (usados.has(destino)) { let n = 2; while (usados.has(destino.replace(/\.pdf$/i, ` (${n}).pdf`))) n++; destino = destino.replace(/\.pdf$/i, ` (${n}).pdf`) }
+              usados.add(destino)
+              entradas.push({ nombre: destino, datos: fs.readFileSync(abs) })
+            }
+            if (!entradas.length) return enviarJson(res, 404, { success: false, error: 'Ninguno de los PDF existe en el vault' })
+            const nombre = (String(cuerpo.nombre || 'Propuesta').replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 80) || 'Propuesta') + '.zip'
+            const zip = zipSinCompresion(entradas)
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/zip')
+            res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(nombre)}"; filename*=UTF-8''${encodeURIComponent(nombre)}`)
+            res.setHeader('X-Faltan', encodeURIComponent(JSON.stringify(faltan)))
+            res.end(zip)
+          } catch (e) {
+            return enviarJson(res, 500, { success: false, error: 'No se pudo armar el ZIP: ' + (e as Error).message })
+          }
+          return
         }
 
         // GET /__lic/archivo?ruta=...

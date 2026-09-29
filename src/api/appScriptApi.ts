@@ -154,6 +154,18 @@ export interface LicServicio extends LicEdicionMeta {
   n_facturas?: number
 }
 
+export interface LicAsistenciaServicio {
+  proyecto: { id: string; nombre: string; ciudad: string }
+  hoy: string
+  desde: string
+  trabajadores: { dni: string; nombre: string; cargo: string; activo: boolean; entrada_hoy: string; salida_hoy: string; dias_mes: number; ultima: string }[]
+}
+
+export interface LicArchivoZip {
+  ruta: string // archivo_vault
+  destino: string // ruta dentro del ZIP
+}
+
 export interface LicCambio {
   id: string
   fecha: string
@@ -1560,6 +1572,19 @@ class AppScriptApi {
   async licDeshacer(id: string): Promise<ApiResponse<Record<string, unknown>>> {
     if (LIC_LOCAL) return licLocal.licDeshacer(id)
     return this.request('licDeshacer', 'POST', { id })
+  }
+
+  // Asistencia del personal del proyecto enlazado a un servicio (Gestión > Proyectos)
+  async licAsistenciaServicio(proyecto_id: string): Promise<ApiResponse<LicAsistenciaServicio>> {
+    if (LIC_LOCAL) return { success: false, error: 'La asistencia se ve en la web publicada (en modo local no hay datos del kiosko).' }
+    return this.request('licAsistenciaServicio', 'POST', { proyecto_id })
+  }
+
+  // Armar propuesta: ZIP con los PDF elegidos en carpetas. En producción lo
+  // arma el backend en Drive y devuelve el enlace; en local se descarga directo.
+  async licArmarZip(data: { nombre: string; archivos: LicArchivoZip[] }): Promise<ApiResponse<{ url?: string; nombre: string; documentos: number; faltan: string[]; mb?: number }>> {
+    if (LIC_LOCAL) return licLocal.licArmarZip(data)
+    return this.request('licArmarZip', 'POST', data as unknown as Record<string, unknown>)
   }
 
   async licServicios(opciones: OpcionesLecturaLic = {}): Promise<ApiResponse<LicServicio[]>> {

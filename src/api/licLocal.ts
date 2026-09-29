@@ -527,3 +527,24 @@ export async function licSubirDocumento(data: { categoria: string; nombre: strin
     return { success: false, error: 'No se pudo subir el PDF (¿está corriendo npm run dev?)' }
   }
 }
+
+// Armar propuesta (modo local): el plugin arma el ZIP y aquí se descarga.
+export async function licArmarZip(data: { nombre: string; archivos: { ruta: string; destino: string }[] }): Promise<ApiResponse<{ nombre: string; documentos: number; faltan: string[] }>> {
+  try {
+    const res = await fetch('/__lic/zip', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+    if (!res.ok) {
+      const j = await res.json().catch(() => null)
+      return { success: false, error: (j && j.error) || `No se pudo armar el ZIP (HTTP ${res.status})` }
+    }
+    const faltan = JSON.parse(decodeURIComponent(res.headers.get('X-Faltan') || '%5B%5D')) as string[]
+    const blob = await res.blob()
+    const nombre = `${data.nombre || 'Propuesta'}.zip`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = nombre; document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 10000)
+    return { success: true, data: { nombre, documentos: data.archivos.length - faltan.length, faltan }, message: 'ZIP descargado' }
+  } catch {
+    return { success: false, error: ERROR_SERVIDOR_LOCAL }
+  }
+}
