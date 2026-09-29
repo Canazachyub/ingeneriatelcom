@@ -13,7 +13,9 @@ var HOJAS_REQUERIDAS = [
   'convocatorias', 'postulaciones', 'contactos',
   'asistencias_v2', 'justificaciones',
   'config_planilla', 'incidencias', 'planilla_log', 'autorizaciones_5pm', 'bolsa_horas',
-  'capacitaciones', 'banco_preguntas', 'evaluaciones', 'eval_fotos', 'eval_logs'
+  'capacitaciones', 'banco_preguntas', 'evaluaciones', 'eval_fotos', 'eval_logs',
+  'lic_procesos', 'lic_postores', 'lic_acciones', 'lic_competidores', 'lic_experiencia', 'lic_documentos',
+  'lic_personal', 'lic_contratos', 'lic_facturas'
 ];
 
 // Funciones que el router referencia — si falta una, la accion revienta en runtime
@@ -42,7 +44,10 @@ var FUNCIONES_REQUERIDAS = [
   'guardarFotoWebcam', 'registrarEventoLog',
   'crearCapacitacion', 'actualizarCapacitacion', 'eliminarCapacitacion',
   'getPreguntas', 'crearPregunta', 'actualizarPregunta', 'eliminarPregunta',
-  'getEvaluaciones', 'revisarEvaluacion'
+  'getEvaluaciones', 'revisarEvaluacion',
+  'licImportar', 'licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia',
+  'licDocumentos', 'licActualizarDocumento', 'licCrearDocumento', 'licActualizarProceso', 'licExportarCambios',
+  'licPersonal', 'licContratos', 'licActualizarPersona', 'licActualizarContrato', 'licActualizarFactura'
 ];
 
 function ejecutarTestSalud() {
@@ -81,6 +86,9 @@ function ejecutarTestSalud() {
     var ss = SpreadsheetApp.openById(SHEET_ID);
     HOJAS_REQUERIDAS.forEach(function (nombre) {
       if (ss.getSheetByName(nombre)) ok();
+      // Las hojas lic_* (Licitaciones) las crea hojaLic_() en la primera
+      // importación o lectura: que falten al inicio no es una falla.
+      else if (nombre.indexOf('lic_') === 0) warn('Hoja ' + nombre + ' aún no existe (se crea sola al importar Licitaciones)');
       else fail('Falta la hoja: ' + nombre);
     });
     if (!ss.getSheetByName('empleados')) warn('Hoja legacy `empleados` no existe (solo afecta rutas legacy EMP0xx)');
@@ -301,6 +309,20 @@ function ejecutarTestSalud() {
       }
     }
   } catch (e) { fail('Verificacion del roster del kiosko fallo: ' + e.message); }
+
+  // 12. Modulo Licitaciones: las hojas lic_* tienen todas las columnas de LIC_HOJAS_
+  // (detecta drift si se agrega un campo al JSON del vault y se olvida la hoja).
+  try {
+    var ssLic = SpreadsheetApp.openById(SHEET_ID);
+    Object.keys(LIC_HOJAS_).forEach(function (clave) {
+      var hLic = ssLic.getSheetByName('lic_' + clave);
+      if (!hLic) return; // ya reportado arriba, en el check de HOJAS_REQUERIDAS
+      var cab = hLic.getRange(1, 1, 1, Math.max(1, hLic.getLastColumn())).getValues()[0];
+      var faltan = LIC_HOJAS_[clave].filter(function (c) { return cab.indexOf(c) < 0; });
+      if (faltan.length) fail('lic_' + clave + ' no tiene las columnas: ' + faltan.join(', '));
+      else ok();
+    });
+  } catch (e) { fail('Verificacion de cabeceras lic_* fallo: ' + e.message); }
 
   var resultado = {
     ok: fails.length === 0,

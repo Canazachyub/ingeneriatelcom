@@ -64,8 +64,17 @@ function guardarUsuario(u: User | null) {
   } catch { /* sin almacenamiento: solo en memoria */ }
 }
 
+// Vista previa SOLO en `npm run dev`: con VITE_PREVIEW_ADMIN=1 en
+// .env.development.local (no se sube a git) el panel abre sin login para
+// revisar diseño. import.meta.env.DEV es false en `npm run build`, así que
+// esta rama desaparece del sitio publicado. Sin token, las pantallas que
+// consultan producción responden "No autorizado": úsese para Licitaciones en
+// modo local (que no llama al backend).
+const PREVIEW_ADMIN = import.meta.env.DEV && import.meta.env.VITE_PREVIEW_ADMIN === '1'
+const USUARIO_PREVIEW: User = { id: 'preview', email: 'preview@local', name: 'Vista previa (local)', role: 'admin' }
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUserState] = useState<User | null>(leerUsuarioGuardado)
+  const [user, setUserState] = useState<User | null>(() => (PREVIEW_ADMIN ? USUARIO_PREVIEW : leerUsuarioGuardado()))
   // Solo se espera a verifyToken si NO hay usuario guardado que mostrar
   const [isLoading, setIsLoading] = useState(() => !!api.getToken() && !leerUsuarioGuardado())
   const setUser = (u: User | null) => { guardarUsuario(u); setUserState(u) }

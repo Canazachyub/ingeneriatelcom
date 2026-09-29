@@ -21,7 +21,11 @@ var MODULOS_PANEL_ = {
   reportes:       { etiqueta: 'Reportes',        soloAdmin: false },
   planilla:       { etiqueta: 'Planilla',        soloAdmin: true },
   usuarios:       { etiqueta: 'Usuarios',        soloAdmin: true },
-  auditoria:      { etiqueta: 'Auditoria',       soloAdmin: true }
+  auditoria:      { etiqueta: 'Auditoria',       soloAdmin: true },
+  // Hoy solo administracion (rutas en admin/01_router.gs son todas nivel 'admin');
+  // cuando el proyecto lo abra a Gerencia/Supervisor, pasar a soloAdmin:false y
+  // mover las rutas licXxx de nivel 'admin' a 'auth' + MODULO_POR_ACCION_.
+  licitaciones:   { etiqueta: 'Licitaciones',    soloAdmin: true }
 };
 
 var ESTADOS_USUARIO_ = ['activo', 'inactivo'];
@@ -372,7 +376,11 @@ function invalidarLecturas_() {
   try { CacheService.getScriptCache().removeAll(LECTURAS_CACHEABLES_.map(function (a) { return 'lect:' + a; })); } catch (e) {}
 }
 
+// Lecturas del modulo Licitaciones que no siguen el prefijo get/obtener/...
+// (nombradas asi en docs/PLAN_LICITACIONES_ADMIN.md, el diseno ya aprobado).
+var LECTURAS_LIC_ = ['licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia', 'licDocumentos', 'licPersonal', 'licContratos'];
+
 // Acciones de solo lectura (no se auditan ni invalidan cache).
 function esAccionDeLectura_(action) {
-  return /^(get|obtener|verify|consultar|historial|listar|login)/i.test(action);
+  return /^(get|obtener|verify|consultar|historial|listar|login)/i.test(action) || LECTURAS_LIC_.indexOf(action) >= 0;
 }

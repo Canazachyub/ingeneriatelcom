@@ -7,12 +7,20 @@ interface FileViewerModalProps {
   fileUrl: string
   title: string
   onClose: () => void
+  // 'drive' (por defecto): getArchivo, para archivos privados en Drive.
+  // 'local': licArchivo (modo local de Licitaciones, /__lic/archivo), para
+  // PDFs del acervo del vault leídos directo del disco. Mismo shape de
+  // respuesta en ambos casos ({base64, mimeType, fileName}), así que el resto
+  // del componente no necesita saber cuál se usó.
+  source?: 'drive' | 'local'
 }
 
 // Visor de archivos privados de Drive (fotos de asistencia/proctoring,
-// justificaciones). Descarga el binario via getArchivo (nivel auth) en vez
-// de enlazar directo a Drive — los archivos ya no son ANYONE_WITH_LINK (C6).
-export default function FileViewerModal({ fileUrl, title, onClose }: FileViewerModalProps) {
+// justificaciones) o, en modo local, PDFs del acervo del vault. Descarga el
+// binario en vez de enlazar directo — los archivos de Drive ya no son
+// ANYONE_WITH_LINK (C6), y los del vault ni siquiera son servibles fuera del
+// dev server local.
+export default function FileViewerModal({ fileUrl, title, onClose, source = 'drive' }: FileViewerModalProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [dataUri, setDataUri] = useState('')
@@ -24,7 +32,7 @@ export default function FileViewerModal({ fileUrl, title, onClose }: FileViewerM
   const cargar = async () => {
     setLoading(true)
     setError('')
-    const res = await api.getArchivo(fileUrl)
+    const res = source === 'local' ? await api.licArchivo(fileUrl) : await api.getArchivo(fileUrl)
     if (!res.success || !res.data) {
       setError(res.error || 'No se pudo cargar el archivo')
       setLoading(false)

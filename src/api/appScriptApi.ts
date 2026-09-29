@@ -1,4 +1,5 @@
 import { config } from '../config/env'
+import * as licLocal from './licLocal'
 import { JobPosting, JobApplication } from '../types/job.types'
 import { ContactForm } from '../types/contact.types'
 import {
@@ -110,6 +111,197 @@ export interface RegistroAuditoria {
   accion: string
   resultado: string
   detalle: string
+}
+
+// ── Licitaciones (backend/16_licitaciones.gs) ─────────────────────────────
+// Los nombres de campo son EXACTAMENTE los del JSON que exporta el vault
+// (ver exportar_web.py): sin capa de normalizacion, a proposito.
+
+export interface LicProceso {
+  nomenclatura: string
+  codigo_seace: string
+  anio: string
+  entidad: string
+  linea: string
+  objeto: string
+  ley: string
+  vr: number | ''
+  resultado: string
+  estado_cola: string
+  nuestro_monto: number | ''
+  nuestro_pct_vr: number | ''
+  n_postores: number | ''
+  ganador_ruc: string
+  ganador: string
+  carpeta_vault: string
+  notas_vault?: string
+  notas: string
+  estado_seguimiento: string
+  actualizado: string
+}
+
+export interface LicPostor {
+  nomenclatura: string
+  ruc: string
+  razon_social: string
+  consorcio: string
+  mype: string
+  monto: number | ''
+  pct_vr: number | ''
+  es_telcom: boolean
+  gano: boolean
+}
+
+export interface LicAccion {
+  nomenclatura: string
+  n: string
+  accion: string
+  fecha: string
+  motivo: string
+}
+
+export interface LicCompetidor {
+  ruc: string
+  nombre: string
+  procesos: string[]
+  n_procesos: number | ''
+  entidades: string[]
+  ofertas: number[]
+  pct_vr_promedio: number | null
+  ganados: number | ''
+}
+
+export interface LicExperiencia {
+  proceso: string
+  entidad: string
+  objeto: string
+  monto_adjudicado: number | ''
+  monto_facturado: number | '' | null
+  pct_telcom: number | ''
+  acreditable: number | '' | null
+  estado: string
+  fecha_contrato: string
+}
+
+export interface LicAparicion {
+  proceso: string // "2026 CP SER-SM-37-2026-ELSE-1"
+  archivo: string | null // propuesta completa, ruta relativa al vault
+  desde: number | null
+  hasta: number | null
+}
+
+// Propuesta completa presentada por Telcom, con el índice de lo extraído de ella
+export interface LicPropuesta {
+  nomenclatura: string
+  anio: string
+  archivo: string
+  tamano_mb: number
+  secciones: { id: string; categoria: string; tipo: string; titulo: string; desde: number | null; hasta: number | null }[]
+}
+
+export interface LicDocumento {
+  id: string
+  categoria: string
+  tipo: string
+  titulo: string
+  entidad: string
+  dni: string
+  nombre: string
+  fecha: string
+  periodo_desde: string
+  periodo_hasta: string
+  monto: number | ''
+  archivo_vault: string
+  usos: number | ''
+  // De qué propuesta COMPLETA se extrajo y en qué páginas (contexto del documento)
+  apariciones?: LicAparicion[]
+  verificado: string
+  vence: string
+  notas: string
+  editado_por: string
+  editado_en: string
+}
+
+export interface LicCargo {
+  titulo: string
+  desde: string
+  hasta: string
+  id: string
+}
+
+export interface LicTitulo {
+  tipo: string
+  titulo: string
+  fecha: string
+  id: string
+}
+
+export interface LicPersonal {
+  dni: string
+  nombre: string
+  documentos: number | ''
+  tipos: Record<string, number>
+  cargos: LicCargo[]
+  titulos: LicTitulo[]
+  meses_experiencia: number | ''
+  anios_experiencia: number | ''
+  empleado_vinculado: string
+  notas: string
+}
+
+export interface LicFactura {
+  contrato: string
+  numero: string
+  fecha: string
+  monto: number | ''
+  documento_id: string
+  archivo_vault: string
+  verificado: string
+  notas: string
+}
+
+export interface LicContrato {
+  contrato: string
+  documentos: number | ''
+  tipos: Record<string, number>
+  monto_contrato: number | '' | null
+  proceso: string
+  monto_adjudicado: number | ''
+  pct_telcom: number | ''
+  n_facturas: number | ''
+  facturado: number | '' | null
+  en_seace_telcom: boolean
+  estado: string
+  notas: string
+  facturas: LicFactura[]
+}
+
+export interface LicResumen {
+  procesos: number
+  presentados: number
+  ganados: number
+  tasa_exito: number | null
+  no_presentados: number
+  pct_vr_promedio_ganado: number | null
+  ganados_por_anio: Record<string, number>
+  procesos_por_anio: Record<string, number>
+  ganados_por_linea: Record<string, number>
+  personas: number
+  contratos_con_sustento: number
+  facturas: number
+  facturado_total: number
+}
+
+export interface LicImportPayload {
+  procesos?: Record<string, unknown>[]
+  postores?: Record<string, unknown>[]
+  acciones?: Record<string, unknown>[]
+  competidores?: Record<string, unknown>[]
+  experiencia?: Record<string, unknown>[]
+  documentos?: Record<string, unknown>[]
+  personal?: Record<string, unknown>[]
+  contratos?: Record<string, unknown>[]
+  facturas?: Record<string, unknown>[]
 }
 
 export interface User {
@@ -232,6 +424,12 @@ function normalizeProject(raw: Record<string, unknown>): Project {
  * Lo suscribe el ToastProvider para que ningun fallo de API quede silencioso.
  */
 export type ApiErrorListener = (message: string, action: string) => void
+
+// Modo local de Licitaciones (ver src/api/licLocal.ts y docs/PLAN_LICITACIONES_ADMIN.md
+// § "Modo local"): cuando está activo, los métodos licXxx de esta clase NO
+// llaman a Apps Script — leen los JSON del vault vía el plugin de Vite
+// (`npm run dev` solamente; el plugin es `apply: 'serve'`, nunca entra al build).
+export const LIC_LOCAL = import.meta.env.VITE_LIC_LOCAL === '1'
 
 class AppScriptApi {
   private baseUrl = config.appsScriptUrl
@@ -1209,6 +1407,126 @@ class AppScriptApi {
     revisado_por?: string
   }): Promise<ApiResponse<null>> {
     return this.request('revisarEvaluacion', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  // ============================================
+  // LICITACIONES (admin) — backend/16_licitaciones.gs
+  // ============================================
+
+  async licImportar(payload: LicImportPayload): Promise<ApiResponse<Record<string, number | { nuevos: number; actualizados: number }>>> {
+    if (LIC_LOCAL) return licLocal.licImportar(payload)
+    return this.request('licImportar', 'POST', payload as unknown as Record<string, unknown>)
+  }
+
+  async licResumen(): Promise<ApiResponse<LicResumen>> {
+    if (LIC_LOCAL) return licLocal.licResumen()
+    return this.request('licResumen', 'POST', {})
+  }
+
+  async licProcesos(): Promise<ApiResponse<LicProceso[]>> {
+    if (LIC_LOCAL) return licLocal.licProcesos()
+    return this.request('licProcesos', 'POST', {})
+  }
+
+  async licProceso(nom: string): Promise<ApiResponse<{ proceso: LicProceso; postores: LicPostor[]; acciones: LicAccion[] }>> {
+    if (LIC_LOCAL) return licLocal.licProceso(nom)
+    return this.request('licProceso', 'POST', { nom })
+  }
+
+  async licCompetidores(): Promise<ApiResponse<LicCompetidor[]>> {
+    if (LIC_LOCAL) return licLocal.licCompetidores()
+    return this.request('licCompetidores', 'POST', {})
+  }
+
+  async licExperiencia(): Promise<ApiResponse<LicExperiencia[]>> {
+    if (LIC_LOCAL) return licLocal.licExperiencia()
+    return this.request('licExperiencia', 'POST', {})
+  }
+
+  // Propuestas completas: por ahora solo en modo local (los PDF viven en el vault)
+  async licPropuestas(): Promise<ApiResponse<LicPropuesta[]>> {
+    if (LIC_LOCAL) return licLocal.licPropuestas()
+    return { success: false, error: 'Las propuestas completas por ahora solo se ven en modo local.' }
+  }
+
+  async licDocumentos(filtros?: { categoria?: string; dni?: string }): Promise<ApiResponse<LicDocumento[]>> {
+    if (LIC_LOCAL) return licLocal.licDocumentos(filtros)
+    return this.request('licDocumentos', 'POST', (filtros || {}) as Record<string, unknown>)
+  }
+
+  async licActualizarDocumento(data: {
+    id: string
+    verificado?: string
+    vence?: string
+    notas?: string
+    titulo?: string
+    fecha?: string
+    monto?: number
+  }): Promise<ApiResponse<Partial<LicDocumento>>> {
+    if (LIC_LOCAL) return licLocal.licActualizarDocumento(data)
+    return this.request('licActualizarDocumento', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async licCrearDocumento(data: {
+    categoria: string
+    tipo?: string
+    titulo: string
+    entidad?: string
+    dni?: string
+    nombre?: string
+    fecha?: string
+    periodo_desde?: string
+    periodo_hasta?: string
+    monto?: number
+    archivo_vault?: string
+    verificado?: string
+    vence?: string
+    notas?: string
+  }): Promise<ApiResponse<LicDocumento>> {
+    if (LIC_LOCAL) return licLocal.licCrearDocumento(data)
+    return this.request('licCrearDocumento', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async licActualizarProceso(data: { nomenclatura: string; estado_seguimiento?: string; notas?: string }): Promise<ApiResponse<Partial<LicProceso>>> {
+    if (LIC_LOCAL) return licLocal.licActualizarProceso(data)
+    return this.request('licActualizarProceso', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async licExportarCambios(desde?: string): Promise<ApiResponse<{ procesos: Partial<LicProceso>[]; documentos: Partial<LicDocumento>[] }>> {
+    if (LIC_LOCAL) return licLocal.licExportarCambios(desde)
+    return this.request('licExportarCambios', 'POST', desde ? { desde } : {})
+  }
+
+  async licPersonal(): Promise<ApiResponse<LicPersonal[]>> {
+    if (LIC_LOCAL) return licLocal.licPersonal()
+    return this.request('licPersonal', 'POST', {})
+  }
+
+  async licContratos(): Promise<ApiResponse<LicContrato[]>> {
+    if (LIC_LOCAL) return licLocal.licContratos()
+    return this.request('licContratos', 'POST', {})
+  }
+
+  async licActualizarPersona(data: { dni: string; empleado_vinculado?: string; notas?: string }): Promise<ApiResponse<Partial<LicPersonal>>> {
+    if (LIC_LOCAL) return licLocal.licActualizarPersona(data)
+    return this.request('licActualizarPersona', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async licActualizarContrato(data: { contrato: string; estado?: string; notas?: string }): Promise<ApiResponse<Partial<LicContrato>>> {
+    if (LIC_LOCAL) return licLocal.licActualizarContrato(data)
+    return this.request('licActualizarContrato', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  async licActualizarFactura(data: { contrato: string; numero: string; verificado?: string; notas?: string }): Promise<ApiResponse<Partial<LicFactura>>> {
+    if (LIC_LOCAL) return licLocal.licActualizarFactura(data)
+    return this.request('licActualizarFactura', 'POST', data as unknown as Record<string, unknown>)
+  }
+
+  // Visor de PDF del vault en modo local (mismo shape que getArchivo/Drive, ver FileViewerModal).
+  // Solo tiene sentido con LIC_LOCAL activo: sin el plugin de Vite no hay adónde pedirlo.
+  async licArchivo(ruta: string): Promise<ApiResponse<{ base64: string; mimeType: string; fileName: string }>> {
+    if (!LIC_LOCAL) return { success: false, error: 'El visor de archivos del vault solo funciona en modo local (VITE_LIC_LOCAL=1)' }
+    return licLocal.licArchivo(ruta)
   }
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, Navigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FaChartArea, FaBook,
+import { FaSatelliteDish, FaChartArea, FaBook,
   FaHome,
   FaUsers,
   FaProjectDiagram,
@@ -22,9 +22,14 @@ import { FaChartArea, FaBook,
   FaLock,
   FaUserShield,
   FaHistory,
+  FaGavel,
+  FaListAlt,
+  FaUserFriends,
+  FaFolderOpen,
 } from 'react-icons/fa'
 import { useAuth } from '../../context/AuthContext'
 import { MODULOS, Modulo, puede, nombreDe, rolDe } from '../../utils/roles'
+import { LIC_LOCAL } from '../../api/appScriptApi'
 
 interface AdminLayoutProps {
   children: React.ReactNode
@@ -39,6 +44,9 @@ interface NavItem {
   // ve una sección que al usarla responde "Permisos insuficientes".
   // Sin módulo = visible para cualquier sesión (Centro de actividades).
   modulo?: Modulo | 'soloAdmin'
+  // Otras rutas que también resaltan este ítem (p. ej. las pestañas de
+  // "Carpeta de la empresa": personal, documentos, contratos, experiencia)
+  tambienActivo?: string[]
 }
 
 // true si el ítem requiere rol de administración (candado en el menú)
@@ -80,6 +88,16 @@ const navigationSections: { title: string; items: NavItem[] }[] = [
     items: [
       { name: 'Gestión de cursos', href: '/admin/capacitaciones', icon: FaGraduationCap, modulo: 'capacitaciones' },
       { name: 'Evaluaciones', href: '/admin/evaluaciones', icon: FaClipboardList, modulo: 'capacitaciones' },
+    ],
+  },
+  {
+    title: 'Licitaciones',
+    items: [
+      { name: 'Inicio', href: '/admin/licitaciones', icon: FaGavel, modulo: 'licitaciones' },
+      { name: 'Buscar licitaciones', href: '/admin/licitaciones/radar', icon: FaSatelliteDish, modulo: 'licitaciones' },
+      { name: 'Mis licitaciones', href: '/admin/licitaciones/procesos', icon: FaListAlt, modulo: 'licitaciones', tambienActivo: ['/admin/licitaciones/estadisticas'] },
+      { name: 'Carpeta de la empresa', href: '/admin/licitaciones/personal', icon: FaFolderOpen, modulo: 'licitaciones', tambienActivo: ['/admin/licitaciones/documentos', '/admin/licitaciones/contratos', '/admin/licitaciones/experiencia'] },
+      { name: 'Competencia', href: '/admin/licitaciones/competidores', icon: FaUserFriends, modulo: 'licitaciones' },
     ],
   },
   {
@@ -151,8 +169,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     .map((s) => ({ ...s, items: s.items.filter((i) => !i.modulo || puede(user, i.modulo)) }))
     .filter((s) => s.items.length > 0)
 
-  const esActivo = (href: string) =>
-    href === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(href)
+  // '/admin' y '/admin/licitaciones' son, ademas de un item de menu, el PREFIJO
+  // de subrutas propias (licitaciones/procesos, /competidores...): sin el
+  // match exacto, "Indicadores" quedaria resaltado tambien en esas subrutas.
+  const esActivo = (href: string, tambien: string[] = []) =>
+    href === '/admin' || href === '/admin/licitaciones'
+      ? location.pathname === href
+      : [href, ...tambien].some((h) => location.pathname.startsWith(h))
 
   const fecha = new Date().toLocaleDateString('es-PE', {
     weekday: 'long',
@@ -229,7 +252,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 </h3>
                 <div className="space-y-0.5">
                   {section.items.map((item) => {
-                    const activo = esActivo(item.href)
+                    const activo = esActivo(item.href, item.tambienActivo)
                     return (
                       <Link
                         key={item.href}
@@ -317,6 +340,15 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </div>
           </div>
         </header>
+
+        {/* Distintivo de modo local (VITE_LIC_LOCAL=1): solo en Licitaciones, para
+            que quede clarísimo que estos datos NO tocan Apps Script de producción. */}
+        {LIC_LOCAL && location.pathname.startsWith('/admin/licitaciones') && (
+          <div className="sticky top-[49px] z-20 flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/15 border-b border-amber-500/40 text-amber-300 font-mono text-[10px] tracking-[0.2em] uppercase">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            Modo local — leyendo JSON del vault, sin tocar producción
+          </div>
+        )}
 
         <main className="relative p-4 lg:p-6">{children}</main>
       </div>

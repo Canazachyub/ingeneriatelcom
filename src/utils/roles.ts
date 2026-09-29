@@ -45,7 +45,7 @@ export function nombreDe(user: unknown): string {
 // Si cambia MODULOS_PANEL_ allá, cambiar aquí también.
 export type Modulo =
   | 'asistencias' | 'personal' | 'proyectos' | 'bolsa' | 'mensajes' | 'capacitaciones' | 'reportes'
-  | 'planilla' | 'usuarios' | 'auditoria'
+  | 'planilla' | 'usuarios' | 'auditoria' | 'licitaciones'
 
 export const MODULOS: { clave: Modulo; etiqueta: string; soloAdmin: boolean }[] = [
   { clave: 'asistencias', etiqueta: 'Asistencias', soloAdmin: false },
@@ -58,6 +58,8 @@ export const MODULOS: { clave: Modulo; etiqueta: string; soloAdmin: boolean }[] 
   { clave: 'planilla', etiqueta: 'Planilla', soloAdmin: true },
   { clave: 'usuarios', etiqueta: 'Usuarios', soloAdmin: true },
   { clave: 'auditoria', etiqueta: 'Auditoría', soloAdmin: true },
+  // Hoy solo administracion (backend/01_router.gs: rutas licXxx nivel 'admin').
+  { clave: 'licitaciones', etiqueta: 'Licitaciones', soloAdmin: true },
 ]
 
 /** true si el usuario puede usar el módulo (mismo criterio que el backend). */

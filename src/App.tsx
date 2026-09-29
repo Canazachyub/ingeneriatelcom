@@ -65,6 +65,16 @@ const UsuariosPage = lazy(() => import('./pages/admin/UsuariosPage'))
 const AuditoriaPage = lazy(() => import('./pages/admin/AuditoriaPage'))
 const ReclamacionesPage = lazy(() => import('./pages/admin/ReclamacionesPage'))
 const AnaliticaPage = lazy(() => import('./pages/admin/AnaliticaPage'))
+const LicResumenPage = lazy(() => import('./pages/admin/licitaciones/ResumenPage'))
+const LicInicioPage = lazy(() => import('./pages/admin/licitaciones/InicioPage'))
+const LicProcesosPage = lazy(() => import('./pages/admin/licitaciones/ProcesosPage'))
+const LicProcesoDetallePage = lazy(() => import('./pages/admin/licitaciones/ProcesoDetallePage'))
+const LicCompetidoresPage = lazy(() => import('./pages/admin/licitaciones/CompetidoresPage'))
+const LicExperienciaPage = lazy(() => import('./pages/admin/licitaciones/ExperienciaPage'))
+const LicPersonalPage = lazy(() => import('./pages/admin/licitaciones/PersonalPage'))
+const LicContratosPage = lazy(() => import('./pages/admin/licitaciones/ContratosPage'))
+const LicDocumentosPage = lazy(() => import('./pages/admin/licitaciones/DocumentosPage'))
+const LicRadarPage = lazy(() => import('./pages/admin/licitaciones/RadarPage'))
 
 import { useAuth } from './context/AuthContext'
 import { ToastProvider, useToast } from './context/ToastContext'
@@ -393,6 +403,108 @@ function App() {
           <Suspense fallback={<PageLoader />}>
             <ProtectedRoute>
               <AuditoriaPage />
+            </ProtectedRoute>
+          </Suspense>
+        }
+      />
+
+      {/* Licitaciones (lazy) */}
+      <Route
+        path="/admin/licitaciones"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <LicInicioPage />
+            </ProtectedRoute>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/licitaciones/estadisticas"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <LicResumenPage />
+            </ProtectedRoute>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/licitaciones/procesos"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <LicProcesosPage />
+            </ProtectedRoute>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/licitaciones/procesos/:nom"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <LicProcesoDetallePage />
+            </ProtectedRoute>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/licitaciones/competidores"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <LicCompetidoresPage />
+            </ProtectedRoute>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/licitaciones/experiencia"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <LicExperienciaPage />
+            </ProtectedRoute>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/licitaciones/personal"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <LicPersonalPage />
+            </ProtectedRoute>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/licitaciones/contratos"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <LicContratosPage />
+            </ProtectedRoute>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/licitaciones/radar"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <LicRadarPage />
+            </ProtectedRoute>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/licitaciones/documentos"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <LicDocumentosPage />
             </ProtectedRoute>
           </Suspense>
         }

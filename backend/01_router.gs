@@ -138,7 +138,25 @@ var ROUTES = {
   actualizarPregunta: { nivel: 'auth', handler: function (ctx) { return actualizarPregunta(ctx.data); } },
   eliminarPregunta: { nivel: 'auth', handler: function (ctx) { return eliminarPregunta(ctx.data); } },
   getEvaluaciones: { nivel: 'auth', handler: function (ctx) { return getEvaluaciones(ctx.data); } },
-  revisarEvaluacion: { nivel: 'auth', handler: function (ctx) { return revisarEvaluacion(ctx.data); } }
+  revisarEvaluacion: { nivel: 'auth', handler: function (ctx) { return revisarEvaluacion(ctx.data); } },
+
+  // === LICITACIONES (16_licitaciones.gs) — hoy solo admin (ver docs/PLAN_LICITACIONES_ADMIN.md) ===
+  licImportar: { nivel: 'admin', handler: function (ctx) { return licImportar(ctx.data); } },
+  licResumen: { nivel: 'admin', handler: function () { return licResumen(); } },
+  licProcesos: { nivel: 'admin', handler: function () { return licProcesos(); } },
+  licProceso: { nivel: 'admin', handler: function (ctx) { return licProceso(arg_(ctx, 'nom')); } },
+  licCompetidores: { nivel: 'admin', handler: function () { return licCompetidores(); } },
+  licExperiencia: { nivel: 'admin', handler: function () { return licExperiencia(); } },
+  licDocumentos: { nivel: 'admin', handler: function (ctx) { return licDocumentos(ctx.data); } },
+  licActualizarDocumento: { nivel: 'admin', handler: function (ctx) { return licActualizarDocumento(ctx.data, ctx.userId); } },
+  licCrearDocumento: { nivel: 'admin', handler: function (ctx) { return licCrearDocumento(ctx.data, ctx.userId); } },
+  licActualizarProceso: { nivel: 'admin', handler: function (ctx) { return licActualizarProceso(ctx.data, ctx.userId); } },
+  licExportarCambios: { nivel: 'admin', handler: function (ctx) { return licExportarCambios(ctx.data); } },
+  licPersonal: { nivel: 'admin', handler: function () { return licPersonal(); } },
+  licContratos: { nivel: 'admin', handler: function () { return licContratos(); } },
+  licActualizarPersona: { nivel: 'admin', handler: function (ctx) { return licActualizarPersona(ctx.data, ctx.userId); } },
+  licActualizarContrato: { nivel: 'admin', handler: function (ctx) { return licActualizarContrato(ctx.data, ctx.userId); } },
+  licActualizarFactura: { nivel: 'admin', handler: function (ctx) { return licActualizarFactura(ctx.data, ctx.userId); } }
 };
 
 // Modulo del panel que exige cada accion de nivel 'auth' (escalon 2).
