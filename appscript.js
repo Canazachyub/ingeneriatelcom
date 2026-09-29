@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-29T09:56:42.284Z con tools/build-backend.mjs
+// Generado: 2026-09-29T09:58:24.568Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -6754,6 +6754,20 @@ function ejecutarTestSalud() {
   warns.forEach(function (w) { Logger.log('WARN: ' + w); });
   Logger.log('Checks OK: ' + oks);
   return resultado;
+}
+
+// Solo lectura: lista las columnas reales de cada hoja (fila 1) para
+// comparar con el orden que asume el código. Ejecutar desde el editor y
+// copiar el registro. No modifica nada.
+function diagnosticoColumnas() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var lineas = ss.getSheets().map(function (h) {
+    var n = h.getLastColumn();
+    var cab = n ? h.getRange(1, 1, 1, n).getValues()[0] : [];
+    return h.getName() + ' (' + Math.max(0, h.getLastRow() - 1) + ' filas): ' + cab.join(' | ');
+  });
+  Logger.log('===== COLUMNAS REALES =====\n' + lineas.join('\n'));
+  return lineas;
 }
 
 // ============================================================

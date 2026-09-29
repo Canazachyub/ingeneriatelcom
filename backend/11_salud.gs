@@ -345,3 +345,17 @@ function ejecutarTestSalud() {
   Logger.log('Checks OK: ' + oks);
   return resultado;
 }
+
+// Solo lectura: lista las columnas reales de cada hoja (fila 1) para
+// comparar con el orden que asume el código. Ejecutar desde el editor y
+// copiar el registro. No modifica nada.
+function diagnosticoColumnas() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var lineas = ss.getSheets().map(function (h) {
+    var n = h.getLastColumn();
+    var cab = n ? h.getRange(1, 1, 1, n).getValues()[0] : [];
+    return h.getName() + ' (' + Math.max(0, h.getLastRow() - 1) + ' filas): ' + cab.join(' | ');
+  });
+  Logger.log('===== COLUMNAS REALES =====\n' + lineas.join('\n'));
+  return lineas;
+}
