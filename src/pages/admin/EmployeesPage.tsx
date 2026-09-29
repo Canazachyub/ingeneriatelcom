@@ -210,7 +210,7 @@ export default function EmployeesPage() {
                         <p className="text-[11px] text-accent-energy font-semibold truncate" title={e.position}>{e.position || 'Sin cargo'}</p>
                         <p className="text-[11px] text-slate-400 flex items-center gap-1"><FaMapMarkerAlt /> {e.city || 'Sin sede'}</p>
                         <p className="text-[11px] text-slate-300 truncate flex items-center gap-1" title={pr.map((a) => a.projectName).join(', ')}>
-                          <FaProjectDiagram className="text-slate-500 shrink-0" /> {pr.length ? pr.map((a) => a.projectName).join(', ') : <span className="text-slate-500">Sin proyecto</span>}
+                          <FaProjectDiagram className="text-slate-500 shrink-0" /> {pr.length ? pr.map((a) => a.projectName).join(', ') : <span className="text-slate-500">{asigQ.isLoading || asigQ.isError ? "cargando…" : "Sin proyecto"}</span>}
                         </p>
                         <div className="flex flex-wrap gap-1 mt-2">
                           <Sello ok={(d?.cv || 0) > 0} texto="CV" />
