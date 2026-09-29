@@ -15,7 +15,7 @@ var HOJAS_REQUERIDAS = [
   'config_planilla', 'incidencias', 'planilla_log', 'autorizaciones_5pm', 'bolsa_horas',
   'capacitaciones', 'banco_preguntas', 'evaluaciones', 'eval_fotos', 'eval_logs',
   'lic_procesos', 'lic_postores', 'lic_acciones', 'lic_competidores', 'lic_experiencia', 'lic_documentos',
-  'lic_personal', 'lic_contratos', 'lic_facturas'
+  'lic_personal', 'lic_contratos', 'lic_facturas', 'lic_propuestas', 'lic_archivos'
 ];
 
 // Funciones que el router referencia — si falta una, la accion revienta en runtime
@@ -47,7 +47,8 @@ var FUNCIONES_REQUERIDAS = [
   'getEvaluaciones', 'revisarEvaluacion',
   'licImportar', 'licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia',
   'licDocumentos', 'licActualizarDocumento', 'licCrearDocumento', 'licActualizarProceso', 'licExportarCambios',
-  'licPersonal', 'licContratos', 'licActualizarPersona', 'licActualizarContrato', 'licActualizarFactura'
+  'licPersonal', 'licContratos', 'licActualizarPersona', 'licActualizarContrato', 'licActualizarFactura',
+  'licPropuestas', 'licCarpetaDrive', 'licIndexarDrive', 'licArchivosDrive', 'licSubirFoto'
 ];
 
 function ejecutarTestSalud() {

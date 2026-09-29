@@ -146,7 +146,7 @@ export default function LicResumenPage() {
         ) : (
           <p className="text-xs text-primary-500 -mt-3">
             Selecciona uno o varios de: procesos.json, postores.json, acciones.json, competidores.json, experiencia.json,
-            documentos.json, personal.json, contratos.json, facturas.json (los exporta la skill{' '}
+            documentos.json, personal.json, contratos.json, facturas.json, propuestas.json (los exporta la skill{' '}
             <code className="text-primary-400">descarga-seace</code> del vault).
           </p>
         )}

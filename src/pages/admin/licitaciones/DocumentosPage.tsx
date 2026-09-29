@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FaFolderOpen, FaSearch, FaPlus, FaTimes, FaSave, FaSpinner, FaCheck, FaExclamationTriangle } from 'react-icons/fa'
 import { api, LicDocumento, LicPropuesta } from '../../../api/appScriptApi'
-import { VISTAS, Vista, agrupar, FilaDocumento, VistaPropuestas } from './DocumentosVistas'
+import { VISTAS, Vista, agrupar, FilaDocumento, VistaPropuestas, PanelDrive } from './DocumentosVistas'
 import PersonalDrive from './PersonalDrive'
 import AdminLayout from '../../../components/admin/AdminLayout'
 import ErrorCarga from '../../../components/admin/ErrorCarga'
@@ -211,6 +211,8 @@ export default function LicDocumentosPage() {
             <FaPlus /> Agregar documento
           </button>
         </div>
+
+        <PanelDrive />
 
         {!cargando && !error && lista.length > 0 && (
           <div className="space-y-3">

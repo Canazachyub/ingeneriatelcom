@@ -302,6 +302,7 @@ export interface LicImportPayload {
   personal?: Record<string, unknown>[]
   contratos?: Record<string, unknown>[]
   facturas?: Record<string, unknown>[]
+  propuestas?: Record<string, unknown>[]
 }
 
 export interface User {
@@ -1443,10 +1444,27 @@ class AppScriptApi {
     return this.request('licExperiencia', 'POST', {})
   }
 
-  // Propuestas completas: por ahora solo en modo local (los PDF viven en el vault)
+  // Propuestas completas con su índice (hoja lic_propuestas; se importa con propuestas.json)
   async licPropuestas(): Promise<ApiResponse<LicPropuesta[]>> {
     if (LIC_LOCAL) return licLocal.licPropuestas()
-    return { success: false, error: 'Las propuestas completas por ahora solo se ven en modo local.' }
+    return this.request('licPropuestas')
+  }
+
+  // ── Archivos en Drive (<TELCOM PAGINA WEB>/Licitaciones), ver src/api/licArchivos.ts ──
+  async licArchivosDrive(): Promise<ApiResponse<Record<string, string>>> {
+    return this.request('licArchivosDrive')
+  }
+
+  async licIndexarDrive(): Promise<ApiResponse<{ archivos: number; carpeta: string }>> {
+    return this.request('licIndexarDrive', 'POST', {})
+  }
+
+  async licCarpetaDrive(): Promise<ApiResponse<{ id: string; url: string }>> {
+    return this.request('licCarpetaDrive')
+  }
+
+  async licSubirFoto(data: { carpeta: string; mime: string; base64: string }): Promise<ApiResponse<{ ruta: string; id: string }>> {
+    return this.request('licSubirFoto', 'POST', data)
   }
 
   async licDocumentos(filtros?: { categoria?: string; dni?: string }): Promise<ApiResponse<LicDocumento[]>> {

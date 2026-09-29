@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { FaUserTie, FaFileContract, FaTruck, FaBuilding, FaBook, FaExternalLinkAlt, FaChevronDown, FaFilePdf, FaDownload } from 'react-icons/fa'
-import { LIC_LOCAL, LicDocumento, LicPropuesta } from '../../../api/appScriptApi'
+import { FaUserTie, FaFileContract, FaTruck, FaBuilding, FaBook, FaExternalLinkAlt, FaChevronDown, FaFilePdf, FaDownload, FaSpinner, FaSyncAlt, FaGoogleDrive } from 'react-icons/fa'
+import { useQueryClient } from '@tanstack/react-query'
+import { api, LIC_LOCAL, LicDocumento, LicPropuesta } from '../../../api/appScriptApi'
 import { fecha, money, ocultarDni } from './licUtils'
-import { licUrlArchivo } from '../../../api/licLocal'
+import { CLAVE_INDICE_DRIVE, useArchivosLic } from '../../../api/licArchivos'
 
 // ============================================================
 // Documentos "con contexto" (pedido del dueño, 28/09/2026):
@@ -48,14 +49,6 @@ const TIPOS_UNICOS_POR_ENTIDAD = ['contrato', 'orden-servicio', 'promesa-consorc
 
 // "2026 CP SER-SM-37-2026-ELSE-1" → "CP SER-SM-37-2026-ELSE-1"
 const nombreProceso = (p: string | null | undefined) => String(p || '').replace(/^\d{4}\s+/, '')
-
-// Abre la propuesta completa en la página indicada (el visor de Chrome la
-// muestra sin cargarla entera en memoria; algunas pesan 150 MB+)
-export function abrirPropuesta(archivo: string | null | undefined, pagina?: number | null) {
-  if (!archivo) return
-  const url = `/__lic/archivo?ruta=${encodeURIComponent(archivo)}${pagina ? `#page=${pagina}` : ''}`
-  window.open(url, '_blank', 'noopener')
-}
 
 interface Grupo {
   titulo: string
@@ -121,6 +114,7 @@ interface FilaProps {
 
 export function FilaDocumento({ u, estado, abierto, onEditar, edicion }: FilaProps) {
   const [verTodas, setVerTodas] = useState(false)
+  const arch = useArchivosLic()
   const d = u.doc
   // Una aparición por propuesta (la misma propuesta puede listar el papel 2 veces)
   const apar = useMemo(() => {
@@ -153,7 +147,7 @@ export function FilaDocumento({ u, estado, abierto, onEditar, edicion }: FilaPro
             <ul className="mt-2 space-y-1">
               {apar.map((a, i) => (
                 <li key={i}>
-                  <button onClick={() => abrirPropuesta(a.archivo, a.desde)} disabled={!LIC_LOCAL} className="text-xs text-primary-300 hover:text-accent-energy disabled:opacity-60">
+                  <button onClick={() => arch.abrirPropuesta(a.archivo, a.desde)} disabled={!arch.ver(a.archivo)} className="text-xs text-primary-300 hover:text-accent-energy disabled:opacity-60">
                     ▸ {nombreProceso(a.proceso)}, págs. {a.desde}–{a.hasta}
                   </button>
                 </li>
@@ -163,10 +157,10 @@ export function FilaDocumento({ u, estado, abierto, onEditar, edicion }: FilaPro
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {estado}
-          {LIC_LOCAL && d.archivo_vault && (
+          {arch.ver(d.archivo_vault) && (
             <>
               <a
-                href={licUrlArchivo(d.archivo_vault)}
+                href={arch.ver(d.archivo_vault)!}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-3 py-1.5 text-xs bg-accent-energy text-[#111827] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
@@ -175,7 +169,7 @@ export function FilaDocumento({ u, estado, abierto, onEditar, edicion }: FilaPro
                 <FaFilePdf /> Abrir PDF
               </a>
               <a
-                href={licUrlArchivo(d.archivo_vault, { descargar: true, nombre: `${nombreTipo(d.tipo)} - ${d.titulo || d.id}.pdf`.replace(/[\/:*?"<>|]/g, '').slice(0, 150) })}
+                href={arch.descargar(d.archivo_vault, `${nombreTipo(d.tipo)} - ${d.titulo || d.id}.pdf`.replace(/[\/:*?"<>|]/g, '').slice(0, 150)) || undefined}
                 className="px-2.5 py-1.5 text-xs border border-primary-700 text-primary-200 hover:border-accent-energy"
                 title="Descargar para reutilizar"
               >
@@ -183,13 +177,13 @@ export function FilaDocumento({ u, estado, abierto, onEditar, edicion }: FilaPro
               </a>
             </>
           )}
-          {LIC_LOCAL && principal?.archivo && (
+          {arch.ver(principal?.archivo) && (
             <button
-              onClick={() => abrirPropuesta(principal.archivo, principal.desde)}
+              onClick={() => arch.abrirPropuesta(principal!.archivo, principal!.desde)}
               className="px-2.5 py-1.5 text-xs border border-primary-700 text-primary-200 hover:border-accent-energy inline-flex items-center gap-1.5 whitespace-nowrap"
               title="Abre la propuesta completa en la página de este documento"
             >
-              En la propuesta <FaExternalLinkAlt className="text-[10px]" />
+              En la propuesta{principal?.desde ? ` (pág. ${principal.desde})` : ''} <FaExternalLinkAlt className="text-[10px]" />
             </button>
           )}
           <button onClick={onEditar} className="px-3 py-1.5 text-xs border border-primary-700 text-primary-200 hover:border-accent-energy">
@@ -207,6 +201,7 @@ export function VistaPropuestas({ propuestas, documentos = [] }: { propuestas: L
   const archivoDe = useMemo(() => new Map(documentos.map((d) => [d.id, d.archivo_vault])), [documentos])
   const [abierta, setAbierta] = useState<string | null>(null)
   const [conAnexos, setConAnexos] = useState(false)
+  const arch = useArchivosLic()
   const ordenadas = [...propuestas].sort((a, b) => b.anio.localeCompare(a.anio))
   if (!ordenadas.length) return <p className="text-primary-400">No hay propuestas completas en el vault.</p>
   return (
@@ -230,8 +225,8 @@ export function VistaPropuestas({ propuestas, documentos = [] }: { propuestas: L
                   </span>
                 </span>
               </button>
-              {LIC_LOCAL && (
-                <button onClick={() => abrirPropuesta(p.archivo)} className="px-4 py-2 text-sm bg-accent-energy text-[#111827] font-semibold inline-flex items-center gap-2 whitespace-nowrap">
+              {arch.ver(p.archivo) && (
+                <button onClick={() => arch.abrirPropuesta(p.archivo)} className="px-4 py-2 text-sm bg-accent-energy text-[#111827] font-semibold inline-flex items-center gap-2 whitespace-nowrap">
                   Abrir propuesta completa <FaExternalLinkAlt className="text-xs" />
                 </button>
               )}
@@ -245,13 +240,13 @@ export function VistaPropuestas({ propuestas, documentos = [] }: { propuestas: L
                       <span className="text-xs text-accent-energy mr-2">{nombreTipo(s.tipo)}</span>
                       <span className="text-slate-200">{s.titulo}</span>
                     </span>
-                    {LIC_LOCAL && archivoDe.get(s.id) && (
-                      <a href={licUrlArchivo(archivoDe.get(s.id)!)} target="_blank" rel="noopener noreferrer" className="px-2 py-1 text-xs bg-accent-energy text-[#111827] font-semibold whitespace-nowrap inline-flex items-center gap-1">
+                    {arch.ver(archivoDe.get(s.id)) && (
+                      <a href={arch.ver(archivoDe.get(s.id))!} target="_blank" rel="noopener noreferrer" className="px-2 py-1 text-xs bg-accent-energy text-[#111827] font-semibold whitespace-nowrap inline-flex items-center gap-1">
                         <FaFilePdf /> PDF
                       </a>
                     )}
-                    {LIC_LOCAL && (
-                      <button onClick={() => abrirPropuesta(p.archivo, s.desde)} className="text-xs text-accent-electric hover:underline whitespace-nowrap">
+                    {arch.ver(p.archivo) && (
+                      <button onClick={() => arch.abrirPropuesta(p.archivo, s.desde)} className="text-xs text-accent-electric hover:underline whitespace-nowrap">
                         Ir a la página →
                       </button>
                     )}
@@ -262,6 +257,49 @@ export function VistaPropuestas({ propuestas, documentos = [] }: { propuestas: L
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ── Franja "Archivos en Drive" (solo producción) ─────────────────
+// Los PDF viven en <TELCOM PAGINA WEB>/Licitaciones (acervo/ y propuestas/).
+// Después de subir o mover archivos allí, "Actualizar" vuelve a conectarlos.
+export function PanelDrive() {
+  const arch = useArchivosLic()
+  const qc = useQueryClient()
+  const [trabajando, setTrabajando] = useState(false)
+  const [mensaje, setMensaje] = useState('')
+  if (LIC_LOCAL) return null
+  const actualizar = async () => {
+    setTrabajando(true)
+    setMensaje('Revisando la carpeta de Drive… (puede tardar 1–2 minutos)')
+    const r = await api.licIndexarDrive()
+    setTrabajando(false)
+    setMensaje(r.success ? `Listo: ${r.data?.archivos ?? 0} archivos conectados.` : r.error || 'No se pudo actualizar')
+    if (r.success) qc.invalidateQueries({ queryKey: CLAVE_INDICE_DRIVE })
+  }
+  const abrirCarpeta = async () => {
+    const r = await api.licCarpetaDrive()
+    if (r.success && r.data?.url) window.open(r.data.url, '_blank', 'noopener')
+    else setMensaje(r.error || 'No se pudo abrir la carpeta')
+  }
+  return (
+    <div className="placa-acero p-4 flex flex-col md:flex-row md:items-center gap-3">
+      <div className="flex-1 text-sm">
+        <p className="text-white font-semibold flex items-center gap-2">
+          <FaGoogleDrive className="text-accent-energy" /> Archivos en Drive:{' '}
+          {arch.cargando ? '…' : arch.total ? `${arch.total} conectados` : 'todavía ninguno'}
+        </p>
+        <p className="text-xs text-slate-400">
+          {mensaje || 'Si subiste o cambiaste PDF en la carpeta Licitaciones de Drive, pulsa "Actualizar" para que aparezcan aquí.'}
+        </p>
+      </div>
+      <button onClick={abrirCarpeta} className="px-3 py-2 text-sm border border-slate-500 text-slate-200 hover:border-accent-energy inline-flex items-center gap-2">
+        <FaExternalLinkAlt className="text-xs" /> Abrir carpeta
+      </button>
+      <button onClick={actualizar} disabled={trabajando} className="px-3 py-2 text-sm bg-accent-energy text-[#111827] font-semibold inline-flex items-center gap-2 disabled:opacity-60">
+        {trabajando ? <FaSpinner className="animate-spin" /> : <FaSyncAlt />} Actualizar
+      </button>
     </div>
   )
 }

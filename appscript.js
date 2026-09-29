@@ -2,7 +2,7 @@
 // SISTEMA DE GESTION TELCOM - APPS SCRIPT (ARCHIVO GENERADO)
 // ============================================================
 // NO EDITAR A MANO. La fuente es backend/*.gs en el repo.
-// Generado: 2026-09-29T00:43:11.953Z con tools/build-backend.mjs
+// Generado: 2026-09-29T07:12:03.602Z con tools/build-backend.mjs
 // Deploy: pegar este archivo completo en el editor de Apps Script
 // y crear Nueva version. Requiere Script Property TOKEN_SECRET.
 // ============================================================
@@ -551,7 +551,12 @@ var ROUTES = {
   licContratos: { nivel: 'admin', handler: function () { return licContratos(); } },
   licActualizarPersona: { nivel: 'admin', handler: function (ctx) { return licActualizarPersona(ctx.data, ctx.userId); } },
   licActualizarContrato: { nivel: 'admin', handler: function (ctx) { return licActualizarContrato(ctx.data, ctx.userId); } },
-  licActualizarFactura: { nivel: 'admin', handler: function (ctx) { return licActualizarFactura(ctx.data, ctx.userId); } }
+  licActualizarFactura: { nivel: 'admin', handler: function (ctx) { return licActualizarFactura(ctx.data, ctx.userId); } },
+  licPropuestas: { nivel: 'admin', handler: function () { return licPropuestas(); } },
+  licCarpetaDrive: { nivel: 'admin', handler: function () { return licCarpetaDrive(); } },
+  licIndexarDrive: { nivel: 'admin', handler: function () { return licIndexarDrive(); } },
+  licArchivosDrive: { nivel: 'admin', handler: function () { return licArchivosDrive(); } },
+  licSubirFoto: { nivel: 'admin', handler: function (ctx) { return licSubirFoto(ctx.data); } }
 };
 
 // Modulo del panel que exige cada accion de nivel 'auth' (escalon 2).
@@ -6385,7 +6390,7 @@ var HOJAS_REQUERIDAS = [
   'config_planilla', 'incidencias', 'planilla_log', 'autorizaciones_5pm', 'bolsa_horas',
   'capacitaciones', 'banco_preguntas', 'evaluaciones', 'eval_fotos', 'eval_logs',
   'lic_procesos', 'lic_postores', 'lic_acciones', 'lic_competidores', 'lic_experiencia', 'lic_documentos',
-  'lic_personal', 'lic_contratos', 'lic_facturas'
+  'lic_personal', 'lic_contratos', 'lic_facturas', 'lic_propuestas', 'lic_archivos'
 ];
 
 // Funciones que el router referencia — si falta una, la accion revienta en runtime
@@ -6417,7 +6422,8 @@ var FUNCIONES_REQUERIDAS = [
   'getEvaluaciones', 'revisarEvaluacion',
   'licImportar', 'licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia',
   'licDocumentos', 'licActualizarDocumento', 'licCrearDocumento', 'licActualizarProceso', 'licExportarCambios',
-  'licPersonal', 'licContratos', 'licActualizarPersona', 'licActualizarContrato', 'licActualizarFactura'
+  'licPersonal', 'licContratos', 'licActualizarPersona', 'licActualizarContrato', 'licActualizarFactura',
+  'licPropuestas', 'licCarpetaDrive', 'licIndexarDrive', 'licArchivosDrive', 'licSubirFoto'
 ];
 
 function ejecutarTestSalud() {
@@ -7208,7 +7214,7 @@ function invalidarLecturas_() {
 
 // Lecturas del modulo Licitaciones que no siguen el prefijo get/obtener/...
 // (nombradas asi en docs/PLAN_LICITACIONES_ADMIN.md, el diseno ya aprobado).
-var LECTURAS_LIC_ = ['licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia', 'licDocumentos', 'licPersonal', 'licContratos'];
+var LECTURAS_LIC_ = ['licResumen', 'licProcesos', 'licProceso', 'licCompetidores', 'licExperiencia', 'licDocumentos', 'licPersonal', 'licContratos', 'licPropuestas', 'licCarpetaDrive', 'licArchivosDrive'];
 
 // Acciones de solo lectura (no se auditan ni invalidan cache).
 function esAccionDeLectura_(action) {
@@ -7703,7 +7709,9 @@ var LIC_HOJAS_ = {
     'id', 'categoria', 'tipo', 'titulo', 'entidad', 'dni', 'nombre', 'fecha',
     'periodo_desde', 'periodo_hasta', 'monto', 'archivo_vault', 'usos', 'verificado', 'vence',
     // Editables desde el panel (ver LIC_DOC_PROTEGIDOS_/SOLO_WEB_):
-    'notas', 'editado_por', 'editado_en'
+    'notas', 'editado_por', 'editado_en',
+    // [{proceso, archivo, desde, hasta}] (JSON): propuesta completa y páginas de donde se extrajo
+    'apariciones'
   ],
   // tipos/cargos/titulos viajan como objeto/arreglo: JSON.stringify en la celda.
   personal: [
@@ -7721,7 +7729,11 @@ var LIC_HOJAS_ = {
     'contrato', 'numero', 'fecha', 'monto', 'documento_id', 'archivo_vault',
     // Solo-web (ver LIC_FACTURAS_SOLO_WEB_):
     'verificado', 'notas'
-  ]
+  ],
+  // Nuestras propuestas completas con su índice (secciones: JSON)
+  propuestas: ['nomenclatura', 'anio', 'archivo', 'tamano_mb', 'secciones'],
+  // Índice de Drive: ruta relativa dentro de la carpeta "Licitaciones" → id del archivo
+  archivos: ['ruta', 'id', 'nombre', 'tamano', 'actualizado']
 };
 
 function hojaLic_(clave) {
@@ -7735,6 +7747,10 @@ function hojaLic_(clave) {
     hoja.getRange(1, 1, 1, headers.length).setValues([headers]);
     hoja.getRange(1, 1, 1, headers.length).setFontWeight('bold');
     hoja.setFrozenRows(1);
+  } else if (hoja.getLastColumn() < headers.length) {
+    var actuales = hoja.getRange(1, 1, 1, Math.max(hoja.getLastColumn(), 1)).getValues()[0];
+    var faltan = headers.slice(actuales.length);
+    hoja.getRange(1, actuales.length + 1, 1, faltan.length).setValues([faltan]).setFontWeight('bold');
   }
   return hoja;
 }
@@ -7931,7 +7947,7 @@ var LIC_CONTRATOS_SOLO_WEB_ = ['estado', 'notas'];
 var LIC_FACTURAS_SOLO_WEB_ = ['verificado', 'notas'];
 
 // data = { procesos, postores, acciones, competidores, experiencia, documentos,
-//          personal, contratos, facturas }
+//          personal, contratos, facturas, propuestas? }
 function licImportar(data) {
   data = data || {};
   return withLock_(function () {
@@ -7946,6 +7962,8 @@ function licImportar(data) {
       contratos: licMergeGenerico_('contratos', data.contratos, ['contrato'], LIC_CONTRATOS_SOLO_WEB_),
       facturas: licMergeGenerico_('facturas', data.facturas, ['contrato', 'numero'], LIC_FACTURAS_SOLO_WEB_)
     };
+    // Solo si viene: un import sin propuestas.json no debe vaciar la hoja
+    if (data.propuestas) resumen.propuestas = licReemplazarHoja_('propuestas', data.propuestas);
     return { success: true, data: resumen, message: 'Importación de licitaciones completada' };
   });
 }
@@ -8039,6 +8057,14 @@ function licDocumentos(data) {
   var lista = leerFilasLic_('documentos');
   if (data.categoria) lista = lista.filter(function (d) { return d.categoria === data.categoria; });
   if (data.dni) lista = lista.filter(function (d) { return String(d.dni) === String(data.dni); });
+  lista = lista.map(function (d) { return Object.assign({}, d, { apariciones: licParseArray_(d.apariciones) }); });
+  return { success: true, data: lista };
+}
+
+function licPropuestas() {
+  var lista = leerFilasLic_('propuestas').map(function (p) {
+    return Object.assign({}, p, { secciones: licParseArray_(p.secciones) });
+  });
   return { success: true, data: lista };
 }
 
@@ -8252,4 +8278,90 @@ function licExportarCambios(data) {
       };
     });
   return { success: true, data: { procesos: procesos, documentos: documentos } };
+}
+
+// ============================================================
+// DRIVE: PDF individuales, propuestas completas y fotos del personal
+//
+// Se sube UNA vez desde el vault (docs/PLAN_LICITACIONES_ADMIN.md §10):
+//   <DRIVE_FOLDER_ID>/Licitaciones/acervo/...              (= 01_GERENCIA/acervo/...)
+//   <DRIVE_FOLDER_ID>/Licitaciones/propuestas/<proceso>/<archivo>.pdf
+// licIndexarDrive() recorre la carpeta y guarda ruta→id en lic_archivos; el
+// panel traduce la ruta del vault a esa ruta (rutaDrive en licArchivos.ts).
+// DriveApp ya estaba autorizado en el backend: no pide permisos nuevos.
+// ============================================================
+
+function licCarpetaRaiz_() {
+  var base = DriveApp.getFolderById(DRIVE_FOLDER_ID);
+  var it = base.getFoldersByName('Licitaciones');
+  return it.hasNext() ? it.next() : base.createFolder('Licitaciones');
+}
+
+function licCarpetaDrive() {
+  var raiz = licCarpetaRaiz_();
+  return { success: true, data: { id: raiz.getId(), url: raiz.getUrl() } };
+}
+
+// Recorre Licitaciones/ completo y reemplaza el índice lic_archivos.
+function licIndexarDrive() {
+  var raiz = licCarpetaRaiz_();
+  var filas = [];
+  var ahora = new Date();
+  var recorrer = function (carpeta, prefijo) {
+    var fs = carpeta.getFiles();
+    while (fs.hasNext()) {
+      var f = fs.next();
+      filas.push({ ruta: prefijo + f.getName(), id: f.getId(), nombre: f.getName(), tamano: f.getSize(), actualizado: ahora });
+    }
+    var cs = carpeta.getFolders();
+    while (cs.hasNext()) {
+      var c = cs.next();
+      recorrer(c, prefijo + c.getName() + '/');
+    }
+  };
+  recorrer(raiz, '');
+  var r = withLock_(function () { return { success: true, n: licReemplazarHoja_('archivos', filas) }; });
+  if (!r.success) return r;
+  return { success: true, data: { archivos: r.n, carpeta: raiz.getUrl() }, message: 'Índice de Drive actualizado: ' + r.n + ' archivos' };
+}
+
+// { ruta: id } del índice, para que el panel arme los enlaces
+function licArchivosDrive() {
+  var mapa = {};
+  leerFilasLic_('archivos').forEach(function (a) { if (a.ruta && a.id) mapa[a.ruta] = String(a.id); });
+  return { success: true, data: mapa };
+}
+
+// Foto del personal clave. data = { carpeta: 'acervo/personal/<DNI - NOMBRE>', base64, mime }
+function licSubirFoto(data) {
+  data = data || {};
+  var carpetaRel = String(data.carpeta || '');
+  if (!/^acervo\/personal\/[^\/]+$/.test(carpetaRel)) return { success: false, error: 'Carpeta de persona no válida' };
+  var err = validarArchivoSubido_(data.base64, data.mime, 'imagen');
+  if (err) return err;
+  var carpeta = licCarpetaRaiz_();
+  var partes = carpetaRel.split('/');
+  for (var i = 0; i < partes.length; i++) {
+    var it = carpeta.getFoldersByName(partes[i]);
+    if (!it.hasNext()) return { success: false, error: 'Falta en Drive la carpeta ' + carpetaRel + '. Sube primero el acervo y pulsa "Actualizar índice".' };
+    carpeta = it.next();
+  }
+  var ext = data.mime === 'image/png' ? 'png' : data.mime === 'image/webp' ? 'webp' : 'jpg';
+  var ruta = carpetaRel + '/foto.' + ext;
+  return withLock_(function () {
+    ['foto.jpg', 'foto.png', 'foto.webp'].forEach(function (n) {
+      var viejos = carpeta.getFilesByName(n);
+      while (viejos.hasNext()) viejos.next().setTrashed(true);
+    });
+    var archivo = carpeta.createFile(Utilities.newBlob(Utilities.base64Decode(data.base64), data.mime, 'foto.' + ext));
+    // Actualiza solo esta entrada del índice (sin recorrer todo Drive)
+    var hoja = hojaLic_('archivos');
+    var datos = hoja.getDataRange().getValues();
+    for (var r = datos.length - 1; r >= 1; r--) {
+      var ruta0 = String(datos[r][0]);
+      if (ruta0.indexOf(carpetaRel + '/foto.') === 0) hoja.deleteRow(r + 1);
+    }
+    hoja.appendRow([ruta, archivo.getId(), archivo.getName(), archivo.getSize(), new Date()]);
+    return { success: true, data: { ruta: ruta, id: archivo.getId() } };
+  });
 }

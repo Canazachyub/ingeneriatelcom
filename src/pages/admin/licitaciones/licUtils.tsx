@@ -63,7 +63,7 @@ export function ResultadoBadge({ resultado }: { resultado?: string }) {
 export async function leerArchivosImportacion(files: FileList | File[]): Promise<{ payload: LicImportPayload; leidos: string[]; ignorados: string[] }> {
   const claves: (keyof LicImportPayload)[] = [
     'procesos', 'postores', 'acciones', 'competidores', 'experiencia', 'documentos',
-    'personal', 'contratos', 'facturas',
+    'personal', 'contratos', 'facturas', 'propuestas',
   ]
   const payload: LicImportPayload = {}
   const leidos: string[] = []

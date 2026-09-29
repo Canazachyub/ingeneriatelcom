@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   FaFolder, FaFolderOpen, FaFilePdf, FaDownload, FaExternalLinkAlt, FaCamera, FaChevronRight, FaArrowLeft, FaSpinner, FaUserTie,
 } from 'react-icons/fa'
-import { api, LIC_LOCAL, LicDocumento, LicPersonal } from '../../../api/appScriptApi'
-import { licSubirFoto, licUrlArchivo } from '../../../api/licLocal'
+import { api, LicDocumento, LicPersonal } from '../../../api/appScriptApi'
+import { useArchivosLic, useSubirFotoLic } from '../../../api/licArchivos'
 import { useToast } from '../../../context/ToastContext'
 import { fecha, ocultarDni } from './licUtils'
-import { nombreTipo, abrirPropuesta } from './DocumentosVistas'
+import { nombreTipo } from './DocumentosVistas'
 
 // ============================================================
 // "Drive" del personal clave, estilo Terran (pedido del dueño 28/09/2026):
@@ -54,9 +54,11 @@ async function aJpeg(archivo: File): Promise<File> {
 
 function Foto({ persona, version, grande = false }: { persona: Persona; version: number; grande?: boolean }) {
   const [falla, setFalla] = useState(false)
-  useEffect(() => setFalla(false), [version])
+  const arch = useArchivosLic()
+  const src = arch.foto(persona.carpeta, version)
+  useEffect(() => setFalla(false), [version, src])
   const tam = grande ? 'w-32 h-40' : 'w-full aspect-[4/5]'
-  if (!LIC_LOCAL || falla) {
+  if (!src || falla) {
     return (
       <div className={`${tam} flex flex-col items-center justify-center bg-gradient-to-b from-slate-700 to-slate-900 border border-slate-600`}>
         <FaUserTie className={`${grande ? 'text-4xl' : 'text-5xl'} text-slate-500 mb-2`} />
@@ -66,7 +68,8 @@ function Foto({ persona, version, grande = false }: { persona: Persona; version:
   }
   return (
     <img
-      src={licUrlArchivo(`${persona.carpeta}/foto.jpg`, { v: version })}
+      src={src}
+      referrerPolicy="no-referrer"
       alt={`Foto de ${persona.nombre}`}
       onError={() => setFalla(true)}
       className={`${tam} object-cover border border-slate-600`}
@@ -85,6 +88,9 @@ function Archivo({ persona, d, pagina, archivoPropuesta, estado, edicion, abiert
   abierto: boolean
   onEditar: () => void
 }) {
+  const arch = useArchivosLic()
+  const url = arch.ver(d.archivo_vault)
+  const inactivo = url ? '' : ' opacity-40 pointer-events-none'
   return (
     <div className="placa-acero flex flex-col">
       <div className="flex items-start gap-3 p-4 pb-3">
@@ -100,17 +106,17 @@ function Archivo({ persona, d, pagina, archivoPropuesta, estado, edicion, abiert
       <div className="px-4 pb-3">{estado}</div>
       <div className="mt-auto grid grid-cols-3 border-t border-slate-700 text-xs">
         <a
-          href={LIC_LOCAL ? licUrlArchivo(d.archivo_vault) : undefined}
+          href={url || undefined}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-center gap-1.5 py-2.5 bg-accent-energy text-[#111827] font-bold hover:brightness-110"
-          title="Abrir este documento (PDF individual)"
+          className={`flex items-center justify-center gap-1.5 py-2.5 bg-accent-energy text-[#111827] font-bold hover:brightness-110${inactivo}`}
+          title={url ? 'Abrir este documento (PDF individual)' : 'Este PDF todavía no está en Drive'}
         >
           <FaFilePdf /> Abrir
         </a>
         <a
-          href={LIC_LOCAL ? licUrlArchivo(d.archivo_vault, { descargar: true, nombre: nombreDescarga(persona, d) }) : undefined}
-          className="flex items-center justify-center gap-1.5 py-2.5 text-slate-200 hover:bg-slate-700/60 border-l border-slate-700"
+          href={arch.descargar(d.archivo_vault, nombreDescarga(persona, d)) || undefined}
+          className={`flex items-center justify-center gap-1.5 py-2.5 text-slate-200 hover:bg-slate-700/60 border-l border-slate-700${inactivo}`}
           title="Descargar para reutilizar en otra propuesta"
         >
           <FaDownload /> Descargar
@@ -122,9 +128,9 @@ function Archivo({ persona, d, pagina, archivoPropuesta, estado, edicion, abiert
           {abierto ? 'Cerrar' : 'Estado'}
         </button>
       </div>
-      {archivoPropuesta && (
+      {arch.ver(archivoPropuesta) && (
         <button
-          onClick={() => abrirPropuesta(archivoPropuesta, pagina)}
+          onClick={() => arch.abrirPropuesta(archivoPropuesta, pagina)}
           className="text-[11px] text-slate-400 hover:text-accent-energy py-1.5 border-t border-slate-800 inline-flex items-center justify-center gap-1.5"
         >
           Ver dónde está en la propuesta{pagina ? ` (pág. ${pagina})` : ''} <FaExternalLinkAlt className="text-[9px]" />
@@ -144,6 +150,8 @@ interface Props {
 
 export default function PersonalDrive({ lista, busqueda, estadoDe, edicionDe }: Props) {
   const toast = useToast()
+  const arch = useArchivosLic()
+  const subirFoto_ = useSubirFotoLic()
   const [fichas, setFichas] = useState<Record<string, LicPersonal>>({})
   const [elegida, setElegida] = useState<string | null>(null)
   const [modo, setModo] = useState<'procesos' | 'todos'>('procesos')
@@ -185,7 +193,7 @@ export default function PersonalDrive({ lista, busqueda, estadoDe, edicionDe }: 
     if (!f || !persona) return
     setSubiendo(true)
     try {
-      const r = await licSubirFoto(persona.carpeta, await aJpeg(f))
+      const r = await subirFoto_(persona.carpeta, await aJpeg(f))
       if (r.success) { setVersionFoto(Date.now()); toast.success('Foto actualizada') }
       else toast.error(r.error || 'No se pudo subir la foto')
     } catch {
@@ -272,7 +280,7 @@ export default function PersonalDrive({ lista, busqueda, estadoDe, edicionDe }: 
       <div className="placa-acero p-5 flex flex-col sm:flex-row gap-5">
         <div className="shrink-0">
           <Foto persona={persona} version={versionFoto} grande />
-          {LIC_LOCAL && (
+          {(arch.disponible || arch.cargando) && (
             <>
               <button
                 onClick={() => inputFoto.current?.click()}

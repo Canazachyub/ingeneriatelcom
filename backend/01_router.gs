@@ -156,7 +156,12 @@ var ROUTES = {
   licContratos: { nivel: 'admin', handler: function () { return licContratos(); } },
   licActualizarPersona: { nivel: 'admin', handler: function (ctx) { return licActualizarPersona(ctx.data, ctx.userId); } },
   licActualizarContrato: { nivel: 'admin', handler: function (ctx) { return licActualizarContrato(ctx.data, ctx.userId); } },
-  licActualizarFactura: { nivel: 'admin', handler: function (ctx) { return licActualizarFactura(ctx.data, ctx.userId); } }
+  licActualizarFactura: { nivel: 'admin', handler: function (ctx) { return licActualizarFactura(ctx.data, ctx.userId); } },
+  licPropuestas: { nivel: 'admin', handler: function () { return licPropuestas(); } },
+  licCarpetaDrive: { nivel: 'admin', handler: function () { return licCarpetaDrive(); } },
+  licIndexarDrive: { nivel: 'admin', handler: function () { return licIndexarDrive(); } },
+  licArchivosDrive: { nivel: 'admin', handler: function () { return licArchivosDrive(); } },
+  licSubirFoto: { nivel: 'admin', handler: function (ctx) { return licSubirFoto(ctx.data); } }
 };
 
 // Modulo del panel que exige cada accion de nivel 'auth' (escalon 2).
