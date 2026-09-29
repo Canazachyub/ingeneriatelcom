@@ -29,6 +29,11 @@ const TIPOS_DOC: { v: TipoDocTrabajador; t: string; icono: JSX.Element; clave?: 
   { v: 'otros', t: 'Otros', icono: <FaFolderOpen /> },
 ]
 const MAX_DOC = 10 * 1024 * 1024
+// Oficina = tiene correo (marca con foto en el kiosko); Campo = sin correo (registro simple)
+const SECCIONES: { clave: string; titulo: string; icono: JSX.Element; ayuda: string; filtro: (e: Employee) => boolean }[] = [
+  { clave: 'oficina', titulo: 'Oficina', icono: <FaBuilding />, ayuda: 'Personal administrativo, legal y de trámite', filtro: (e) => !!e.email },
+  { clave: 'campo', titulo: 'Campo', icono: <FaHardHat />, ayuda: 'Supervisores, operarios y técnicos en obra', filtro: (e) => !e.email },
+]
 const input = 'w-full bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white focus:outline-none focus:border-accent-energy'
 const hoy = () => new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10)
 const iniciales = (n: string) => n.replace(/,/g, ' ').split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase()
@@ -110,6 +115,7 @@ export default function EmployeesPage() {
     return m
   }, [asigQ.data])
 
+  const proyectoTexto = (e: Employee) => (proyectoDe.get(e.id) || []).map((a) => a.projectName).join(', ') || '~'
   const docs = (dni: string) => resumen[dni] as ResumenDocsTrabajador | undefined
   const completo = (dni: string) => { const d = docs(dni); return !!d && d.cv > 0 && d.contrato > 0 && d.dni > 0 }
   const activos = empleados.filter((e) => e.status !== 'inactive')
@@ -119,7 +125,7 @@ export default function EmployeesPage() {
     .filter((e) => !sede || (e.city || 'Sin sede') === sede)
     .filter((e) => !soloIncompletos || !completo(e.dni))
     .filter((e) => !q || `${e.name} ${e.dni} ${e.position} ${e.email}`.toLowerCase().includes(q.toLowerCase()))
-    .sort((a, b) => (a.city || '').localeCompare(b.city || '') || a.name.localeCompare(b.name))
+    .sort((a, b) => proyectoTexto(a).localeCompare(proyectoTexto(b)) || a.name.localeCompare(b.name))
 
   return (
     <AdminLayout>
@@ -174,31 +180,48 @@ export default function EmployeesPage() {
         ) : !visibles.length ? (
           <div className="placa-acero p-8 text-center text-slate-400">{verCesados ? 'No hay personas dadas de baja.' : 'Nadie coincide con el filtro.'}</div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
-            {visibles.map((e) => {
-              const d = docs(e.dni)
-              const pr = proyectoDe.get(e.id) || []
+          <div className="space-y-8">
+            {SECCIONES.map((sec) => {
+              const lista = visibles.filter(sec.filtro)
+              if (!lista.length) return null
               return (
-                <button key={e.id} onClick={() => setAbierto(e)} className={`placa-acero group text-left p-3 hover:brightness-125 transition ${e.status === 'inactive' ? 'opacity-60' : ''}`}>
-                  <div className="relative">
-                    <Retrato nombre={e.name} foto={d?.foto} clase="w-full aspect-[4/5]" />
-                    <span className="absolute top-0 left-0 px-1.5 py-0.5 bg-accent-energy text-[#111827] text-[9px] font-bold tracking-widest uppercase flex items-center gap-1">
-                      {e.email ? <><FaBuilding /> Oficina</> : <><FaHardHat /> Campo</>}
-                    </span>
-                    {e.status === 'inactive' && <span className="absolute bottom-0 inset-x-0 text-center py-1 bg-red-600/90 text-white text-[10px] font-bold uppercase tracking-widest">De baja</span>}
+                <section key={sec.clave}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="w-9 h-9 flex items-center justify-center bg-accent-energy text-[#111827] text-lg">{sec.icono}</span>
+                    <h2 className="font-display font-bold text-xl text-white tracking-wide uppercase">{sec.titulo}</h2>
+                    <span className="px-2 py-0.5 text-xs font-bold bg-slate-800 border border-slate-600 text-slate-200">{lista.length}</span>
+                    <span className="flex-1 h-px bg-gradient-to-r from-accent-energy/60 to-transparent" />
+                    <span className="hidden md:inline text-xs text-slate-500">{sec.ayuda}</span>
                   </div>
-                  <p className="mt-2 font-display font-bold text-white leading-tight text-sm">{e.name}</p>
-                  <p className="text-[11px] text-accent-energy font-semibold">{e.position || 'Sin cargo'}</p>
-                  <p className="text-[11px] text-slate-400 flex items-center gap-1"><FaMapMarkerAlt /> {e.city || 'Sin sede'}</p>
-                  <p className="text-[11px] text-slate-300 truncate flex items-center gap-1" title={pr.map((a) => a.projectName).join(', ')}>
-                    <FaProjectDiagram className="text-slate-500 shrink-0" /> {pr.length ? pr.map((a) => a.projectName).join(', ') : <span className="text-slate-500">Sin proyecto</span>}
-                  </p>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    <Sello ok={(d?.cv || 0) > 0} texto="CV" />
-                    <Sello ok={(d?.contrato || 0) > 0} texto="Contrato" />
-                    <Sello ok={(d?.dni || 0) > 0} texto="DNI" />
+                  <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
+                    {lista.map((e) => {
+                    const d = docs(e.dni)
+                    const pr = proyectoDe.get(e.id) || []
+                    return (
+                      <button key={e.id} onClick={() => setAbierto(e)} className={`placa-acero group text-left p-3 hover:brightness-125 transition ${e.status === 'inactive' ? 'opacity-60' : ''}`}>
+                        <div className="relative">
+                          <Retrato nombre={e.name} foto={d?.foto} clase="w-full aspect-[4/5]" />
+                          <span className="absolute top-0 left-0 px-1.5 py-0.5 bg-accent-energy text-[#111827] text-[9px] font-bold tracking-widest uppercase flex items-center gap-1">
+                            {e.email ? <><FaBuilding /> Oficina</> : <><FaHardHat /> Campo</>}
+                          </span>
+                          {e.status === 'inactive' && <span className="absolute bottom-0 inset-x-0 text-center py-1 bg-red-600/90 text-white text-[10px] font-bold uppercase tracking-widest">De baja</span>}
+                        </div>
+                        <p className="mt-2 font-display font-bold text-white leading-tight text-sm line-clamp-2 min-h-[2.5rem]" title={e.name}>{e.name}</p>
+                        <p className="text-[11px] text-accent-energy font-semibold truncate" title={e.position}>{e.position || 'Sin cargo'}</p>
+                        <p className="text-[11px] text-slate-400 flex items-center gap-1"><FaMapMarkerAlt /> {e.city || 'Sin sede'}</p>
+                        <p className="text-[11px] text-slate-300 truncate flex items-center gap-1" title={pr.map((a) => a.projectName).join(', ')}>
+                          <FaProjectDiagram className="text-slate-500 shrink-0" /> {pr.length ? pr.map((a) => a.projectName).join(', ') : <span className="text-slate-500">Sin proyecto</span>}
+                        </p>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          <Sello ok={(d?.cv || 0) > 0} texto="CV" />
+                          <Sello ok={(d?.contrato || 0) > 0} texto="Contrato" />
+                          <Sello ok={(d?.dni || 0) > 0} texto="DNI" />
+                        </div>
+                      </button>
+                    )
+                    })}
                   </div>
-                </button>
+                </section>
               )
             })}
           </div>
