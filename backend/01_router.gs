@@ -60,6 +60,16 @@ var ROUTES = {
   createEmployee: { nivel: 'auth', handler: function (ctx) { return createEmployee(ctx.data); } },
   updateEmployee: { nivel: 'auth', handler: function (ctx) { return updateEmployee(ctx.data); } },
   transferEmployee: { nivel: 'auth', handler: function (ctx) { return transferEmployee(ctx.data); } },
+  // Ficha del trabajador (19_rrhh.gs)
+  rrhhFicha: { nivel: 'auth', handler: function (ctx) { return rrhhFicha(ctx.data); } },
+  rrhhResumen: { nivel: 'auth', handler: function () { return rrhhResumen(); } },
+  rrhhSubirDocumento: { nivel: 'auth', handler: function (ctx) { return rrhhSubirDocumento(ctx.data, ctx.userId); } },
+  rrhhArchivarDocumento: { nivel: 'auth', handler: function (ctx) { return rrhhArchivarDocumento(ctx.data, ctx.userId); } },
+  rrhhSubirFoto: { nivel: 'auth', handler: function (ctx) { return rrhhSubirFoto(ctx.data, ctx.userId); } },
+  rrhhCambiarCargo: { nivel: 'auth', handler: function (ctx) { return rrhhCambiarCargo(ctx.data, ctx.userId); } },
+  rrhhCambiarSede: { nivel: 'auth', handler: function (ctx) { return rrhhCambiarSede(ctx.data, ctx.userId); } },
+  rrhhCesar: { nivel: 'admin', handler: function (ctx) { return rrhhCesar(ctx.data, ctx.userId); } },
+  rrhhReactivar: { nivel: 'admin', handler: function (ctx) { return rrhhReactivar(ctx.data, ctx.userId); } },
   createCredentials: { nivel: 'admin', handler: function (ctx) { return createCredentialsForEmployee(ctx.data); } },
 
   // === PROYECTOS Y ASIGNACIONES ===
@@ -188,6 +198,8 @@ var MODULO_POR_ACCION_ = {
   getAnalytics: 'reportes',
   getEmployees: 'personal', getEmployee: 'personal', createEmployee: 'personal',
   updateEmployee: 'personal', transferEmployee: 'personal',
+  rrhhFicha: 'personal', rrhhResumen: 'personal', rrhhSubirDocumento: 'personal', rrhhArchivarDocumento: 'personal',
+  rrhhSubirFoto: 'personal', rrhhCambiarCargo: 'personal', rrhhCambiarSede: 'personal',
   getProjects: 'proyectos', getProject: 'proyectos', createProject: 'proyectos', updateProject: 'proyectos', deleteProject: 'proyectos',
   getAssignments: 'proyectos', assignEmployee: 'proyectos', removeAssignment: 'proyectos',
   getAttendances: 'asistencias', obtenerAsistenciasHoy: 'asistencias', getAsistenciasV2: ['asistencias', 'reportes'],

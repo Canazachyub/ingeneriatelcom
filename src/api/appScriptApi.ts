@@ -409,6 +409,36 @@ export interface Employee {
   updatedAt: string
 }
 
+export type TipoDocTrabajador = 'cv' | 'contrato' | 'dni' | 'certificados' | 'otros'
+
+export interface DocTrabajador {
+  id: string
+  nombre: string
+  tipo: TipoDocTrabajador
+  tamano: number
+  fecha: string
+}
+
+export type ResumenDocsTrabajador = Record<TipoDocTrabajador, number> & { foto: string | null }
+
+export interface FichaTrabajador {
+  id: string
+  dni: string
+  nombre_completo: string
+  email: string
+  cargo: string
+  area: string
+  ciudad_actual: string
+  estado: string
+  fecha_inicio: string
+  fecha_fin: string
+  documentos: DocTrabajador[]
+  foto: string | null
+  carpeta_url: string
+  asignaciones: { id: string; projectId: string; projectName: string; role: string; startDate: string; endDate: string; status: string }[]
+  historial: { id: string; tipo: string; ubicacion_anterior: string; ubicacion_nueva: string; descripcion: string; fecha: string; usuario: string }[]
+}
+
 export interface Project {
   id: string
   name: string
@@ -723,6 +753,50 @@ class AppScriptApi {
       return { success: false, error: result.error }
     }
     return { success: true, data: result.data.map(normalizeEmployee) }
+  }
+
+  // Incluye a los cesados (estado 'inactive'): para la ficha y el historial
+  async getEmployeesTodos(): Promise<ApiResponse<Employee[]>> {
+    const result = await this.request<Record<string, unknown>[]>('getEmployees', 'POST', { filters: { estado: 'todos' } })
+    if (!result.success || !result.data) return { success: false, error: result.error }
+    return { success: true, data: result.data.map(normalizeEmployee) }
+  }
+
+  // ── Ficha del trabajador (backend/19_rrhh.gs) ─────────────────────────
+  async rrhhFicha(dni: string): Promise<ApiResponse<FichaTrabajador>> {
+    return this.request('rrhhFicha', 'POST', { dni })
+  }
+
+  async rrhhResumen(): Promise<ApiResponse<Record<string, ResumenDocsTrabajador>>> {
+    return this.request('rrhhResumen', 'POST', {})
+  }
+
+  async rrhhSubirDocumento(data: { dni: string; tipo: TipoDocTrabajador; nombre: string; base64: string; mime: string }): Promise<ApiResponse<{ id: string; nombre: string }>> {
+    return this.request('rrhhSubirDocumento', 'POST', data)
+  }
+
+  async rrhhArchivarDocumento(dni: string, id: string): Promise<ApiResponse<null>> {
+    return this.request('rrhhArchivarDocumento', 'POST', { dni, id })
+  }
+
+  async rrhhSubirFoto(data: { dni: string; base64: string; mime: string }): Promise<ApiResponse<{ id: string }>> {
+    return this.request('rrhhSubirFoto', 'POST', data)
+  }
+
+  async rrhhCambiarCargo(dni: string, cargo: string, motivo: string): Promise<ApiResponse<null>> {
+    return this.request('rrhhCambiarCargo', 'POST', { dni, cargo, motivo })
+  }
+
+  async rrhhCambiarSede(dni: string, sede: string, motivo: string): Promise<ApiResponse<null>> {
+    return this.request('rrhhCambiarSede', 'POST', { dni, sede, motivo })
+  }
+
+  async rrhhCesar(dni: string, fecha_fin: string, motivo: string): Promise<ApiResponse<{ fecha_fin: string }>> {
+    return this.request('rrhhCesar', 'POST', { dni, fecha_fin, motivo })
+  }
+
+  async rrhhReactivar(dni: string, motivo: string): Promise<ApiResponse<null>> {
+    return this.request('rrhhReactivar', 'POST', { dni, motivo })
   }
 
   async getEmployee(id: string): Promise<ApiResponse<Employee>> {

@@ -199,7 +199,9 @@ function createEmployee(data) {
       return { success: false, error: 'Ya existe un trabajador con ese DNI' };
     }
 
-    const fechaInicio = Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
+    const fechaInicio = /^\d{4}-\d{2}-\d{2}$/.test(String(data.fecha_inicio || ''))
+      ? String(data.fecha_inicio)
+      : Utilities.formatDate(new Date(), 'America/Lima', 'yyyy-MM-dd');
 
     const headers = sheet.getDataRange().getValues()[0];
     const fila = headers.map(function(h) {
