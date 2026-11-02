@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import Retrato from '../../../components/admin/Retrato'
 import { Link } from 'react-router-dom'
 import { FaHardHat, FaPlus, FaPen, FaMapMarkerAlt, FaCalendarAlt, FaUsers, FaExclamationTriangle, FaArrowRight, FaTrophy, FaClipboardCheck, FaSpinner, FaLink } from 'react-icons/fa'
 import { api, LIC_LOCAL, LicAsistenciaServicio, LicContrato, LicPersonal, LicProceso, LicServicio } from '../../../api/appScriptApi'
@@ -104,7 +105,7 @@ function AsistenciaServicio({ s, onEnlazado }: { s: LicServicio; onEnlazado?: ()
                 <tbody>
                   {datos.trabajadores.map((t) => (
                     <tr key={t.dni} className="border-t border-slate-800">
-                      <td className="py-1.5 text-slate-200">{t.nombre}<span className="block text-slate-500">{t.cargo}</span></td>
+                      <td className="py-1.5 text-slate-200"><span className="flex items-center gap-2.5"><Retrato dni={String(t.dni)} nombre={t.nombre} size={32} /><span>{t.nombre}<span className="block text-slate-500">{t.cargo}</span></span></span></td>
                       <td className={`text-center font-mono ${t.entrada_hoy ? 'text-green-300' : 'text-red-300'}`}>{t.entrada_hoy || 'No marcó'}</td>
                       <td className="text-center font-mono text-slate-300">{t.salida_hoy || '—'}</td>
                       <td className="text-center font-mono text-white">{t.dias_mes}</td>
@@ -218,7 +219,7 @@ function ElegirLicitacion({ ganadas, contratos, yaUsadas, onElegir, onCerrar }: 
   }
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onCerrar() }}>
-      <div className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-[#0f172a] border-2 border-accent-energy">
+      <div className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-primary-900 border-2 border-accent-energy">
         <div className="p-5 border-b border-slate-700">
           <p className="rotulo-estencil mb-1">Nuevo servicio · paso 1 de 2</p>
           <h2 className="text-xl font-display font-bold text-white">¿De qué licitación ganada es?</h2>

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
 import { api, User, ApiResponse } from '../api/appScriptApi'
+import { borrarRetratos } from '../hooks/useRetratos'
 
 // Revalidación de sesión: throttle minimo entre verificaciones al recuperar foco
 const FOCUS_REVALIDATE_THROTTLE_MS = 60 * 1000
@@ -158,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     api.logout()
+    borrarRetratos()
     setUser(null)
   }
 

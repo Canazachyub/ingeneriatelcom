@@ -4,6 +4,7 @@ import {
 } from 'react-icons/fa'
 import { ConfigPlanilla, formatoSoles, valorDia, valorMinuto, descuentoIncidencia, SueldoTrabajador } from '../../../utils/planilla'
 import { Fila, TIPO_LABELS, ESTADO_BADGE, ESTADO_LABELS } from './planilla.types'
+import Retrato from '../../../components/admin/Retrato'
 
 interface SueldosTableProps {
   filas: Fila[]
@@ -65,6 +66,9 @@ export default function SueldosTable({
                     className={`hover:bg-primary-800/30 transition-colors cursor-pointer ${cesado ? 'opacity-60' : ''}`}
                   >
                     <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                      <Retrato dni={f.trabajador.dni} nombre={f.trabajador.nombre} size={40} />
+                      <div className="min-w-0">
                       <div className="font-medium text-white leading-tight">
                         {f.trabajador.nombre}
                         {cesado && (
@@ -80,6 +84,8 @@ export default function SueldosTable({
                       {f.trabajador.email && (
                         <div className="text-primary-500 text-[11px] truncate max-w-[220px]">{f.trabajador.email}</div>
                       )}
+                      </div>
+                      </div>
                     </td>
                     <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                       {f.trabajador.usa_rmv ? (

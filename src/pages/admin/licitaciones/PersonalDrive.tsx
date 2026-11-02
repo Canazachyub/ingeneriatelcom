@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Retrato from '../../../components/admin/Retrato'
 import {
-  FaFolder, FaFolderOpen, FaFilePdf, FaDownload, FaExternalLinkAlt, FaCamera, FaChevronRight, FaArrowLeft, FaSpinner, FaUserTie,
-  FaPen, FaPlus, FaIdCard, FaPhone, FaEnvelope,
+  FaFolder, FaFolderOpen, FaFilePdf, FaDownload, FaExternalLinkAlt, FaCamera, FaChevronRight, FaArrowLeft, FaSpinner, FaPen, FaPlus, FaIdCard, FaPhone, FaEnvelope,
 } from 'react-icons/fa'
 import { api, LicDocumento, LicPersonal } from '../../../api/appScriptApi'
 import { useArchivosLic, useSubirFotoLic } from '../../../api/licArchivos'
@@ -32,7 +32,6 @@ interface Persona {
 
 const nombreProceso = (p: string) => String(p || '').replace(/^\d{4}\s+/, '')
 const anioProceso = (p: string) => (String(p || '').match(/^\d{4}/) || [''])[0]
-const iniciales = (n: string) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join('')
 
 // Nombre amigable al descargar: "<PERSONA> - <Tipo> - <fecha>.pdf"
 const nombreDescarga = (p: Persona, d: LicDocumento) =>
@@ -64,12 +63,7 @@ function Foto({ persona, version, grande = false }: { persona: Persona; version:
   useEffect(() => setFalla(false), [version, src])
   const tam = grande ? 'w-32 h-40' : 'w-full aspect-[4/5]'
   if (!src || falla) {
-    return (
-      <div className={`${tam} flex flex-col items-center justify-center bg-gradient-to-b from-slate-700 to-slate-900 border border-slate-600`}>
-        <FaUserTie className={`${grande ? 'text-4xl' : 'text-5xl'} text-slate-500 mb-2`} />
-        <span className="font-display font-bold text-2xl text-slate-300">{iniciales(persona.nombre)}</span>
-      </div>
-    )
+    return <div className={tam}><Retrato dni={persona.dni} nombre={persona.nombre} /></div>
   }
   return (
     <img

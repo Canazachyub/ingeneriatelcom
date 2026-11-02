@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { registrarVista } from './utils/analytics'
-import { lazy as lazyReact, Suspense, useEffect, useRef, ComponentType } from 'react'
+import { lazy as lazyReact, Suspense, useEffect, useLayoutEffect, useRef, ComponentType } from 'react'
 
 // Carga diferida con recuperación tras un deploy. GitHub Pages deja el
 // index.html en caché ~10 min; si ese HTML viejo pide un archivo de la versión
@@ -90,7 +90,7 @@ import { ToastProvider, useToast } from './context/ToastContext'
 // caso con su propio mensaje. Un toast rojo "El servidor tardó demasiado"
 // mientras el registro sigue reintentando hacía creer al trabajador que había
 // fallado (y volvía a marcar), aunque la marca sí se guardaba.
-const ACCIONES_SIN_TOAST = new Set(['registrarAsistenciaFoto', 'getTrabajadores', 'subirJustificacion', 'registrarReclamo'])
+const ACCIONES_SIN_TOAST = new Set(['registrarAsistenciaFoto', 'getTrabajadores', 'subirJustificacion', 'registrarReclamo', 'getArchivo'])
 
 function ApiErrorBridge() {
   const toast = useToast()
@@ -141,6 +141,12 @@ function PageLoader() {
 function AnalyticsRutas() {
   const { pathname } = useLocation()
   useEffect(() => { registrarVista(pathname) }, [pathname])
+  // Tema del panel (src/styles/admin.css). Va por ruta y no en AdminLayout: al
+  // cambiar de pantalla el layout se desmonta mientras carga la siguiente y el
+  // color de fondo parpadearía.
+  useLayoutEffect(() => {
+    document.documentElement.classList.toggle('admin-ui', pathname.startsWith('/admin'))
+  }, [pathname])
   return null
 }
 

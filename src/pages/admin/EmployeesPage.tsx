@@ -2,14 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import {
-  FaPlus, FaSearch, FaSpinner, FaTimes, FaUserTie, FaFileAlt, FaFileContract, FaIdCard, FaCamera, FaExchangeAlt,
+  FaPlus, FaSearch, FaSpinner, FaTimes, FaFileAlt, FaFileContract, FaIdCard, FaCamera, FaExchangeAlt,
   FaMapMarkerAlt, FaUserSlash, FaUserCheck, FaKey, FaCopy, FaHistory, FaFolderOpen, FaUpload, FaExternalLinkAlt,
   FaArchive, FaCheck, FaExclamationTriangle, FaHardHat, FaBuilding, FaPen, FaProjectDiagram,
 } from 'react-icons/fa'
 import { api, Employee, FichaTrabajador, ResumenDocsTrabajador, TipoDocTrabajador, Project, EmployeeAssignment } from '../../api/appScriptApi'
 import { queryKeys } from '../../hooks/queries'
 import AdminLayout from '../../components/admin/AdminLayout'
+import Retrato from '../../components/admin/Retrato'
+import { CifraCard } from '../../components/admin/ui'
 import { useToast } from '../../context/ToastContext'
+import { useRefrescarRetratos } from '../../hooks/useRetratos'
 
 // ============================================================
 // Personal — "cuartel" estilo Terran. Una tarjeta por trabajador con lo que
@@ -35,10 +38,8 @@ const SECCIONES: { clave: string; titulo: string; icono: JSX.Element; ayuda: str
   { clave: 'oficina', titulo: 'Oficina', icono: <FaBuilding />, ayuda: 'Personal administrativo, legal y de trámite', filtro: (e) => !!e.email },
   { clave: 'campo', titulo: 'Campo', icono: <FaHardHat />, ayuda: 'Supervisores, operarios y técnicos en obra', filtro: (e) => !e.email },
 ]
-const input = 'w-full bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white focus:outline-none focus:border-accent-energy'
+const input = 'w-full bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white focus:outline-none'
 const hoy = () => new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10)
-const iniciales = (n: string) => n.replace(/,/g, ' ').split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase()
-const miniatura = (id: string | null | undefined, w = 400) => (id ? `https://drive.google.com/thumbnail?id=${id}&sz=w${w}` : '')
 const verArchivo = (id: string) => `https://drive.google.com/file/d/${id}/view`
 
 function aBase64(f: Blob): Promise<string> {
@@ -63,23 +64,9 @@ async function fotoJpeg(archivo: File): Promise<Blob> {
   } finally { URL.revokeObjectURL(url) }
 }
 
-function Retrato({ nombre, foto, clase }: { nombre: string; foto?: string | null; clase: string }) {
-  const [falla, setFalla] = useState(false)
-  useEffect(() => setFalla(false), [foto])
-  if (!foto || falla) {
-    return (
-      <div className={`${clase} flex flex-col items-center justify-center bg-gradient-to-b from-slate-700 to-slate-900 border border-slate-600`}>
-        <FaUserTie className="text-3xl text-slate-500 mb-1" />
-        <span className="font-display font-bold text-xl text-slate-300">{iniciales(nombre)}</span>
-      </div>
-    )
-  }
-  return <img src={miniatura(foto)} alt={`Foto de ${nombre}`} referrerPolicy="no-referrer" onError={() => setFalla(true)} className={`${clase} object-cover border border-slate-600`} />
-}
-
 function Sello({ ok, texto }: { ok: boolean; texto: string }) {
   return (
-    <span className={`px-1.5 py-0.5 text-[10px] font-bold border ${ok ? 'bg-green-500/15 text-green-300 border-green-500/40' : 'bg-red-500/10 text-red-300 border-red-500/40'}`}>
+    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold border ${ok ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/10 text-rose-300 border-rose-500/30'}`}>
       {ok ? '✔' : '✖'} {texto}
     </span>
   )
@@ -112,6 +99,14 @@ export default function EmployeesPage() {
   }
 
   const empleados = empleadosQ.data || []
+  // Desde el buscador del panel llega ?ver=<dni>: abre esa ficha
+  const verDni = params.get('ver')
+  useEffect(() => {
+    if (!verDni || !empleados.length) return
+    const e = empleados.find((x) => x.dni === verDni)
+    if (e) setAbierto(e)
+    setParams({}, { replace: true })
+  }, [verDni, empleados.length]) // eslint-disable-line react-hooks/exhaustive-deps
   const resumen = resumenQ.data || {}
   const proyectoDe = useMemo(() => {
     const m = new Map<string, EmployeeAssignment[]>()
@@ -134,30 +129,22 @@ export default function EmployeesPage() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pt-2">
           <div>
-            <p className="rotulo-estencil mb-1">Cuartel</p>
-            <h1 className="text-2xl md:text-3xl font-display font-bold text-white flex items-center gap-3"><FaHardHat className="text-accent-energy" /> Personal</h1>
-            <p className="text-primary-300">Toca a una persona para ver su ficha: documentos, proyecto, cargo, sede, baja e historial.</p>
+            <p className="marca-rotulo">Gestión</p>
+            <h1 className="mt-1.5 text-2xl md:text-[32px] md:leading-tight font-bold text-white">Personal</h1>
+            <p className="text-primary-300 mt-1 text-sm">Toca a una persona para ver su ficha: documentos, proyecto, cargo, sede, baja e historial.</p>
           </div>
           <button onClick={() => setNuevo(true)} className="btn-primary flex items-center gap-2 shrink-0"><FaPlus /> Nuevo trabajador</button>
         </div>
 
         {/* HUD */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {[
-            ['Activos', activos.length, 'bg-green-400'],
-            ['En campo', activos.filter((e) => !e.email).length, 'bg-accent-energy'],
-            ['En oficina', activos.filter((e) => e.email).length, 'bg-sky-400'],
-            ['Con CV', `${activos.filter((e) => (docs(e.dni)?.cv || 0) > 0).length}/${activos.length}`, 'bg-violet-400'],
-            ['Con contrato', `${activos.filter((e) => (docs(e.dni)?.contrato || 0) > 0).length}/${activos.length}`, 'bg-amber-400'],
-          ].map(([t, v, c]) => (
-            <div key={String(t)} className="placa-acero p-4 pl-5 relative">
-              <span className={`absolute left-0 top-3 bottom-3 w-1 ${c}`} />
-              <p className="text-2xl font-display font-bold text-white tabular-nums">{v}</p>
-              <p className="text-xs text-slate-400 uppercase tracking-wider">{t}</p>
-            </div>
-          ))}
+          <CifraCard etiqueta="Activos" valor={activos.length} tono="verde" />
+          <CifraCard etiqueta="En campo" valor={activos.filter((e) => !e.email).length} tono="ambar" />
+          <CifraCard etiqueta="En oficina" valor={activos.filter((e) => e.email).length} tono="azul" />
+          <CifraCard etiqueta="Con CV" valor={`${activos.filter((e) => (docs(e.dni)?.cv || 0) > 0).length}/${activos.length}`} tono="violeta" />
+          <CifraCard etiqueta="Con contrato" valor={`${activos.filter((e) => (docs(e.dni)?.contrato || 0) > 0).length}/${activos.length}`} tono="cian" />
         </div>
 
         {/* Filtros */}
@@ -167,9 +154,9 @@ export default function EmployeesPage() {
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre, DNI, cargo o correo…" className={input + ' pl-10 py-2.5'} />
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => setSede('')} className={`px-3 py-2 text-xs border ${!sede ? 'bg-accent-energy text-[#111827] border-accent-energy font-bold' : 'border-slate-600 text-slate-300'}`}>Todas las sedes</button>
+            <button onClick={() => setSede('')} className={`px-3 py-2 text-xs border ${!sede ? 'bg-accent-electric/15 text-accent-electric border-accent-electric/60 font-semibold' : 'border-slate-600 text-slate-300'}`}>Todas las sedes</button>
             {sedes.map((s) => (
-              <button key={s} onClick={() => setSede(s)} className={`px-3 py-2 text-xs border ${sede === s ? 'bg-accent-energy text-[#111827] border-accent-energy font-bold' : 'border-slate-600 text-slate-300'}`}>{s}</button>
+              <button key={s} onClick={() => setSede(s)} className={`px-3 py-2 text-xs border ${sede === s ? 'bg-accent-electric/15 text-accent-electric border-accent-electric/60 font-semibold' : 'border-slate-600 text-slate-300'}`}>{s}</button>
             ))}
             <button onClick={() => setSoloIncompletos(!soloIncompletos)} className={`px-3 py-2 text-xs border ${soloIncompletos ? 'bg-red-500/20 border-red-400 text-red-200' : 'border-slate-600 text-slate-300'}`}>Falta CV/contrato/DNI</button>
             <button onClick={() => setVerCesados(!verCesados)} className={`px-3 py-2 text-xs border ${verCesados ? 'bg-slate-700 border-slate-400 text-white' : 'border-slate-600 text-slate-400'}`}>{verCesados ? 'Ver activos' : 'Ver dados de baja'}</button>
@@ -178,7 +165,7 @@ export default function EmployeesPage() {
 
         {/* Unidades */}
         {empleadosQ.isLoading ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="placa-acero h-72 animate-pulse" />)}</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="tarjeta h-72 animate-pulse" />)}</div>
         ) : empleadosQ.error ? (
           <div className="placa-acero p-6 text-red-300">No se pudo cargar el personal. <button onClick={recargar} className="underline">Reintentar</button></div>
         ) : !visibles.length ? (
@@ -191,27 +178,27 @@ export default function EmployeesPage() {
               return (
                 <section key={sec.clave}>
                   <div className="flex items-center gap-3 mb-3">
-                    <span className="w-9 h-9 flex items-center justify-center bg-accent-energy text-[#111827] text-lg">{sec.icono}</span>
-                    <h2 className="font-display font-bold text-xl text-white tracking-wide uppercase">{sec.titulo}</h2>
-                    <span className="px-2 py-0.5 text-xs font-bold bg-slate-800 border border-slate-600 text-slate-200">{lista.length}</span>
-                    <span className="flex-1 h-px bg-gradient-to-r from-accent-energy/60 to-transparent" />
+                    <span className="w-9 h-9 rounded-xl flex items-center justify-center bg-accent-electric/10 text-accent-electric">{sec.icono}</span>
+                    <h2 className="font-bold text-lg text-white">{sec.titulo}</h2>
+                    <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-800 border border-primary-700 text-slate-200">{lista.length}</span>
+                    <span className="flex-1 h-px bg-gradient-to-r from-primary-700 to-transparent" />
                     <span className="hidden md:inline text-xs text-slate-500">{sec.ayuda}</span>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-3">
                     {lista.map((e) => {
                     const d = docs(e.dni)
                     const pr = proyectoDe.get(e.id) || []
                     return (
-                      <button key={e.id} onClick={() => setAbierto(e)} className={`placa-acero group text-left p-3 hover:brightness-125 transition ${e.status === 'inactive' ? 'opacity-60' : ''}`}>
-                        <div className="relative">
-                          <Retrato nombre={e.name} foto={d?.foto} clase="w-full aspect-[4/5]" />
-                          <span className="absolute top-0 left-0 px-1.5 py-0.5 bg-accent-energy text-[#111827] text-[9px] font-bold tracking-widest uppercase flex items-center gap-1">
+                      <button key={e.id} onClick={() => setAbierto(e)} className={`tarjeta tarjeta-pulsable group text-left p-2.5 ${e.status === 'inactive' ? 'opacity-60' : ''}`}>
+                        <div className="relative aspect-square">
+                          <Retrato dni={e.dni} nombre={e.name} />
+                          <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-primary-950/85 text-accent-energy text-[9px] font-semibold flex items-center gap-1">
                             {e.email ? <><FaBuilding /> Oficina</> : <><FaHardHat /> Campo</>}
                           </span>
-                          {e.status === 'inactive' && <span className="absolute bottom-0 inset-x-0 text-center py-1 bg-red-600/90 text-white text-[10px] font-bold uppercase tracking-widest">De baja</span>}
+                          {e.status === 'inactive' && <span className="absolute bottom-0.5 inset-x-0.5 text-center py-1 bg-rose-600/90 text-white text-[10px] font-semibold">De baja</span>}
                         </div>
-                        <p className="mt-2 font-display font-bold text-white leading-tight text-sm line-clamp-2 min-h-[2.5rem]" title={e.name}>{e.name}</p>
-                        <p className="text-[11px] text-accent-energy font-semibold truncate" title={e.position}>{e.position || 'Sin cargo'}</p>
+                        <p className="mt-2 font-semibold text-white leading-tight text-sm line-clamp-2 min-h-[2.5rem]" title={e.name}>{e.name}</p>
+                        <p className="text-[11px] text-accent-electric font-medium truncate" title={e.position}>{e.position || 'Sin cargo'}</p>
                         <p className="text-[11px] text-slate-400 flex items-center gap-1"><FaMapMarkerAlt /> {e.city || 'Sin sede'}</p>
                         <p className="text-[11px] text-slate-300 truncate flex items-center gap-1" title={pr.map((a) => a.projectName).join(', ')}>
                           <FaProjectDiagram className="text-slate-500 shrink-0" /> {pr.length ? pr.map((a) => a.projectName).join(', ') : <span className="text-slate-500">{asigQ.isLoading || asigQ.isError ? "cargando…" : "Sin proyecto"}</span>}
@@ -245,6 +232,7 @@ type Accion = null | 'cargo' | 'sede' | 'proyecto' | 'datos' | 'baja' | 'reactiv
 
 function FichaPanel({ empleado, proyectos, onCerrar, onCambio }: { empleado: Employee; proyectos: Project[]; onCerrar: () => void; onCambio: () => void }) {
   const toast = useToast()
+  const refrescarRetratos = useRefrescarRetratos()
   const [ficha, setFicha] = useState<FichaTrabajador | null>(null)
   const [error, setError] = useState('')
   const [pestana, setPestana] = useState<'resumen' | 'documentos' | 'historial'>('resumen')
@@ -283,7 +271,7 @@ function FichaPanel({ empleado, proyectos, onCerrar, onCambio }: { empleado: Emp
     if (!f) return
     if (!/^image\//.test(f.type)) { toast.error('Elige una imagen (JPG o PNG)'); return }
     const jpg = await fotoJpeg(f)
-    hacer(async () => api.rrhhSubirFoto({ dni: empleado.dni, mime: 'image/jpeg', base64: await aBase64(jpg) }), 'Foto actualizada')
+    hacer(async () => api.rrhhSubirFoto({ dni: empleado.dni, mime: 'image/jpeg', base64: await aBase64(jpg) }), 'Foto actualizada').then((ok) => { if (ok) refrescarRetratos() })
   }
 
   const activo = ficha ? !ficha.fecha_fin || ficha.fecha_fin >= hoy() : empleado.status !== 'inactive'
@@ -291,18 +279,18 @@ function FichaPanel({ empleado, proyectos, onCerrar, onCambio }: { empleado: Emp
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60" onMouseDown={(e) => { if (e.target === e.currentTarget) onCerrar() }}>
-      <div className="w-full max-w-2xl h-full flex flex-col bg-[#0f172a] border-l-2 border-accent-energy shadow-2xl">
+      <div className="w-full max-w-2xl h-full flex flex-col bg-primary-900 border-l border-primary-700 shadow-2xl">
         {/* Cabecera */}
         <div className="flex gap-4 p-5 border-b border-slate-700">
           <div className="shrink-0">
-            <Retrato nombre={empleado.name} foto={ficha?.foto} clase="w-24 h-28" />
-            <button onClick={() => inputFoto.current?.click()} disabled={trabajando} className="mt-1 w-24 text-[11px] py-1 border border-slate-600 text-slate-300 hover:border-accent-energy inline-flex items-center justify-center gap-1"><FaCamera /> Foto</button>
+            <Retrato dni={empleado.dni} nombre={empleado.name} size={104} />
+            <button onClick={() => inputFoto.current?.click()} disabled={trabajando} className="mt-1 w-[104px] text-[11px] py-1 border border-slate-600 text-slate-300 hover:border-accent-electric inline-flex items-center justify-center gap-1"><FaCamera /> Foto</button>
             <input ref={inputFoto} type="file" accept="image/*" hidden onChange={(e) => { subirFoto(e.target.files?.[0]); e.target.value = '' }} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="rotulo-estencil mb-1">Ficha del trabajador</p>
-            <h2 className="text-xl font-display font-bold text-white leading-tight">{ficha?.nombre_completo || empleado.name}</h2>
-            <p className="text-accent-energy font-semibold text-sm">{ficha?.cargo || empleado.position || 'Sin cargo'}</p>
+            <p className="marca-rotulo mb-1">Ficha del trabajador</p>
+            <h2 className="text-xl font-bold text-white leading-tight">{ficha?.nombre_completo || empleado.name}</h2>
+            <p className="text-accent-electric font-medium text-sm">{ficha?.cargo || empleado.position || 'Sin cargo'}</p>
             <p className="text-xs text-slate-400 mt-1">DNI {empleado.dni} · {ficha?.ciudad_actual || empleado.city || 'Sin sede'} · {empleado.email ? 'Oficina' : 'Campo'}</p>
             <p className="text-xs mt-1">{activo
               ? <span className="text-green-300">● Activo{ficha?.fecha_inicio ? ` desde ${ficha.fecha_inicio}` : ''}</span>
@@ -313,7 +301,7 @@ function FichaPanel({ empleado, proyectos, onCerrar, onCambio }: { empleado: Emp
 
         <div className="flex border-b border-slate-700 text-sm">
           {([['resumen', 'Resumen'], ['documentos', 'Documentos'], ['historial', 'Historial']] as const).map(([k, t]) => (
-            <button key={k} onClick={() => setPestana(k)} className={`px-5 py-2.5 font-semibold ${pestana === k ? 'bg-accent-energy text-[#111827]' : 'text-slate-300 hover:text-white'}`}>{t}</button>
+            <button key={k} onClick={() => setPestana(k)} className={`px-5 py-2.5 font-semibold border-b-2 -mb-px ${pestana === k ? 'border-accent-electric text-accent-electric' : 'border-transparent text-slate-300 hover:text-white'}`}>{t}</button>
           ))}
         </div>
 
@@ -323,14 +311,14 @@ function FichaPanel({ empleado, proyectos, onCerrar, onCambio }: { empleado: Emp
             : pestana === 'resumen' ? (
               <>
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-accent-energy mb-2">Proyecto</p>
+                  <p className="text-xs font-semibold text-primary-300 mb-2">Proyecto</p>
                   {asignActivas.length ? asignActivas.map((a) => (
                     <p key={a.id} className="text-sm text-white flex items-center gap-2"><FaProjectDiagram className="text-slate-500" /> {a.projectName} <span className="text-slate-400">· {a.role}</span></p>
                   )) : <p className="text-sm text-slate-400">No está asignado a ningún proyecto (su asistencia no aparece en los servicios).</p>}
                 </div>
 
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-accent-energy mb-2">¿Qué quieres hacer?</p>
+                  <p className="text-xs font-semibold text-primary-300 mb-2">¿Qué quieres hacer?</p>
                   <div className="grid grid-cols-2 gap-2">
                     {activo && <>
                       <BotonAccion icono={<FaExchangeAlt />} texto="Cambiar de cargo" onClick={() => setAccion('cargo')} />
@@ -373,8 +361,8 @@ function FichaPanel({ empleado, proyectos, onCerrar, onCambio }: { empleado: Emp
 
 function BotonAccion({ icono, texto, onClick, peligro }: { icono: JSX.Element; texto: string; onClick: () => void; peligro?: boolean }) {
   return (
-    <button onClick={onClick} className={`flex items-center gap-2 px-3 py-3 text-sm text-left border ${peligro ? 'border-red-500/50 text-red-200 hover:bg-red-500/10' : 'border-slate-600 text-slate-200 hover:border-accent-energy hover:bg-slate-800'}`}>
-      <span className={peligro ? 'text-red-300' : 'text-accent-energy'}>{icono}</span> {texto}
+    <button onClick={onClick} className={`flex items-center gap-2 px-3 py-3 text-sm text-left border ${peligro ? 'border-red-500/50 text-red-200 hover:bg-red-500/10' : 'border-slate-600 text-slate-200 hover:border-accent-electric hover:bg-slate-800'}`}>
+      <span className={peligro ? 'text-red-300' : 'text-accent-electric'}>{icono}</span> {texto}
     </button>
   )
 }
@@ -430,8 +418,8 @@ function PanelAccion({ accion, ficha, empleado, proyectos, asignActivas, trabaja
   }
 
   return (
-    <div className={`p-4 border ${accion === 'baja' ? 'border-red-500/60 bg-red-500/5' : 'border-accent-energy/60 bg-slate-900'} space-y-3`}>
-      <p className="font-display font-bold text-white">{titulo[accion]}</p>
+    <div className={`p-4 border ${accion === 'baja' ? 'border-red-500/60 bg-red-500/5' : 'border-accent-electric/50 bg-slate-800'} rounded-xl space-y-3`}>
+      <p className="font-bold text-white">{titulo[accion]}</p>
       {accion === 'cargo' && <>
         <label className="block text-xs text-slate-300">Nuevo cargo (hoy: <b>{ficha.cargo || '—'}</b>)
           <input value={v1} onChange={(e) => setV1(e.target.value)} list="cargos-conocidos" className={input + ' mt-1'} autoFocus />
@@ -479,7 +467,7 @@ function PanelAccion({ accion, ficha, empleado, proyectos, asignActivas, trabaja
       <div className="flex gap-2 justify-end">
         <button onClick={onCancelar} className="px-4 py-2 text-sm border border-slate-600 text-slate-200">Cancelar</button>
         <button onClick={confirmar} disabled={!valido || trabajando}
-          className={`px-4 py-2 text-sm font-bold inline-flex items-center gap-2 disabled:opacity-40 ${accion === 'baja' ? 'bg-red-500 text-white' : 'bg-accent-energy text-[#111827]'}`}>
+          className={`px-4 py-2 text-sm font-bold inline-flex items-center gap-2 disabled:opacity-40 ${accion === 'baja' ? 'bg-red-500 text-white rounded-xl' : 'btn-primary'}`}>
           {trabajando ? <FaSpinner className="animate-spin" /> : <FaCheck />} {accion === 'baja' ? 'Sí, dar de baja' : 'Confirmar'}
         </button>
       </div>
@@ -504,17 +492,17 @@ function Documentos({ ficha, dni, hacer, trabajando }: { ficha: FichaTrabajador;
 
   return (
     <div className="space-y-3">
-      {ficha.carpeta_url && <a href={ficha.carpeta_url} target="_blank" rel="noopener noreferrer" className="text-xs text-accent-energy hover:underline inline-flex items-center gap-1"><FaFolderOpen /> Abrir su carpeta en Drive</a>}
+      {ficha.carpeta_url && <a href={ficha.carpeta_url} target="_blank" rel="noopener noreferrer" className="text-xs text-accent-electric hover:underline inline-flex items-center gap-1"><FaFolderOpen /> Abrir su carpeta en Drive</a>}
       {TIPOS_DOC.map((t) => {
         const lista = ficha.documentos.filter((d) => d.tipo === t.v)
         return (
-          <div key={t.v} className={`border ${t.clave && !lista.length ? 'border-red-500/50' : 'border-slate-700'}`}>
+          <div key={t.v} className={`border rounded-xl overflow-hidden ${t.clave && !lista.length ? 'border-rose-500/50' : 'border-slate-700'}`}>
             <div className="flex items-center gap-2 px-3 py-2 bg-slate-900/60">
-              <span className="text-accent-energy">{t.icono}</span>
+              <span className="text-accent-electric">{t.icono}</span>
               <span className="text-white font-semibold text-sm flex-1">{t.t}</span>
               {t.clave && !lista.length && <span className="text-[11px] text-red-300">Falta</span>}
               <button onClick={() => inputs.current[t.v]?.click()} disabled={trabajando}
-                className="px-2.5 py-1 text-xs bg-accent-energy text-[#111827] font-semibold inline-flex items-center gap-1 disabled:opacity-50">
+                className="px-2.5 py-1 rounded-lg text-xs bg-blue-600 text-white font-semibold inline-flex items-center gap-1 disabled:opacity-50">
                 {subiendo === t.v ? <FaSpinner className="animate-spin" /> : <FaUpload />} Subir
               </button>
               <input ref={(el) => { inputs.current[t.v] = el }} type="file" accept="application/pdf,image/jpeg,image/png" hidden onChange={(e) => { subir(t.v, e.target.files?.[0]); e.target.value = '' }} />
@@ -525,7 +513,7 @@ function Documentos({ ficha, dni, hacer, trabajando }: { ficha: FichaTrabajador;
                   <li key={d.id} className="flex items-center gap-3 px-3 py-2 text-sm">
                     <span className="flex-1 min-w-0 truncate text-slate-200" title={d.nombre}>{d.nombre}</span>
                     <span className="text-[11px] text-slate-500 shrink-0">{d.fecha}</span>
-                    <a href={verArchivo(d.id)} target="_blank" rel="noopener noreferrer" className="text-xs text-accent-energy inline-flex items-center gap-1 shrink-0"><FaExternalLinkAlt /> Ver</a>
+                    <a href={verArchivo(d.id)} target="_blank" rel="noopener noreferrer" className="text-xs text-accent-electric inline-flex items-center gap-1 shrink-0"><FaExternalLinkAlt /> Ver</a>
                     {quitando === d.id ? (
                       <span className="flex items-center gap-2 shrink-0 text-xs">
                         ¿Quitar?
@@ -559,7 +547,7 @@ function Historial({ ficha }: { ficha: FichaTrabajador }) {
     <ol className="space-y-2">
       {lista.map((h) => (
         <li key={h.id} className="p-3 bg-slate-900 border border-slate-700 text-sm">
-          <p className="text-white font-semibold flex items-center gap-2"><FaHistory className="text-accent-energy" /> {TIPO_HIST[h.tipo] || h.tipo}
+          <p className="text-white font-semibold flex items-center gap-2"><FaHistory className="text-accent-electric" /> {TIPO_HIST[h.tipo] || h.tipo}
             <span className="text-slate-500 font-normal text-xs">· {String(h.fecha).slice(0, 16).replace('T', ' ')}{h.usuario ? ` · ${h.usuario}` : ''}</span></p>
           {(h.ubicacion_anterior || h.ubicacion_nueva) && (
             <p className="text-xs mt-1"><span className="text-red-300/80">{h.ubicacion_anterior || '—'}</span> <span className="text-slate-500">→</span> <span className="text-green-300">{h.ubicacion_nueva || '—'}</span></p>
@@ -601,9 +589,9 @@ function NuevoTrabajador({ inicial, onCerrar, onCreado }: { inicial?: { dni: str
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onCerrar() }}>
-      <div className="w-full max-w-lg bg-[#0f172a] border-2 border-accent-energy">
+      <div className="w-full max-w-lg bg-primary-900 border border-primary-700">
         <div className="p-5 border-b border-slate-700 flex items-start">
-          <div className="flex-1"><p className="rotulo-estencil mb-1">Reclutamiento</p><h2 className="text-xl font-display font-bold text-white">Nuevo trabajador</h2></div>
+          <div className="flex-1"><p className="marca-rotulo mb-1">Personal</p><h2 className="text-xl font-bold text-white">Nuevo trabajador</h2></div>
           <button onClick={onCerrar} className="p-2 text-slate-400"><FaTimes /></button>
         </div>
         <div className="p-5 grid sm:grid-cols-2 gap-4">
@@ -620,7 +608,7 @@ function NuevoTrabajador({ inicial, onCerrar, onCreado }: { inicial?: { dni: str
         </div>
         <div className="p-4 border-t border-slate-700 flex justify-end gap-2">
           <button onClick={onCerrar} className="px-4 py-2 text-sm border border-slate-600 text-slate-200">Cancelar</button>
-          <button onClick={crear} disabled={!listo || guardando} className="px-5 py-2 text-sm bg-accent-energy text-[#111827] font-bold inline-flex items-center gap-2 disabled:opacity-40">
+          <button onClick={crear} disabled={!listo || guardando} className="btn-primary inline-flex items-center gap-2 disabled:opacity-40">
             {guardando ? <FaSpinner className="animate-spin" /> : <FaPlus />} Crear trabajador
           </button>
         </div>

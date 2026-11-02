@@ -3,6 +3,42 @@
 @tailwind utilities;
 
 :root {
+  /* Escalas de Tailwind (ver tailwind.config.js): mismos valores por defecto;
+     el panel las redefine en src/styles/admin.css */
+  --tw-primary-50: 239 246 255;
+  --tw-primary-100: 219 234 254;
+  --tw-primary-200: 191 219 254;
+  --tw-primary-300: 147 197 253;
+  --tw-primary-400: 96 165 250;
+  --tw-primary-500: 59 130 246;
+  --tw-primary-600: 37 99 235;
+  --tw-primary-700: 29 78 216;
+  --tw-primary-800: 30 64 175;
+  --tw-primary-900: 30 58 138;
+  --tw-primary-950: 10 22 40;
+  --tw-slate-50: 248 250 252;
+  --tw-slate-100: 241 245 249;
+  --tw-slate-200: 226 232 240;
+  --tw-slate-300: 203 213 225;
+  --tw-slate-400: 148 163 184;
+  --tw-slate-500: 100 116 139;
+  --tw-slate-600: 71 85 105;
+  --tw-slate-700: 51 65 85;
+  --tw-slate-800: 30 41 59;
+  --tw-slate-900: 15 23 42;
+  --tw-slate-950: 2 6 23;
+  --tw-gray-50: 249 250 251;
+  --tw-gray-100: 243 244 246;
+  --tw-gray-200: 229 231 235;
+  --tw-gray-300: 209 213 219;
+  --tw-gray-400: 156 163 175;
+  --tw-gray-500: 107 114 128;
+  --tw-gray-600: 75 85 99;
+  --tw-gray-700: 55 65 81;
+  --tw-gray-800: 31 41 55;
+  --tw-gray-900: 17 24 39;
+  --tw-gray-950: 3 7 18;
+
   --primary-900: #0a1628;
   --primary-800: #0f2847;
   --primary-700: #1a3a5c;

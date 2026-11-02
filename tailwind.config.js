@@ -7,18 +7,47 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Colores por variable: en el sitio público valen lo mismo de siempre; dentro
+        // del panel (html.admin-ui, src/styles/admin.css) pasan a la escala navy del
+        // dashboard de operaciones y todas las pantallas cambian sin reescribirlas.
         primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
-          950: '#0a1628',
+          50: 'rgb(var(--tw-primary-50) / <alpha-value>)',
+          100: 'rgb(var(--tw-primary-100) / <alpha-value>)',
+          200: 'rgb(var(--tw-primary-200) / <alpha-value>)',
+          300: 'rgb(var(--tw-primary-300) / <alpha-value>)',
+          400: 'rgb(var(--tw-primary-400) / <alpha-value>)',
+          500: 'rgb(var(--tw-primary-500) / <alpha-value>)',
+          600: 'rgb(var(--tw-primary-600) / <alpha-value>)',
+          700: 'rgb(var(--tw-primary-700) / <alpha-value>)',
+          800: 'rgb(var(--tw-primary-800) / <alpha-value>)',
+          900: 'rgb(var(--tw-primary-900) / <alpha-value>)',
+          950: 'rgb(var(--tw-primary-950) / <alpha-value>)',
+        },
+        slate: {
+          50: 'rgb(var(--tw-slate-50) / <alpha-value>)',
+          100: 'rgb(var(--tw-slate-100) / <alpha-value>)',
+          200: 'rgb(var(--tw-slate-200) / <alpha-value>)',
+          300: 'rgb(var(--tw-slate-300) / <alpha-value>)',
+          400: 'rgb(var(--tw-slate-400) / <alpha-value>)',
+          500: 'rgb(var(--tw-slate-500) / <alpha-value>)',
+          600: 'rgb(var(--tw-slate-600) / <alpha-value>)',
+          700: 'rgb(var(--tw-slate-700) / <alpha-value>)',
+          800: 'rgb(var(--tw-slate-800) / <alpha-value>)',
+          900: 'rgb(var(--tw-slate-900) / <alpha-value>)',
+          950: 'rgb(var(--tw-slate-950) / <alpha-value>)',
+        },
+        gray: {
+          50: 'rgb(var(--tw-gray-50) / <alpha-value>)',
+          100: 'rgb(var(--tw-gray-100) / <alpha-value>)',
+          200: 'rgb(var(--tw-gray-200) / <alpha-value>)',
+          300: 'rgb(var(--tw-gray-300) / <alpha-value>)',
+          400: 'rgb(var(--tw-gray-400) / <alpha-value>)',
+          500: 'rgb(var(--tw-gray-500) / <alpha-value>)',
+          600: 'rgb(var(--tw-gray-600) / <alpha-value>)',
+          700: 'rgb(var(--tw-gray-700) / <alpha-value>)',
+          800: 'rgb(var(--tw-gray-800) / <alpha-value>)',
+          900: 'rgb(var(--tw-gray-900) / <alpha-value>)',
+          950: 'rgb(var(--tw-gray-950) / <alpha-value>)',
         },
         accent: {
           electric: '#00d4ff',

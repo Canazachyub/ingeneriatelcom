@@ -101,7 +101,7 @@ function PasoPdf({ inicial, onCerrar, onListo }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget && !subiendo) onCerrar() }}>
-      <div className="w-full max-w-lg bg-[#0f172a] border-2 border-accent-energy">
+      <div className="w-full max-w-lg bg-primary-900 border-2 border-accent-energy">
         <div className="flex items-start gap-3 p-5 border-b border-slate-700">
           <div className="flex-1">
             <p className="rotulo-estencil mb-1">Nuevo documento · Paso 1 de 2</p>

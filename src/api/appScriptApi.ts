@@ -1171,9 +1171,11 @@ class AppScriptApi {
     totalEmpleados: number
     presentes: number
     registros: Array<{
+      dni: string
       employeeName: string
       checkIn: string
       checkOut: string
+      estado: 'dentro' | 'fuera'
     }>
   }>> {
     const result = await this.request<{
@@ -1202,9 +1204,11 @@ class AppScriptApi {
         totalEmpleados: result.data.total,
         presentes: result.data.dentro,
         registros: result.data.registros.map(r => ({
+          dni: r.dni,
           employeeName: r.nombre,
           checkIn: r.entrada || '',
-          checkOut: r.salida || ''
+          checkOut: r.salida || '',
+          estado: r.estado
         }))
       }
     }

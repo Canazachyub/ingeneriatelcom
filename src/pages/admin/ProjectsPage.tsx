@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   FaPlus,
@@ -19,6 +19,7 @@ import { useProjects, useEmployees, queryKeys } from '../../hooks/queries'
 import AdminLayout from '../../components/admin/AdminLayout'
 import TableSkeleton from '../../components/common/TableSkeleton'
 import EmptyState from '../../components/common/EmptyState'
+import Retrato, { PilaRetratos } from '../../components/admin/Retrato'
 
 const cities = ['Cusco', 'Puerto Maldonado', 'Abancay', 'Tacna', 'Puno', 'Juliaca', 'Arequipa', 'Pucallpa', 'Lima']
 const statuses = [
@@ -35,6 +36,19 @@ export default function ProjectsPage() {
   const projects = projectsData || []
   const employees = employeesData || []
   const isLoading = isLoadingProjects || isLoadingEmployees
+  // Todas las asignaciones activas: el equipo se ve en la tarjeta sin abrirla
+  const todasAsig = useQuery({
+    queryKey: ['asignacionesProyectos'],
+    queryFn: async () => { const r = await api.getAssignments(); if (!r.success) throw new Error(r.error); return r.data || [] },
+    staleTime: 60 * 1000,
+  })
+  const equipoDe = useMemo(() => {
+    const m = new Map<string, { dni: string; nombre: string }[]>()
+    ;(todasAsig.data || []).filter((a) => String(a.status) === 'active').forEach((a) => {
+      m.set(a.projectId, [...(m.get(a.projectId) || []), { dni: String(a.employeeId).replace('SUE-', ''), nombre: a.employeeName }])
+    })
+    return m
+  }, [todasAsig.data])
   const [assignments, setAssignments] = useState<EmployeeAssignment[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
@@ -172,6 +186,7 @@ export default function ProjectsPage() {
       setMessage({ type: 'success', text: 'Empleado asignado' })
       setAssignData({ employeeId: '', role: '' })
       loadAssignments(selectedProject.id)
+      queryClient.invalidateQueries({ queryKey: ['asignacionesProyectos'] })
     } else {
       setMessage({ type: 'error', text: result.error || 'Error al asignar' })
     }
@@ -183,6 +198,7 @@ export default function ProjectsPage() {
     const result = await api.removeAssignment(assignmentId)
     if (result.success && selectedProject) {
       loadAssignments(selectedProject.id)
+      queryClient.invalidateQueries({ queryKey: ['asignacionesProyectos'] })
     }
   }
 
@@ -210,10 +226,11 @@ export default function ProjectsPage() {
     <AdminLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pt-2">
           <div>
-            <h1 className="text-2xl font-display font-bold text-white">Proyectos</h1>
-            <p className="text-primary-400">Gestiona los proyectos de la empresa</p>
+            <p className="marca-rotulo">Gestión</p>
+            <h1 className="mt-1.5 text-2xl md:text-[32px] md:leading-tight font-bold text-white">Proyectos</h1>
+            <p className="text-primary-300 mt-1 text-sm">Gestiona los proyectos de la empresa</p>
           </div>
           <button
             onClick={() => handleOpenModal()}
@@ -342,6 +359,12 @@ export default function ProjectsPage() {
                       <span className="text-white ml-2">{String(project.endDate).slice(0, 10)}</span>
                     </div>
                   )}
+                </div>
+                <div className="flex items-center justify-between gap-3 mb-4 min-h-[34px]">
+                  <PilaRetratos personas={equipoDe.get(project.id) || []} max={8} />
+                  <span className="text-xs text-primary-400">
+                    {(equipoDe.get(project.id) || []).length ? `${(equipoDe.get(project.id) || []).length} en el equipo` : 'Sin equipo asignado'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 pt-4 border-t border-primary-800">
                   <button
@@ -580,9 +603,12 @@ export default function ProjectsPage() {
                             key={assign.id}
                             className="flex items-center justify-between bg-primary-800/50 rounded-lg p-3"
                           >
-                            <div>
-                              <p className="text-white">{assign.employeeName}</p>
-                              <p className="text-primary-400 text-sm">{assign.role}</p>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Retrato dni={String(assign.employeeId).replace('SUE-', '')} nombre={assign.employeeName} size={38} />
+                              <div className="min-w-0">
+                                <p className="text-white truncate">{assign.employeeName}</p>
+                                <p className="text-primary-400 text-sm truncate">{assign.role}</p>
+                              </div>
                             </div>
                             <button
                               onClick={() => handleRemoveAssignment(assign.id)}

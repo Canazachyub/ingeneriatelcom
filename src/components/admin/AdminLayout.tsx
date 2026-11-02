@@ -11,7 +11,6 @@ import { FaSatelliteDish, FaChartArea, FaBook,
   FaBars,
   FaTimes,
   FaSignOutAlt,
-  FaBolt,
   FaServer,
   FaClock,
   FaChartLine,
@@ -20,6 +19,7 @@ import { FaSatelliteDish, FaChartArea, FaBook,
   FaFileInvoiceDollar,
   FaGlobe,
   FaLock,
+  FaSearch,
   FaUserShield,
   FaHistory,
   FaGavel,
@@ -32,6 +32,10 @@ import { FaSatelliteDish, FaChartArea, FaBook,
 import { useAuth } from '../../context/AuthContext'
 import { MODULOS, Modulo, puede, nombreDe, rolDe } from '../../utils/roles'
 import { LIC_LOCAL } from '../../api/appScriptApi'
+import { useCargarRetratos } from '../../hooks/useRetratos'
+import Retrato from './Retrato'
+import RelojTerran from './RelojTerran'
+import Buscador, { EntradaMenu } from './Buscador'
 
 interface AdminLayoutProps {
   children: React.ReactNode
@@ -142,9 +146,32 @@ function useEnLinea() {
   return enLinea
 }
 
+// Imagen de fondo de cada módulo (primera coincidencia: las rutas más largas van antes)
+const FONDOS: [string, string][] = [
+  ['/admin/licitaciones/servicios', 'b-proyectos'],
+  ['/admin/licitaciones', 'b-licitaciones'],
+  ['/admin/asistencias', 'b-asistencia'],
+  ['/admin/planilla', 'b-planilla'],
+  ['/admin/empleados', 'b-personal'],
+  ['/admin/proyectos', 'b-proyectos'],
+  ['/admin/bolsa-trabajo', 'b-reclutamiento'],
+  ['/admin/postulaciones', 'b-reclutamiento'],
+  ['/admin/mensajes', 'b-comunicacion'],
+  ['/admin/reclamaciones', 'b-comunicacion'],
+  ['/admin/capacitaciones', 'b-capacitaciones'],
+  ['/admin/evaluaciones', 'b-capacitaciones'],
+  ['/admin/reportes', 'b-reportes'],
+  ['/admin/analitica', 'b-reportes'],
+  ['/admin/usuarios', 'b-sistema'],
+  ['/admin/auditoria', 'b-sistema'],
+  ['/admin/api-test', 'b-sistema'],
+  ['/admin', 'b-inicio'],
+]
+
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const { user, isAuthenticated, isLoading, logout } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [buscando, setBuscando] = useState(false)
   const location = useLocation()
   const enLinea = useEnLinea()
 
@@ -152,6 +179,23 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   useEffect(() => {
     setSidebarOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    const f = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setBuscando(true) }
+    }
+    window.addEventListener('keydown', f)
+    return () => window.removeEventListener('keydown', f)
+  }, [])
+
+  // Los retratos se piden unos segundos después de entrar: las cifras de la
+  // pantalla tienen prioridad y Apps Script se pone lento con muchas consultas.
+  const [cargarRetratos, setCargarRetratos] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setCargarRetratos(true), 6000)
+    return () => clearTimeout(t)
+  }, [])
+  useCargarRetratos(cargarRetratos && isAuthenticated, { asistencias: puede(user, 'asistencias'), personal: puede(user, 'personal') })
 
   if (isLoading) {
     return (
@@ -181,26 +225,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       ? location.pathname === href
       : [href, ...tambien].some((h) => location.pathname.startsWith(h))
 
-  const fecha = new Date().toLocaleDateString('es-PE', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
+  const menu: EntradaMenu[] = secciones.flatMap((s) => s.items.map((i) => ({ nombre: i.name, href: i.href, icono: <i.icon />, grupo: s.title })))
+  const fondo = FONDOS.find(([r]) => location.pathname.startsWith(r))?.[1]
 
   return (
-    <div className="min-h-screen bg-primary-950">
-      {/* Rejilla táctica de fondo (estática, solo CSS) */}
-      <div
-        aria-hidden="true"
-        className="fixed inset-0 pointer-events-none opacity-[0.035]"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(0,212,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,212,255,1) 1px, transparent 1px)',
-          backgroundSize: '56px 56px',
-        }}
-      />
-
+    <div className="min-h-screen">
       {/* Fondo del menú móvil */}
       <AnimatePresence>
         {sidebarOpen && (
@@ -216,32 +245,25 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
       {/* ── Menú lateral ── */}
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-64 bg-[#081324] border-r border-primary-800/70 transform transition-transform duration-300 lg:translate-x-0 ${
+        className={`fixed top-0 left-0 z-50 h-full w-64 bg-primary-950 border-r border-primary-800 transform transition-transform duration-200 lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         aria-label="Menú del panel"
       >
         <div className="flex flex-col h-full">
           {/* Marca */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-primary-800/70">
-            <Link to="/admin" className="flex items-center gap-2.5 group">
-              <span
-                className="w-9 h-9 flex items-center justify-center bg-accent-electric/10 border border-accent-electric/40 text-accent-electric"
-                style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}
-              >
-                <FaBolt />
-              </span>
-              <span className="leading-tight">
-                <span className="block font-display font-bold text-white text-sm">TELCOM</span>
-                <span className="block font-mono text-[9px] tracking-[0.25em] text-accent-electric/80 uppercase">
-                  Centro de mando
-                </span>
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-primary-800">
+            <Link to="/admin" className="flex items-center gap-3 min-w-0 flex-1">
+              <img src="/assets/images/admin/isotipo.webp" alt="" className="h-10 w-10 drop-shadow-[0_4px_12px_rgba(0,212,255,0.25)]" />
+              <span className="min-w-0">
+                <span className="block font-display text-[15px] font-bold tracking-[0.14em] text-white">TELCOM</span>
+                <span className="block text-[11px] text-primary-400">Centro de mando</span>
               </span>
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
               aria-label="Cerrar menú"
-              className="lg:hidden w-9 h-9 flex items-center justify-center text-primary-400 hover:text-white"
+              className="lg:hidden w-9 h-9 flex items-center justify-center rounded-lg text-primary-400 hover:text-white hover:bg-slate-800"
             >
               <FaTimes />
             </button>
@@ -251,7 +273,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
             {secciones.map((section) => (
               <div key={section.title}>
-                <h3 className="px-3 mb-1.5 font-mono text-[10px] tracking-[0.25em] uppercase text-primary-500">
+                <h3 className="mb-2 px-3 font-display text-[9px] font-bold uppercase tracking-[0.24em] text-primary-500">
                   {section.title}
                 </h3>
                 <div className="space-y-0.5">
@@ -262,19 +284,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                         key={item.href}
                         to={item.href}
                         aria-current={activo ? 'page' : undefined}
-                        className={`relative flex items-center gap-3 pl-4 pr-3 py-2.5 text-sm transition-colors duration-200 ${
+                        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                           activo
-                            ? 'bg-accent-electric/10 text-white'
-                            : 'text-primary-300 hover:bg-primary-800/40 hover:text-white'
+                            ? 'bg-gradient-to-r from-blue-600/25 to-blue-600/5 text-white shadow-[inset_2px_0_0_#00d4ff]'
+                            : 'text-primary-400 hover:bg-slate-800 hover:text-white'
                         }`}
                       >
-                        <span
-                          aria-hidden="true"
-                          className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] transition-all ${
-                            activo ? 'bg-accent-electric shadow-[0_0_10px_rgba(0,212,255,0.8)]' : 'bg-transparent'
-                          }`}
-                        />
-                        <item.icon className={`text-base shrink-0 ${activo ? 'text-accent-electric' : 'text-primary-500'}`} />
+                        <item.icon className={`text-[15px] shrink-0 ${activo ? 'text-accent-electric' : ''}`} />
                         <span className="truncate">{item.name}</span>
                         {requiereAdmin(item.modulo) && <FaLock className="ml-auto text-[10px] text-accent-energy/70" title="Solo administradores" />}
                       </Link>
@@ -285,62 +301,63 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             ))}
           </nav>
 
-          {/* Usuario */}
-          <div className="p-4 border-t border-primary-800/70 space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 shrink-0 bg-accent-electric/10 border border-accent-electric/30 flex items-center justify-center font-display font-bold text-accent-electric">
-                {nombre.charAt(0).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <p className="text-white text-sm font-medium truncate">{nombre}</p>
-                <p className="font-mono text-[10px] tracking-[0.15em] uppercase text-primary-400 truncate">{etiquetaRol}</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Link
-                to="/"
-                className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs text-primary-300 border border-primary-700/60 hover:border-accent-electric/50 hover:text-accent-electric transition-colors"
-              >
-                <FaGlobe /> Sitio web
-              </Link>
-              <button
-                onClick={logout}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs text-rose-300 border border-rose-500/30 hover:bg-rose-500/10 transition-colors"
-              >
-                <FaSignOutAlt /> Salir
-              </button>
-            </div>
+          {/* Sitio web y salida */}
+          <div className="grid grid-cols-2 gap-2 p-3 border-t border-primary-800">
+            <Link
+              to="/"
+              className="flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-primary-300 hover:bg-slate-800 hover:text-accent-electric transition-colors"
+            >
+              <FaGlobe /> Sitio web
+            </Link>
+            <button
+              onClick={logout}
+              className="flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-primary-300 hover:bg-rose-600/15 hover:text-rose-300 transition-colors"
+            >
+              <FaSignOutAlt /> Salir
+            </button>
           </div>
         </div>
       </aside>
 
       {/* ── Contenido ── */}
       <div className="relative lg:pl-64">
-        <header className="sticky top-0 z-30 bg-primary-950/85 backdrop-blur-md border-b border-primary-800/70">
-          <div className="flex items-center gap-3 px-4 lg:px-6 py-3">
+        <header className="sticky top-0 z-30 bg-primary-900/85 backdrop-blur-md border-b border-primary-800">
+          <div className="flex items-center gap-3 px-4 lg:px-6 py-2.5">
             <button
               onClick={() => setSidebarOpen(true)}
               aria-label="Abrir menú"
-              className="lg:hidden w-10 h-10 flex items-center justify-center text-primary-300 hover:text-white border border-primary-700/60"
+              className="lg:hidden w-10 h-10 flex items-center justify-center rounded-lg text-primary-300 hover:text-white hover:bg-slate-800"
             >
               <FaBars />
             </button>
-            <p className="hidden sm:block font-mono text-[11px] tracking-[0.15em] uppercase text-primary-400 capitalize">
-              {fecha}
-            </p>
-            <div className="ml-auto flex items-center gap-3">
-              <span
-                className={`flex items-center gap-1.5 px-2.5 py-1 font-mono text-[10px] tracking-[0.15em] uppercase border ${
-                  enLinea
-                    ? 'text-emerald-300 border-emerald-500/30 bg-emerald-500/5'
-                    : 'text-rose-300 border-rose-500/40 bg-rose-500/10'
-                }`}
-                title={enLinea ? 'Conexión a internet activa' : 'Sin conexión a internet'}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${enLinea ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-                {enLinea ? 'En línea' : 'Sin conexión'}
-              </span>
-              <span className="hidden md:block text-sm text-primary-200 truncate max-w-[180px]">{nombre}</span>
+
+            <button
+              onClick={() => setBuscando(true)}
+              aria-label="Buscar pantalla o trabajador"
+              className="flex items-center gap-2.5 rounded-xl border border-primary-700 bg-slate-800/60 px-3 py-2 text-sm text-primary-400 hover:border-accent-electric/60 hover:text-white transition-colors sm:min-w-[260px]"
+            >
+              <FaSearch className="text-accent-electric" />
+              <span className="hidden sm:inline">Buscar pantalla o trabajador</span>
+              <kbd className="ml-auto hidden sm:inline font-mono text-[10px] border border-primary-700 rounded px-1.5 py-0.5">Ctrl K</kbd>
+            </button>
+
+            <div className="flex-1" />
+
+            <div
+              className={`hidden md:flex items-center gap-2 text-xs ${enLinea ? 'text-emerald-400' : 'text-rose-300'}`}
+              title={enLinea ? 'Conexión a internet activa' : 'Sin conexión a internet'}
+            >
+              <span className={`h-2 w-2 rounded-full ${enLinea ? 'bg-emerald-500 shadow-[0_0_0_4px_rgb(16_185_129/0.15)]' : 'bg-rose-500'}`} />
+              {enLinea ? 'En línea' : 'Sin conexión'}
+            </div>
+            <RelojTerran />
+
+            <div className="flex items-center gap-3 border-l border-primary-800 pl-3">
+              <div className="hidden sm:block text-right">
+                <p className="max-w-[170px] truncate text-sm font-semibold text-white">{nombre}</p>
+                <p className="text-[11px] font-semibold text-accent-energy">{etiquetaRol}</p>
+              </div>
+              <Retrato nombre={nombre} size={38} />
             </div>
           </div>
         </header>
@@ -348,14 +365,23 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {/* Distintivo de modo local (VITE_LIC_LOCAL=1): solo en Licitaciones, para
             que quede clarísimo que estos datos NO tocan Apps Script de producción. */}
         {LIC_LOCAL && location.pathname.startsWith('/admin/licitaciones') && (
-          <div className="sticky top-[49px] z-20 flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/15 border-b border-amber-500/40 text-amber-300 font-mono text-[10px] tracking-[0.2em] uppercase">
+          <div className="sticky top-[59px] z-20 flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/15 border-b border-amber-500/40 text-amber-300 font-mono text-[10px] tracking-[0.2em] uppercase">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
             Modo local — leyendo JSON del vault, sin tocar producción
           </div>
         )}
 
-        <main className="relative p-4 lg:p-6">{children}</main>
+        <div className="relative">
+          {fondo && (
+            <div className="fondo-modulo" aria-hidden="true">
+              <img key={fondo} src={`/assets/images/admin/${fondo}.webp`} alt="" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+            </div>
+          )}
+          <main className="relative p-4 lg:p-6">{children}</main>
+        </div>
       </div>
+
+      <Buscador abierto={buscando} onCerrar={() => setBuscando(false)} menu={menu} verPersonal={puede(user, 'personal')} />
     </div>
   )
 }

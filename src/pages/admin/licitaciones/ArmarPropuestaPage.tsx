@@ -298,7 +298,7 @@ export default function ArmarPropuestaPage() {
 
       {/* Barra fija: cuánto llevas y descargar */}
       {!cargando && !error && (
-        <div className="fixed bottom-0 left-0 right-0 lg:left-64 z-30 border-t-2 border-accent-energy bg-[#0b1220]/95 backdrop-blur px-4 py-3 flex flex-wrap items-center gap-3">
+        <div className="fixed bottom-0 left-0 right-0 lg:left-64 z-30 border-t-2 border-accent-energy bg-primary-950/95 backdrop-blur px-4 py-3 flex flex-wrap items-center gap-3">
           <span className="text-sm text-slate-200 flex-1">
             <b className="text-white text-lg">{archivos.length}</b> documentos · {b.personas.length} personas · carpeta <b className="text-accent-energy">{nombreCarpeta}</b>
           </span>

@@ -317,6 +317,11 @@ hacerla fuera del horario de marcación (o dejarla al activador nocturno).
 5. **Pantalla** — página en `src/pages/admin/`, ruta en `src/App.tsx` dentro de `ProtectedRoute`,
    entrada en `navigationSections` de `src/components/admin/AdminLayout.tsx`.
    Distinguir siempre **"falló la carga"** de **"no hay datos"** (lección de Asistencias).
+   **Diseño:** usar `tarjeta`, `marca-rotulo` y las piezas de `src/components/admin/ui.tsx`; a cada
+   persona mostrarla con `<Retrato dni nombre size />` (foto de ficha → selfie del kiosko → iniciales).
+   El tema está en `src/styles/admin.css` y solo aplica bajo `html.admin-ui` (rutas `/admin`): remapea
+   las escalas `primary`, `slate` y `gray`, así que no hace falta tocar colores pantalla por pantalla.
+   La imagen de fondo de cada módulo se elige en `FONDOS` de `AdminLayout.tsx`.
 6. **Probar** — `npx tsc --noEmit -p .`, probar en `npm run dev` (el `.env` local apunta a **producción**: no
    crear datos de prueba reales), agregar un caso seguro a `tools/test-produccion.mjs` si aplica.
 7. **Publicar** (fuera de 07:00–08:00 y ~18:00, hora de Lima):

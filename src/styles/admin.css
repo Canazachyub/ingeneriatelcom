@@ -1,0 +1,332 @@
+/* ==========================================================================
+   Tema del panel (/admin) — "centro de operaciones"
+   La misma identidad del dashboard de campo (F:\TELCOMDASHBOARD): navy, azul,
+   cian eléctrico y ámbar, tarjetas redondeadas con línea de luz, retratos de
+   unidad y reloj Terran.
+
+   Todo cuelga de html.admin-ui (lo pone AdminLayout y LoginPage al montar), así
+   que el sitio público y el kiosko no reciben ninguna de estas reglas. Se
+   remapea la paleta de Tailwind para que las ~30 pantallas cambien sin
+   reescribirlas: una clase bg-primary-900/40 sigue siendo válida, solo que aquí
+   significa "panel navy".
+   ========================================================================== */
+
+html.admin-ui {
+  /* Primary → superficies y textos neutros */
+  --tw-primary-50: 238 243 250;
+  --tw-primary-100: 221 229 241;
+  --tw-primary-200: 197 208 226;
+  --tw-primary-300: 166 180 204;
+  --tw-primary-400: 138 156 187;
+  --tw-primary-500: 107 127 163;
+  --tw-primary-600: 37 99 235;
+  --tw-primary-700: 42 66 104;
+  --tw-primary-800: 31 52 84;
+  --tw-primary-900: 13 27 49;
+  --tw-primary-950: 5 12 25;
+
+  /* Slate y gray hablan el mismo idioma que primary */
+  --tw-slate-100: 238 243 250;
+  --tw-slate-200: 221 229 241;
+  --tw-slate-300: 197 208 226;
+  --tw-slate-400: 138 156 187;
+  --tw-slate-500: 107 127 163;
+  --tw-slate-600: 42 66 104;
+  --tw-slate-700: 31 52 84;
+  --tw-slate-800: 18 34 59;
+  --tw-slate-900: 13 27 49;
+  --tw-slate-950: 5 12 25;
+
+  --tw-gray-200: 221 229 241;
+  --tw-gray-300: 197 208 226;
+  --tw-gray-400: 138 156 187;
+  --tw-gray-500: 107 127 163;
+  --tw-gray-600: 74 94 128;
+  --tw-gray-700: 42 66 104;
+  --tw-gray-800: 18 34 59;
+  --tw-gray-900: 13 27 49;
+
+  --panel: #0d1b31;
+  --panel-alto: #12223b;
+  --linea: #1f3454;
+  --linea-fuerte: #2a4268;
+  --electrico: #00d4ff;
+  --energia: #fbbf24;
+
+  color-scheme: dark;
+}
+
+html.admin-ui body {
+  background-color: #050c19;
+  background-image:
+    radial-gradient(1100px 520px at 85% -10%, rgb(0 212 255 / 0.06), transparent 60%),
+    radial-gradient(900px 480px at -10% 110%, rgb(37 99 235 / 0.07), transparent 60%);
+  background-attachment: fixed;
+}
+
+html.admin-ui ::-webkit-scrollbar-track { background-color: #050c19; }
+html.admin-ui ::-webkit-scrollbar-thumb { background-color: var(--linea-fuerte); }
+html.admin-ui ::-webkit-scrollbar-thumb:hover { background-color: #6b7fa3; }
+
+/* Títulos: Orbitron queda solo para la marca y las cifras; los títulos del
+   trabajo diario se leen mejor en Plus Jakarta. */
+html.admin-ui main h1,
+html.admin-ui main h2,
+html.admin-ui main h3,
+html.admin-ui main h4,
+html.admin-ui main .font-display,
+html.admin-ui .fixed h2,
+html.admin-ui .fixed h3 {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  letter-spacing: -0.01em;
+}
+html.admin-ui main h1 {
+  font-size: clamp(1.5rem, 2.2vw, 2rem);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* El ámbar queda para avisos: los bloques llenos de acción pasan al azul de marca */
+html.admin-ui main .bg-accent-energy,
+html.admin-ui .fixed .bg-accent-energy {
+  background-color: #2563eb;
+  color: #fff;
+  border-radius: 10px;
+}
+html.admin-ui main .franja-peligro { display: none; }
+
+/* ── Tarjetas ─────────────────────────────────────────────────────────────── */
+
+/* Placas y paneles antiguos: misma tarjeta, sin remaches ni esquinas cortadas */
+html.admin-ui .placa-acero,
+html.admin-ui .panel-hud {
+  background: var(--panel);
+  border: 1px solid var(--linea);
+  border-radius: 16px;
+  clip-path: none;
+  backdrop-filter: none;
+  box-shadow: 0 1px 0 rgb(0 212 255 / 0.08) inset, 0 8px 24px rgb(0 0 0 / 0.25);
+}
+html.admin-ui .panel-hud::before { display: none; }
+html.admin-ui .panel-hud:hover { border-color: var(--linea-fuerte); }
+
+/* Toda caja con fondo de panel y borde recibe la misma curvatura y sombra */
+html.admin-ui main [class*='bg-primary-900'][class*='border'],
+html.admin-ui main [class*='bg-primary-950'][class*='border'],
+html.admin-ui main [class*='bg-slate-900'][class*='border'],
+html.admin-ui main [class*='bg-slate-800'][class*='border'] {
+  border-radius: 14px;
+}
+html.admin-ui main [class*='bg-primary-900/'][class*='border'] {
+  background-color: var(--panel);
+  box-shadow: 0 1px 0 rgb(0 212 255 / 0.06) inset, 0 8px 24px rgb(0 0 0 / 0.2);
+  backdrop-filter: none;
+}
+
+/* Modales y paneles laterales: mismo color de superficie que las tarjetas */
+html.admin-ui .fixed > [class*='bg-primary-900'],
+html.admin-ui .fixed > [class*='bg-slate-9'] {
+  background-color: var(--panel);
+  border-color: var(--linea-fuerte);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.55);
+}
+html.admin-ui .fixed.justify-end > div { border-radius: 18px 0 0 18px; }
+
+/* ── Rótulos ─────────────────────────────────────────────────────────────── */
+html.admin-ui .rotulo-estencil,
+html.admin-ui .rotulo-esténcil,
+.marca-rotulo {
+  display: inline-block;
+  padding: 0;
+  font-family: 'Orbitron', 'Plus Jakarta Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--electrico);
+  background: none;
+  clip-path: none;
+}
+
+/* ── Formularios ─────────────────────────────────────────────────────────── */
+html.admin-ui input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='color']):not([type='range']),
+html.admin-ui select,
+html.admin-ui textarea {
+  background-color: #0a1628;
+  border-color: var(--linea-fuerte);
+  border-radius: 12px;
+  color-scheme: dark;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+html.admin-ui input:not([type='checkbox']):not([type='radio']):focus,
+html.admin-ui select:focus,
+html.admin-ui textarea:focus {
+  border-color: var(--electrico);
+  box-shadow: 0 0 0 4px rgb(0 212 255 / 0.12);
+  outline: none;
+}
+html.admin-ui select option { background-color: #0a1628; color: #eef3fa; }
+html.admin-ui input.buscador-entrada,
+html.admin-ui input.buscador-entrada:focus { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+
+/* ── Botones ─────────────────────────────────────────────────────────────── */
+html.admin-ui main button[class*='border'],
+html.admin-ui .fixed button[class*='border'],
+html.admin-ui main a[class*='border'][class*='px-'] {
+  border-radius: 10px;
+}
+html.admin-ui .btn-primary {
+  padding: 0.55rem 1rem;
+  font-size: 0.875rem;
+  border-radius: 12px;
+  background-image: none;
+  background-color: #2563eb;
+  box-shadow: 0 6px 18px rgb(37 99 235 / 0.3);
+}
+html.admin-ui .btn-primary:hover {
+  transform: none;
+  filter: brightness(1.1);
+  box-shadow: 0 6px 18px rgb(37 99 235 / 0.4);
+}
+html.admin-ui .btn-secondary {
+  padding: 0.55rem 1rem;
+  font-size: 0.875rem;
+  border-width: 1px;
+  border-radius: 12px;
+  border-color: var(--linea-fuerte);
+  color: #c5d0e2;
+}
+html.admin-ui .btn-secondary:hover {
+  background: transparent;
+  border-color: var(--electrico);
+  color: var(--electrico);
+}
+
+/* ── Tablas ──────────────────────────────────────────────────────────────── */
+html.admin-ui main table { font-variant-numeric: tabular-nums; }
+html.admin-ui main table thead th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #8a9cbb;
+}
+html.admin-ui main table thead tr { background-color: var(--panel-alto); border-color: var(--linea); }
+html.admin-ui main table tbody tr { border-color: var(--linea); transition: background-color 0.15s; }
+html.admin-ui main table tbody tr:hover { background-color: rgb(18 34 59 / 0.7); }
+
+/* ── Piezas nuevas ───────────────────────────────────────────────────────── */
+
+/* Tarjeta con línea de luz superior */
+.tarjeta {
+  position: relative;
+  border-radius: 16px;
+  border: 1px solid var(--linea);
+  background: var(--panel);
+  box-shadow: 0 1px 0 rgb(0 212 255 / 0.08) inset, 0 8px 24px rgb(0 0 0 / 0.25);
+}
+.tarjeta-pulsable { transition: border-color 0.15s, transform 0.15s; }
+.tarjeta-pulsable:hover { border-color: rgb(0 212 255 / 0.5); transform: translateY(-1px); }
+
+/* Esquinas de mira en las tarjetas protagonistas */
+.esquinas-hud::before,
+.esquinas-hud::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  z-index: 5;
+  border-color: rgb(0 212 255 / 0.7);
+  border-style: solid;
+}
+.esquinas-hud::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; border-top-left-radius: 12px; }
+.esquinas-hud::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; border-bottom-right-radius: 12px; }
+
+/* Fondo de módulo detrás del título de cada pantalla */
+.fondo-modulo {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 270px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.fondo-modulo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: right center;
+  opacity: 0.55;
+  -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent 100%), linear-gradient(to right, transparent 12%, #000 62%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to bottom, #000 30%, transparent 100%), linear-gradient(to right, transparent 12%, #000 62%);
+  mask-composite: intersect;
+}
+
+/* Retrato de unidad: marco metálico de esquinas cortadas (como el dashboard) */
+.retrato-unidad {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  padding: 2px;
+  background: linear-gradient(145deg, #5b6b82 0%, #1c2638 35%, #0a111e 60%, #3d4a5e 100%);
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+.retrato-unidad[data-estado='presente'] { background: linear-gradient(145deg, #34d399 0%, #065f46 45%, #0a111e 62%, #10b981 100%); }
+.retrato-unidad[data-estado='fuera'] { background: linear-gradient(145deg, #60a5fa 0%, #1e3a8a 45%, #0a111e 62%, #3b82f6 100%); }
+.retrato-unidad[data-estado='pendiente'] { background: linear-gradient(145deg, #fbbf24 0%, #92400e 45%, #0a111e 62%, #f59e0b 100%); }
+.retrato-unidad > img,
+.retrato-unidad > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: linear-gradient(145deg, #1e4976, #0f1e36);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+.retrato-unidad > span {
+  color: #c5d0e2;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.retrato-unidad::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgb(0 0 0 / 0.1) 0 1px, transparent 1px 3px);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+
+/* Fila de retratos encimados (equipo de un proyecto) */
+.pila-retratos > * + * { margin-left: -8px; }
+
+/* Reloj Terran del encabezado */
+.reloj-terran {
+  background:
+    repeating-linear-gradient(0deg, rgb(0 212 255 / 0.05) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgb(0 212 255 / 0.08), rgb(0 212 255 / 0.02));
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  box-shadow: inset 0 0 0 1px rgb(0 212 255 / 0.35);
+}
+
+/* Fondo del login: acercamiento lento */
+@keyframes acercamiento {
+  from { transform: scale(1.1) translate3d(1.5%, 1%, 0); }
+  to { transform: scale(1.02) translate3d(0, 0, 0); }
+}
+.login-fondo { animation: acercamiento 16s ease-out forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .login-fondo { animation: none; }
+  .tarjeta-pulsable:hover { transform: none; }
+}
+
+@media (max-width: 767px) {
+  /* En el celular el título ocupa todo el ancho: la imagen se atenúa para leerlo */
+  .fondo-modulo img { opacity: 0.32; }
+}

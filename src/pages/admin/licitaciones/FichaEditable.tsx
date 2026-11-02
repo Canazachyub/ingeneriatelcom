@@ -111,7 +111,7 @@ export default function FichaEditable({ entidad, fila: filaProp, inicial, claves
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60" onMouseDown={(e) => { if (e.target === e.currentTarget) intentarCerrar() }}>
-      <div className="w-full max-w-2xl h-full flex flex-col bg-[#0f172a] border-l-2 border-accent-energy shadow-2xl">
+      <div className="w-full max-w-2xl h-full flex flex-col bg-primary-900 border-l-2 border-accent-energy shadow-2xl">
         {/* Cabecera */}
         <div className="flex items-start gap-3 p-5 border-b border-slate-700">
           <div className="flex-1 min-w-0">

@@ -20,6 +20,8 @@ import AdminLayout from '../../components/admin/AdminLayout'
 import FileViewerModal from '../../components/admin/FileViewerModal'
 import TableSkeleton from '../../components/common/TableSkeleton'
 import EmptyState from '../../components/common/EmptyState'
+import Retrato from '../../components/admin/Retrato'
+import { CifraCard } from '../../components/admin/ui'
 import { useToast } from '../../context/ToastContext'
 import { exportarExcel } from '../../utils/excel'
 import {
@@ -273,6 +275,11 @@ export default function AttendancePage() {
     [registros]
   )
 
+  const resumenRango = useMemo(() => ({
+    personas: new Set(registros.map((r) => String(r.dni))).size,
+    tardes: registros.filter((r) => esTarde(r.evento, String(r.hora))).length,
+  }), [registros])
+
   // ── Informe: resumen por trabajador ────────────────────────
   const informe = useMemo(() => {
     // fechas del rango (máx 62 días para no desbordar)
@@ -371,10 +378,11 @@ export default function AttendancePage() {
     <AdminLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pt-2">
           <div>
-            <h1 className="text-2xl font-bold text-white">Asistencias</h1>
-            <p className="text-gray-400 text-sm mt-0.5">
+            <p className="marca-rotulo">Principal</p>
+            <h1 className="mt-1.5 text-2xl md:text-[32px] md:leading-tight font-bold text-white">Asistencias</h1>
+            <p className="text-primary-300 text-sm mt-1">
               Registros con foto y GPS · Informes semanales y mensuales
             </p>
           </div>
@@ -396,8 +404,16 @@ export default function AttendancePage() {
           </div>
         </div>
 
+        {/* Resumen del rango elegido */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <CifraCard etiqueta="Marcas" valor={registros.length} ayuda={`${desde} a ${hasta}`} tono="cian" icono={<FaClock />} cargando={isLoading} />
+          <CifraCard etiqueta="Trabajadores que marcaron" valor={resumenRango.personas} ayuda={`de ${trabajadores.filter((t) => t.activo !== false).length} activos`} tono="verde" icono={<FaCheckCircle />} cargando={isLoading} />
+          <CifraCard etiqueta="Ingresos tarde" valor={resumenRango.tardes} ayuda="Personal de oficina" tono="ambar" icono={<FaExclamationTriangle />} cargando={isLoading} />
+          <CifraCard etiqueta="Justificaciones" valor={justificaciones.length} ayuda="En este rango" tono="azul" icono={<FaFileAlt />} cargando={isLoading} />
+        </div>
+
         {/* Tabs */}
-        <div className="flex items-center gap-1 bg-primary-900 border border-primary-800 rounded-xl p-1 w-fit">
+        <div className="flex items-center gap-1 bg-primary-900 border border-primary-800 rounded-xl p-1 w-fit max-w-full overflow-x-auto">
           {([
             { key: 'registros', label: 'Registros', icon: FaTable },
             { key: 'informe', label: 'Informe', icon: FaChartBar },
@@ -406,7 +422,7 @@ export default function AttendancePage() {
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
                 tab === t.key
                   ? 'bg-accent-electric/20 text-accent-electric'
                   : 'text-primary-300 hover:text-white'
@@ -528,14 +544,19 @@ export default function AttendancePage() {
                               onClick={() => setFotoModal(r)}
                               disabled={!r.foto_url}
                               title={r.foto_url ? 'Ver foto de asistencia' : 'Sin foto'}
-                              className="w-14 h-11 rounded-lg overflow-hidden bg-primary-800 border border-primary-700 hover:ring-2 hover:ring-accent-electric transition-all flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="w-10 h-10 rounded-lg bg-primary-800 hover:ring-2 hover:ring-accent-electric transition-all flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               <FaCamera className="text-primary-400" />
                             </button>
                           </td>
                           <td className="px-4 py-3">
-                            <div className="font-medium text-white leading-tight">{r.nombre}</div>
-                            <div className="text-gray-500 text-xs">{r.cargo}</div>
+                            <div className="flex items-center gap-3">
+                              <Retrato dni={String(r.dni)} nombre={r.nombre} size={38} />
+                              <div className="min-w-0">
+                                <div className="font-medium text-white leading-tight">{r.nombre}</div>
+                                <div className="text-gray-500 text-xs">{r.cargo}</div>
+                              </div>
+                            </div>
                           </td>
                           <td className="px-4 py-3">
                             <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
@@ -637,8 +658,13 @@ export default function AttendancePage() {
                     {informe.filas.map((f) => (
                       <tr key={f.trabajador.dni} className="hover:bg-primary-800/30 transition-colors">
                         <td className="px-4 py-3">
-                          <div className="font-medium text-white leading-tight">{f.trabajador.nombre}</div>
-                          <div className="text-gray-500 text-xs">{f.trabajador.cargo}</div>
+                          <div className="flex items-center gap-3">
+                            <Retrato dni={f.trabajador.dni} nombre={f.trabajador.nombre} size={38} />
+                            <div className="min-w-0">
+                              <div className="font-medium text-white leading-tight">{f.trabajador.nombre}</div>
+                              <div className="text-gray-500 text-xs">{f.trabajador.cargo}</div>
+                            </div>
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className="text-emerald-400 font-bold">{f.diasAsistidos}</span>
@@ -754,9 +780,12 @@ export default function AttendancePage() {
                 .map((j) => (
                   <div key={j.id} className="bg-primary-900/60 border border-primary-800 rounded-2xl p-4">
                     <div className="flex items-start justify-between gap-3 mb-2">
-                      <div>
-                        <p className="font-medium text-white leading-tight">{j.nombre}</p>
-                        <p className="text-gray-500 text-xs">{j.cargo} · DNI {j.dni}</p>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Retrato dni={String(j.dni)} nombre={j.nombre} size={42} />
+                        <div className="min-w-0">
+                          <p className="font-medium text-white leading-tight">{j.nombre}</p>
+                          <p className="text-gray-500 text-xs">{j.cargo} · DNI {j.dni}</p>
+                        </div>
                       </div>
                       <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-amber-400/15 text-amber-300 border border-amber-400/25 whitespace-nowrap">
                         {j.motivo}

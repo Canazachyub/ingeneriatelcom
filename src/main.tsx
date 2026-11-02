@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './context/AuthContext'
 import App from './App'
 import './styles/globals.css'
+import './styles/admin.css'
 
 // Tras publicar una versión nueva, una pestaña abierta con la anterior puede
 // pedir un fragmento que ya no existe: se recarga UNA vez para tomar la nueva.

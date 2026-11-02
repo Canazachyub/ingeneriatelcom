@@ -297,7 +297,7 @@ export default function UsuariosPage() {
           <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
             initial={reducir ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.div {...animModal} role="dialog" aria-modal="true" aria-labelledby="titulo-form-usuario"
-              className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[#0b1a30] border border-primary-700/70 p-6 space-y-4">
+              className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-primary-900 border border-primary-700/70 p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h2 id="titulo-form-usuario" className="text-lg font-display font-semibold text-white">
                   {form.id ? 'Editar usuario' : 'Nuevo usuario'}
@@ -371,7 +371,7 @@ export default function UsuariosPage() {
           <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
             initial={reducir ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.div {...animModal} role="dialog" aria-modal="true" aria-labelledby="titulo-cred-usuario"
-              className="w-full max-w-md bg-[#0b1a30] border border-accent-energy/50 p-6 space-y-4">
+              className="w-full max-w-md bg-primary-900 border border-accent-energy/50 p-6 space-y-4">
               <h2 id="titulo-cred-usuario" className="text-lg font-display font-semibold text-white flex items-center gap-2">
                 <FaKey className="text-accent-energy" /> {credenciales.motivo}
               </h2>
